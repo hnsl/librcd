@@ -1,0 +1,59 @@
+{
+    "preprocessor": "rcd-pp",
+    "compiler": "rcd-i2o",
+    "project-linker": "rcd-pl",
+    "pkg-config": [],
+    "installdir": "",
+    "library": "static",
+    "dependencies": [],
+    "general-flags": [
+        "-g",
+        "-Werror"
+    ],
+    "pp-flags": [],
+    "o-flags": [],
+    "o-env": {},
+    "additional-src-dirs": [
+        "src/polarssl",
+        "src/compiler-rt"
+    ],
+    "include": [],
+    "build-masks": {
+        "test": {
+            "library": "",
+            "output": "librcd.self-test",
+            "pp-flags": [
+                "-DRCD_SELF_TEST",
+                "-DDEBUG"
+            ],
+            "include": ["src"],
+            "additional-src-dirs": ["tests"]
+        },
+        "otest": {
+            "library": "",
+            "output": "librcd.self-otest",
+            "pp-flags": [
+                "-DRCD_SELF_TEST"
+            ],
+            "include": ["src"],
+            "additional-src-dirs": ["tests"],
+            "o-flags": ["-O1"],
+            "o-env": {
+                "LLC_ARGS": "-O1"
+            }
+        },
+        "debug": {
+            "output": "librcd.debug.a",
+            "pp-flags": [
+                "-DDEBUG"
+            ]
+        },
+        "release": {
+            "output": "librcd.a",
+            "o-flags": ["-O1"],
+            "o-env": {
+                "LLC_ARGS": "-O1"
+            }
+        }
+    }
+}

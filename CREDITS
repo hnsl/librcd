@@ -1,0 +1,25 @@
+	This is at least a partial credits-file of people that have
+	contributed to librcd. It is sorted by name and
+	formatted to allow easy grepping and beautification by
+	scripts.  The fields are: name (N), email (E), web-address
+	(W), PGP key ID and fingerprint (P), description (D), and
+	snail-mail address (S).
+
+	Thanks, Hannes Landeholm
+----------
+
+M: Caj Larsson
+E: caj@jumpstarter.io
+D: rio & fstr contributions
+
+M: Simon Lindholm
+E: simon@jumpstarter.io
+D: generics, improved musl gen, various fixes
+
+M: Daniel Lundqvist
+E: thorwald@jumpstarter.io
+D: 1st version of rio
+
+M: Jan Stefan Oswald Bror Johann Wilhelm Judas Nyman
+E: stefan@jumpstarter.io
+D: rio & fstr contributions

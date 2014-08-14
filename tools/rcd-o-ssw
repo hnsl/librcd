@@ -1,0 +1,93 @@
+#!/bin/bash
+####################################################################
+#
+#  Takes an input object file generated from raw assembly and creates
+#  split stack wrappers for all global symbols which are assumed to be
+#  functions.
+#
+#  This makes it possibly to call raw legacy assembly functions which
+#  assume that there is a large stack available from a split stack context.
+#
+#  SYNOPSIS:
+#      ./rcd-o-ssw infile.o outfile.o
+#
+#  Copyright © 2014, Jumpstarter AB. This file is part of the librcd project.
+#  This Source Code Form is subject to the terms of the Mozilla Public
+#  License, v. 2.0. If a copy of the MPL was not distributed with this
+#  file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#  See the COPYING file distributed with this project for more information.
+#
+####################################################################
+
+set -e
+set -o pipefail
+
+IFS=
+
+TFILE_MAPPED_O="/tmp/$(basename $0).$$.o.mapped"
+TFILE_SYM_MAP="/tmp/$(basename $0).$$.o.sym-map"
+TFILE_SSW_S="/tmp/$(basename $0).$$.ssw.s"
+TFILE_SSW_O="/tmp/$(basename $0).$$.ssw.o"
+
+all_symbols=`nm -g $1 | cut -f 3 -d " " | sed '/^\?/d'`
+
+all_no_seg_stack_wrapped_symbols=`sed 's/^__seg_stack_sym__\(.\+\)__$/\1/g;tx;d;:x' <<< $all_symbols`
+
+all_symbols=`sed '/^__seg_stack_sym__.\+__$/d' <<< $all_symbols`
+
+declare -A no_seg_stack_wrapped_symbols
+
+while IFS= read -r line; do
+    if [[ $line ]]; then
+        no_seg_stack_wrapped_symbols["$line"]="$line"
+    fi
+done <<< $all_no_seg_stack_wrapped_symbols
+
+no_seg_stack_wrapped_symbols["__morestack_raw_asm"]=1
+no_seg_stack_wrapped_symbols["__releasestack_raw_asm"]=1
+no_seg_stack_wrapped_symbols["__morestack"]=1
+no_seg_stack_wrapped_symbols["__releasestack"]=1
+no_seg_stack_wrapped_symbols["__morestack_fx"]=1
+no_seg_stack_wrapped_symbols["__releasestack_fx"]=1
+no_seg_stack_wrapped_symbols["__morestack_ctx_restore_fx"]=1
+no_seg_stack_wrapped_symbols["__morestack_allocate_stack_space"]=1
+no_seg_stack_wrapped_symbols["__releasestack_free_stack_space"]=1
+no_seg_stack_wrapped_symbols["__stacklet_mmap_reserve"]=1
+no_seg_stack_wrapped_symbols["__stacklet_mmap_unreserve"]=1
+no_seg_stack_wrapped_symbols["__morestack_adjust_overflow_arg_area"]=1
+no_seg_stack_wrapped_symbols["__rcd_escape_try"]=1
+no_seg_stack_wrapped_symbols["_start"]=1
+
+echo -e ".global __morestack_raw_asm\n\n" > $TFILE_SSW_S
+
+if [[ -e $TFILE_SYM_MAP ]]; then
+    unlink $TFILE_SYM_MAP
+fi
+
+while IFS= read -r line; do
+    if [[ $line ]]; then
+        if [[ ${no_seg_stack_wrapped_symbols[$line]} ]]; then
+            nop=nop
+        else
+            echo -e ".global $line\n.global __raw_asm__$line\n$line:\ncall __morestack_raw_asm\nret\njmp __raw_asm__$line\n\n" >> $TFILE_SSW_S
+            echo -e "$line __raw_asm__$line" >> $TFILE_SYM_MAP
+        fi
+    fi
+done <<< $all_symbols
+
+if [[ -e $TFILE_SYM_MAP ]]; then
+    objcopy --redefine-syms=$TFILE_SYM_MAP $1 $TFILE_MAPPED_O
+    unlink $TFILE_SYM_MAP
+    as $INCLUDE_ARGS --fatal-warnings -g -o $TFILE_SSW_O $TFILE_SSW_S
+    unlink $TFILE_SSW_S
+    ld -r $TFILE_MAPPED_O $TFILE_SSW_O -o $2
+    unlink $TFILE_MAPPED_O
+    unlink $TFILE_SSW_O
+else
+    unlink $TFILE_SSW_S
+    if [[ $1 != $2 ]]; then
+        cp -p $1 $2
+    fi
+fi
+
+

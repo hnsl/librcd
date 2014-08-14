@@ -1,0 +1,20 @@
+### Useful for simulating unlikely context switches in critical points: ###
+
+static inline void _debug_timing_inject() {
+    uint64_t n = (lwt_rdrand64() % 10000);
+    if (n < 9950) {
+        // No injected timing!
+    } else if (n < 9995) {
+        // Injected 1000-100 µs.
+        struct timespec req = {.tv_sec = 0, .tv_nsec = 100 * 1000 + (lwt_rdrand64() % (900 * 1000))};
+        nanosleep(&req, 0);
+    } else if (n < 9999) {
+        // Injected 1-10 ms.
+        struct timespec req = {.tv_sec = 0, .tv_nsec = 1 * 1000 * 1000 + (lwt_rdrand64() % (9 * 1000 * 1000))};
+        nanosleep(&req, 0);
+    } else {
+        // Injected 10-100 ms.
+        struct timespec req = {.tv_sec = 0, .tv_nsec = 10 * 1000 * 1000 + (lwt_rdrand64() % (90 * 1000 * 1000))};
+        nanosleep(&req, 0);
+    }
+}

@@ -1,0 +1,504 @@
+/* Copyright © 2014, Jumpstarter AB. This file is part of the librcd project.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* See the COPYING file distributed with this project for more information. */
+
+#ifndef RCD_FSTRING_H
+#define	RCD_FSTRING_H
+
+#include "rcd.h"
+
+#define flstr(fixed_length) \
+    struct __rcd_flstr__##fixed_length
+
+#define flstr_to_fstr(flstr_value, fixed_length) ({ \
+    flstr(fixed_length)* typed_flstr = flstr_value; \
+    size_t typed_fixed_length = fixed_length; \
+    (fstr_t) {.len = typed_fixed_length, .str = (uint8_t*) typed_flstr}; \
+})
+
+#define flstr_from_fstr(fstr_value, fixed_length) ({ \
+    fstr_t typed_fstr = fstr_value; \
+    size_t typed_fixed_length = fixed_length; \
+    if (typed_fstr.len != typed_fixed_length) \
+        _fstr_fixed_len_error(typed_fixed_length, typed_fstr.len); \
+    flstr(fixed_length)* typed_flstr = (flstr(fixed_length)*) typed_fstr.str; \
+    typed_flstr; \
+})
+
+#define new_flstr(size) ((flstr(size)*) lwt_alloc_new(size))
+
+/// Returns true if specified byte is an ASCII upper case character.
+#define fstr_cisupper(c) ((uint8_t) (c - 'A') < 26)
+
+/// Returns true if specified byte is an ASCII lower case character.
+#define fstr_cislower(c) ((uint8_t) (c - 'a') < 26)
+
+/// Returns the specified byte as an ASCII upper case character if it is an
+/// ASCII lower case character, otherwise returns the same byte.
+#define fstr_ctoupper(c) ({uint8_t _c = c; fstr_cislower(_c)? (_c & 0x5f): _c;})
+
+/// Returns the specified byte as an ASCII lower case character if it is an
+/// ASCII upper case character, otherwise returns the same byte.
+#define fstr_ctolower(c) ({uint8_t _c = c; fstr_cisupper(_c)? (_c | 32): _c;})
+
+/// Defines a fstr that wraps a cstr in compile time.
+#define FSTR_CSTR(str) fstr(str "\0")
+
+#define FSTR_STACK_DECL(name, length) \
+    uint8_t _##name##_buf[length]; \
+    name.len = length; \
+    name.str = _##name##_buf
+
+#define FSTR_CONCAT(...) \
+    fstr_concat((fstr_t[]) {__VA_ARGS__}, VA_NARGS(__VA_ARGS__), ((fstr_t){0}))
+
+#define FSTR_CONCAT_ANY(...) \
+    fstr_concat((fstr_t[]) { FOR_EACH_ARG(STR, __VA_ARGS__) }, VA_NARGS(__VA_ARGS__), ((fstr_t){0}))
+
+#define FSTR_BUILD(fstr_builder) \
+    for (fixed_str_builder_t fstr_builder = {0}; fstr_builder.phase < 2; fstr_builder.phase++)
+
+#define FSTR_PACK(value) \
+    ((fstr_t) {sizeof(value), (void*) &value})
+
+#define FSTR_UNPACK(buffer, type) ({ \
+    fstr_t v_slice = fstr_slice(buffer, 0, sizeof(type)); \
+    buffer = fstr_sslice(buffer, v_slice.len, -1); \
+    if (v_slice.len < sizeof(type)) \
+        _fstr_unpack_error(); \
+    *((type*) v_slice.str); \
+})
+
+#define FSTR_UNPACK_MEM(buffer, memory_length) ({ \
+    fstr_t v_slice = fstr_slice(buffer, 0, memory_length); \
+    buffer = fstr_sslice(buffer, v_slice.len, -1); \
+    if (v_slice.len < memory_length) \
+        _fstr_unpack_error(); \
+    v_slice; \
+})
+
+#define FSTR_UNPACK_FLSTR(buffer, constant_length) \
+    flstr_from_fstr(FSTR_UNPACK_MEM(buffer, constant_length), constant_length)
+
+typedef struct fstr_mem {
+    size_t len;
+    uint8_t str[];
+} fstr_mem_t;
+
+typedef struct fstr {
+    size_t len;
+    uint8_t* str;
+} fstr_t;
+
+/// Fixed string circular fifo buffer.
+typedef struct fstr_cfifo {
+    fstr_t buffer;
+    size_t data_offs;
+    size_t data_len;
+} fstr_cfifo_t;
+
+/// A vector of sliced cfifo parts.
+typedef struct fstr_cfifo_slicev {
+    uint8_t len;
+    fstr_t vec[2];
+} fstr_cfifo_slicev_t;
+
+typedef struct fixed_str_builder {
+    uint8_t phase;
+    size_t final_length;
+    uint8_t* write_ptr;
+    fstr_t* final_str;
+} fixed_str_builder_t;
+
+typedef struct fixed_str_buffer fsbuf_t;
+
+typedef int64_t (*fstr_cmp_fn_t)(const fstr_t, const fstr_t);
+
+list(fstr_t);
+
+void _fstr_unpack_error();
+
+void _fstr_fixed_len_error(size_t expect_length, size_t actual_length);
+
+/// Converts a c string declaration to a fstring. Not actually implemented
+/// as it can't be used to declare fstrings on compile time but instead used as
+/// an indicator for the occ preprocessor (occpp) to replace the declaration
+/// with a fixed string.
+fstr_t* fstr(char* c_string);
+
+/// Converts a c string declaration to a 128 bit hash value. Not actually
+/// implemented as it can't be used to declare uids on compile time but instead
+/// used as an indicator for the occ preprocessor (occpp) to replace the
+/// declaration with a fixed string.
+uint128_t fstr_pphash(char* c_string);
+
+/// Returns the fixed string representation of the given memory.
+inline static fstr_t fstr_str(fstr_mem_t* fstr_mem) {
+    return (fstr_t) {.len = fstr_mem->len, .str = fstr_mem->str};
+}
+
+/// Allocates a new fixed string.
+/// It guarantees that the returned buffer has space for length bytes.
+/// The content that the buffer contains is undefined.
+fstr_mem_t* fstr_alloc(size_t length);
+
+/// Like fstr_alloc() but attempts to align the allocation so no space is
+/// wasted in memory, useful for buffer when the exact size is not important.
+fstr_mem_t* fstr_alloc_buffer(size_t length);
+
+/// Calculates the length of the null terminated c string and initializes a
+/// fixed string based on the information, essentially fixates it.
+///  (Returns the null terminated c string)
+fstr_t fstr_fix_cstr(const char* c_string);
+
+/// Creates a fixed string from the specified fixed length buffer in place.
+fstr_t fstr_fix_buffer(void* buffer, size_t length);
+
+/// Allocates a new c string and copies the fixed string to it and null
+/// terminates the buffer. As fixed strings is not necessarily null terminated
+/// this function should be used when passing the fixed string to interfaces
+/// that accept c strings.
+char* fstr_to_cstr(fstr_t fstr);
+
+/// Converts a fixed string representing a number and serialized in a certain
+/// base to an integer. Ignores characters not specific for the specified base.
+/// Returns false if fstr contains a number that is larger than ULONG_MAX.
+/// Returns true if unserialization was successful and out_uint64 was set to
+/// the unserialized integer. No found specific characters counts as a success
+/// and 0 is returned in out_uint64.
+bool fstr_unserial_uint(fstr_t fstr, uint8_t base, uint128_t* out_uint128);
+
+/// Exactly like fstr_unserial_uint() but for signed integers.
+/// If the given string contains a minus sign prefix it is interpreted as a
+/// negative value. Returns zero if the number is larger than LONG_MAX or
+/// smaller than LONG_MIN.
+bool fstr_unserial_int(fstr_t fstr, uint8_t base, int128_t* out_int128);
+
+/// Attempts to convert a serialized number to an unsigned integer.
+/// Returns zero for the same reasons fstr_unserial_uint() would return false.
+uint128_t fstr_to_uint(fstr_t fstr, uint8_t base);
+
+/// Attempts to convert a serialized number to an signed integer.
+/// Returns zero for the same reasons fstr_unserial_int() would return false.
+int128_t fstr_to_int(fstr_t fstr, uint8_t base);
+
+/// Attempts to convert a serialized double to a double.
+/// Returns zero if the syntax could not be understood.
+double fstr_to_double(fstr_t fstr);
+
+/// Serializes an unsigned integer in specified base and fills a preallocated
+/// buffer with the numeric value from the right. If the buffer is too large
+/// it will be left padded with zeroes. If the buffer is to small the content
+/// is undefined. The slice of the buffer that contains the number without
+/// padding is returned.
+/// Any text symbols returned are always lowercase.
+fstr_t fstr_serial_uint(fstr_t fstr_dest, uint128_t i, uint8_t base);
+
+/// Exactly like fstr_fill_uint() but for signed integers. Returns a minus
+/// sign prefix if the number is negative.
+/// Any text symbols returned are always lowercase.
+fstr_t fstr_serial_int(fstr_t fstr_dest, int128_t i, uint8_t base);
+
+/// Converts signed integer to string with specified padding.
+/// Any text symbols returned are always lowercase.
+fstr_mem_t* fstr_from_int_pad(int128_t i, uint8_t base, size_t padding);
+
+/// Converts signed integer to string.
+/// Any text symbols returned are always lowercase.
+fstr_mem_t* fstr_from_int(int128_t i, uint8_t base);
+
+/// Converts unsigned integer to string with specified padding.
+/// Any text symbols returned are always lowercase.
+fstr_mem_t* fstr_from_uint_pad(uint128_t i, uint8_t base, size_t padding);
+
+/// Converts unsigned integer to string.
+/// Any text symbols returned are always lowercase.
+fstr_mem_t* fstr_from_uint(uint128_t i, uint8_t base);
+
+/// Converts a double to a string. The returned string will be an exact
+/// representation of the input double, including NaN and infinity values.
+fstr_mem_t* fstr_from_double(double d);
+
+/// Copies a null terminated c string into a fixed string.
+fstr_mem_t* fstr_from_cstr(const char* src);
+
+/// Copies a fixed string.
+fstr_mem_t* fstr_cpy(fstr_t src);
+
+/// Copies a fixed string to the destination buffer and returns the
+/// slice of the destination buffer that was copied over. Optionally
+/// the remaining destination and source tail can be provided as a convenience
+/// which is usually useful for buffer operations.
+fstr_t fstr_cpy_over(fstr_t dst, fstr_t src, fstr_t* out_dst_tail, fstr_t* out_src_tail);
+
+/// Copies a character to the destination buffer and returns true if there
+/// was room for the character or false if the buffer had no remaining space.
+static inline bool fstr_putc(fstr_t* dst, uint8_t c) {
+    if (dst->len == 0)
+        return false;
+    dst->str[0] = c;
+    dst->len--;
+    dst->str++;
+    return true;
+}
+
+/// Returns the head of the buffer that is not member of tail.
+/// Tail must either have a zero length (in which case full will be returned)
+/// or specify a range that is either full or a subset of full where the last
+/// byte is also the last byte of full.
+/// On error a zero length string is returned.
+fstr_t fstr_detail(fstr_t full, fstr_t tail);
+
+/// Completely overwrites all characters in the specified fixed string with
+/// the specified character.
+void fstr_fill(fstr_t dst, uint8_t chr);
+
+/// Returns a pseudo random string with the specified number of bytes.
+/// This stream is not suitable for cryptographic applications.
+fstr_mem_t* fstr_pseudo_random(size_t length);
+
+/// Returns a pseudo random hexadecimal string with the specified number of bytes.
+fstr_mem_t* fstr_hexrandom(size_t length);
+
+/// Hex encodes a fixed string to lowercase alpha numeric text.
+fstr_mem_t* fstr_hexencode(fstr_t bin_src);
+
+/// Hex decodes a fixed string, ignores invalid characters and scans the full
+/// string it's given.
+fstr_mem_t* fstr_hexdecode(fstr_t hex_src);
+
+/// Generates a hex dump for a binary buffer. Useful for debug output.
+fstr_mem_t* fstr_hexdump(fstr_t buf);
+
+/// Generates a hex description of a pointer. Useful for debug output.
+fstr_mem_t* fstr_hex_from_ptr(void* ptr);
+
+/// Compares two fixed strings for equality.
+bool fstr_equal(const fstr_t str1, const fstr_t str2);
+
+/// Like fstr_equal() but case insensitive (ASCII Latin).
+bool fstr_equal_case(fstr_t str1, fstr_t str2);
+
+/// Returns true if str has given prefix.
+bool fstr_prefixes(fstr_t str, fstr_t prefix);
+
+/// Like fstr_prefixes() but case insensitive (ASCII Latin).
+bool fstr_prefixes_case(fstr_t str, fstr_t prefix);
+
+/// Returns true if str has given suffix.
+bool fstr_suffixes(fstr_t str, fstr_t suffix);
+
+/// Like fstr_suffixes() but case insensitive (ASCII Latin).
+bool fstr_suffixes_case(fstr_t str, fstr_t suffix);
+
+/// Compares two fixed strings in an undefined but deterministic order
+/// that is optimized for speed. Memory is never compared unless the strings
+/// have an equal size and point to different regions of memory.
+int64_t fstr_cmp(const fstr_t str1, const fstr_t str2);
+
+/// Like fstr_cmp_case() but case insensitive (ASCII Latin).
+int64_t fstr_cmp_case(fstr_t str1, fstr_t str2);
+
+/// Compares two fixed strings according to the rules of lexicographical order
+/// which is slower than undefined deterministic ordering.
+int64_t fstr_cmp_lexical(const fstr_t str1, const fstr_t str2);
+
+/// Takes a C array of fixed strings and sorts them.
+/// If lexical is true the sorting will be done in lexical order.
+void fstr_sort(fstr_t fstr_list[], size_t n_fstr_list, bool lexical);
+
+/// Gets the next string in non lexicographical order.
+/// E.g. "" -> "\x00" -> "\x01" -> ... -> "\xff" -> "\x00\x00" -> "\x00\x01"
+fstr_mem_t* fstr_order_next(fstr_t src);
+
+/// Gets the previous string in non lexicographical order.
+/// Throws logical exception if given the empty string.
+fstr_mem_t* fstr_order_prev(fstr_t src);
+
+/// Copies a string to lower case (ASCII Latin).
+fstr_mem_t* fstr_lower(fstr_t src);
+
+/// Copies a string to upper case (ASCII Latin).
+fstr_mem_t* fstr_upper(fstr_t src);
+
+/// Converts the given string to lower case (ASCII Latin).
+/// This function modifies memory in-place.
+void fstr_tolower(fstr_t str);
+
+/// Converts the given string to upper case (ASCII Latin).
+/// This function modifies memory in-place.
+void fstr_toupper(fstr_t str);
+
+/// Creates a reference to the slice of memory that str contains. Offs0 is the
+/// offset where the slice starts and offs1 is the offset where the next slice
+/// starts that will be cut off from the region returned.
+/// If offs0 == offs1 the returned .len will be zero but the .str is undefined.
+///  function is in-place and does NULL return a null
+/// terminated c string.
+fstr_t fstr_slice(fstr_t str, uint64_t offs0, uint64_t offs1);
+
+/// Exactly like slice but takes two signed offsets where -1 is the offset
+/// after the last character in the string, -2 is the offset of the last
+/// character in the string and so on.
+fstr_t fstr_sslice(fstr_t str, int64_t offs0, int64_t offs1);
+
+/// Scans the string from left to right after a sub string and returns the
+/// offset where it is first found. If no such substring is found the function
+/// returns -1. This scanning has quadratic worst-case complexity (N*M) where N
+/// is the length of str and M is the length of sub_str.
+int64_t fstr_scan(fstr_t str, fstr_t sub_str);
+
+/// Like fstr_scan but scans in reverse. It returns the offset where the
+/// specified sub string is last found. If no such substring is found the
+/// function returns -1.
+int64_t fstr_rscan(fstr_t str, fstr_t sub_str);
+
+/// Takes a C array of fixed strings and concatenates them.
+/// Returns an allocated empty string if n_fstr_list = 0.
+fstr_mem_t* fstr_concat(fstr_t fstr_list[], size_t n_fstr_list, fstr_t glue);
+
+/// Takes a C array of fixed strings and glues them together.
+/// Returns an allocated empty string if list_count(fstr_list, fstr_t) == 0.
+fstr_mem_t* fstr_implode(list(fstr_t)* fstr_list, fstr_t glue);
+
+/// Takes a fixed string and returns a C array of chunks based on a certain
+/// delimiter. The references returned refers to in-place slices
+/// of the source string. If the delimiter has zero length a list is returned
+/// with a singe element, the specified source string.
+list(fstr_t)* fstr_explode(fstr_t src, fstr_t delimiter);
+
+/// Takes a source text, finds elements and replaces them. This function
+/// is implemented using fstr_implode() and fstr_explode() and has the same
+/// run-time complexity limitations.
+fstr_mem_t* fstr_replace(fstr_t source, fstr_t find, fstr_t replace);
+
+/// Finds the first instance of the specified separator in the source and
+/// returns the range before and after unless null.
+/// Returns false if the separator is not found.
+bool fstr_divide(fstr_t src, fstr_t separator, fstr_t* out_before, fstr_t* out_after);
+
+/// Like fstr_divide() but divides in reverse.
+bool fstr_rdivide(fstr_t src, fstr_t separator, fstr_t* out_before, fstr_t* out_after);
+
+/// Iterates over a series of chunks in a string joined with the specified
+/// separator. The io_str will be modified so the first chunk and separator
+/// is skipped. The next chunk to iterate over is returned in out_next unless
+/// it is 0. The length of the io_str string will shrink for each iteration.
+/// When the function is called with a zero length string in io_str or separator
+/// the function return false, otherwise the function will always return true
+/// and return the next chunk in out_next.
+bool fstr_iterate(fstr_t* io_str, fstr_t separator, fstr_t* out_next);
+
+/// Like fstr_iterate() but iterates in reverse.
+bool fstr_riterate(fstr_t* io_str, fstr_t separator, fstr_t* out_next);
+
+/// Like fstr_iterate() but will trim the input string before iterating over it.
+/// This means that leading and trailing whitespace have no effect.
+/// The returned separator in out_next is also trimmed. Useful when parsing
+/// text files or data that is heavily white space separated.
+/// The function returns false immediately if given a string with only
+/// whitespace since it will have a zero initial length.
+bool fstr_iterate_trim(fstr_t* io_str, fstr_t separator, fstr_t* out_next);
+
+/// Like fstr_iterate_trim() but iterates in reverse.
+bool fstr_riterate_trim(fstr_t* io_str, fstr_t separator, fstr_t* out_next);
+
+/// Takes a fixed string and returns the slice of it that has been rid of any
+/// leading or trailing whitespace.
+fstr_t fstr_trim(fstr_t fstr);
+
+/// Encodes binary data in base64.
+/// The returned output is approximately 4 / 3 the size of the binary data.
+/// It includes padding '=' characters to make the returned length dividable by 4.
+fstr_mem_t* fstr_base64_encode(fstr_t binary_data);
+
+/// Decodes a base64 to binary data. Invalid base64 characters are ignored.
+/// The returned output is ~ 3 / 4 the size of the valid base64 text.
+/// Partial base64 data will have its corrupt tail silently discarded.
+/// Padding '=' characters is not required and will be silently discarded.
+fstr_mem_t* fstr_base64_decode(fstr_t base64_text);
+
+/// Computes md5 hash of the specified data.
+flstr(16)* fstr_md5(fstr_t data);
+
+/// Computes sha1 hash of the specified data.
+flstr(20)* fstr_sha1(fstr_t data);
+
+/// Computes sha256 hash of the specified data.
+flstr(32)* fstr_sha256(fstr_t data);
+
+/// Reverses a given string in place
+void fstr_reverse_buffer(fstr_t buffer);
+
+/// Returns a new string with the reversed content of the source string
+fstr_mem_t* fstr_reverse(const fstr_t source);
+
+/// Generic string conversion functions.
+/// __attribute__((overloadable)) is a clang extension, but is only used for
+/// convenience and reduced preprocessor output - in standard C11 _Generic
+/// could be used instead.
+static inline fstr_t __attribute__((overloadable)) STR(uint128_t x) { return fss(fstr_from_uint(x, 10)); }
+static inline fstr_t __attribute__((overloadable)) STR(uint64_t x) { return fss(fstr_from_uint(x, 10)); }
+static inline fstr_t __attribute__((overloadable)) STR(uint32_t x) { return fss(fstr_from_uint(x, 10)); }
+static inline fstr_t __attribute__((overloadable)) STR(uint16_t x) { return fss(fstr_from_uint(x, 10)); }
+static inline fstr_t __attribute__((overloadable)) STR(uint8_t x) { return fss(fstr_from_uint(x, 10)); }
+static inline fstr_t __attribute__((overloadable)) STR(int128_t x) { return fss(fstr_from_int(x, 10)); }
+static inline fstr_t __attribute__((overloadable)) STR(int64_t x) { return fss(fstr_from_int(x, 10)); }
+static inline fstr_t __attribute__((overloadable)) STR(int32_t x) { return fss(fstr_from_int(x, 10)); }
+static inline fstr_t __attribute__((overloadable)) STR(int16_t x) { return fss(fstr_from_int(x, 10)); }
+static inline fstr_t __attribute__((overloadable)) STR(int8_t x) { return fss(fstr_from_int(x, 10)); }
+static inline fstr_t __attribute__((overloadable)) STR(double x) { return fss(fstr_from_double(x)); }
+static inline fstr_t __attribute__((overloadable)) STR(void* x) { return fss(fstr_hex_from_ptr(x)); }
+static inline fstr_t __attribute__((overloadable)) STR(fstr_t x) { return x; }
+
+/// Creates a new fixed string circular fifo buffer.
+static inline fstr_cfifo_t fstr_cfifo_init(fstr_t buffer) {
+    return (fstr_cfifo_t) {
+        .buffer = buffer,
+        .data_offs = 0,
+        .data_len = 0,
+    };
+}
+
+static inline fstr_t fstr_cfifo_join(fstr_cfifo_slicev_t slices) {
+    if (slices.len == 0)
+        return fstr("");
+    else if (slices.len == 1)
+        return slices.vec[0];
+    else
+        return concs(slices.vec[0], slices.vec[1]);
+}
+
+/// Slices the circular fifo to get the memory segments.
+/// If free_slice is true the function returns the slices of free memory.
+/// If free_slice is false the function returns the slices of used memory.
+fstr_cfifo_slicev_t fstr_cfifo_slice(fstr_cfifo_t* cfifo, bool free_slice);
+
+/// Returns the length of the exiting data in the cfifo buffer.
+static inline size_t fstr_cfifo_len_data(fstr_cfifo_t* cfifo) {
+    return cfifo->data_len;
+}
+
+/// Returns the length of the free space in the cfifo buffer.
+static inline size_t fstr_cfifo_len_space(fstr_cfifo_t* cfifo) {
+    return cfifo->buffer.len - cfifo->data_len;
+}
+
+/// Reads from a new fixed string circular fifo buffer.
+/// Returns the initial slice of dst that was copied to.
+/// If peek is false the cfifo is modified so the read data is consumed.
+fstr_t fstr_cfifo_read(fstr_cfifo_t* cfifo, fstr_t dst, bool peek);
+
+/// Writes a to a fixed string circular fifo buffer.
+/// Returns the tail of src that was not copied because it did not fit.
+/// If overwrite is true an empty string is always returned and the tail of the source buffer that fit was written.
+fstr_t fstr_cfifo_write(fstr_cfifo_t* cfifo, fstr_t src, bool overwrite);
+
+/// Returns the base name of the specified path. The base name is the last
+/// slice of the path after the last non-trailing forward slash.
+/// The base name is also informally known as the file name.
+fstr_t fstr_path_base(fstr_t file_path);
+
+#endif /* RCD_FSTRING_H */

@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import subprocess
+
+LIB_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "asmlib")
+OBJFILE_OUTPUT_DIR = sys.argv[1]
+
+for file in os.listdir(LIB_DIR):
+    if (file == "dispatchpatch64.asm"):
+        continue
+    name, ext = os.path.splitext(file)
+    if (ext != ".asm"):
+        continue
+    source_file = os.path.join(LIB_DIR, file)
+    obj_file = os.path.join(OBJFILE_OUTPUT_DIR, name + ".o")
+    print(obj_file)
+    if (os.path.exists(source_file) and os.path.exists(obj_file) and os.stat(source_file).st_mtime < os.stat(obj_file).st_mtime):
+        continue
+    subprocess.check_output(["yasm -felf64 -DUNIX -Worphan-labels %s -o %s.tmp" % (source_file, obj_file)], shell=True)
+    subprocess.check_output(["rcd-o-ssw %s.tmp %s" % (obj_file, obj_file)], shell=True)
+
+exit(0)

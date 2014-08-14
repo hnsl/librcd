@@ -1,0 +1,12 @@
+#!/bin/bash
+
+clang test-vm.c vm.c avl.c \
+-g -o test-vm.out \
+## -O3 \
+\
+&& \
+\
+cp ./test-vm.out /tmp/test-vm.out \
+&& \
+/tmp/test-vm.out
+## gdb /tmp/test-vm.out

@@ -1,0 +1,1369 @@
+#!/usr/bin/env php
+<?php
+####################################################################
+#
+#  Musl source code generator
+#
+#  Copyright © 2014, Jumpstarter AB. This file is part of the librcd project.
+#  This Source Code Form is subject to the terms of the Mozilla Public
+#  License, v. 2.0. If a copy of the MPL was not distributed with this
+#  file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#  See the COPYING file distributed with this project for more information.
+#
+#  SYNOPSIS:
+#     cd musl-src/
+#     musl-generator (c|h) > musl.(c|h)
+#
+#  Currently based on musl version:
+#  7cbb6f70c8fe711644ec0dbede1973cc6641a283 (Wed Jan 15 22:29:13 2014 -0500)
+#
+####################################################################
+
+exit(call_user_func(function() {
+    assert_options(ASSERT_BAIL, 1);
+    set_error_handler(function($errno, $errstr, $errfile, $errline) {
+        trigger_error("[$errfile:$errline] $errstr", E_USER_ERROR);
+    }, E_ALL);
+    global $argv;
+    $mode = isset($argv[1])? $argv[1]: null;
+    $is_c_mode = ($mode === "c");
+    $is_s_mode = ($mode === "s");
+    $is_h_mode = ($mode === "h");
+    if (!$is_c_mode && !$is_s_mode && !$is_h_mode)
+        throw new Exception("must select c, s or h mode");
+    $hard_src_files = array(
+        /* we hand pick the header files that contain the */
+        /* declarations we want in the public musl header */
+
+        "include/dirent.h",
+        "include/poll.h",
+        "include/pthread.h",
+        "include/signal.h",
+        "include/time.h",
+        "include/utime.h",
+        "include/utmp.h",
+        "include/arpa/inet.h",
+        "include/net/ethernet.h",
+        "include/net/if.h",
+        "include/net/if_arp.h",
+        "include/net/route.h",
+        "include/netinet/icmp6.h",
+        "include/netinet/if_ether.h",
+        "include/netinet/in.h",
+        "include/netinet/in_systm.h",
+        "include/netinet/ip.h",
+        "include/netinet/ip6.h",
+        "include/netinet/ip_icmp.h",
+        "include/netinet/tcp.h",
+        "include/netinet/udp.h",
+        "include/netpacket/packet.h",
+        "include/sys/epoll.h",
+        "include/sys/eventfd.h",
+        "include/sys/inotify.h",
+        "include/sys/file.h",
+        "include/sys/mman.h",
+        "include/sys/mount.h",
+        "include/sys/prctl.h",
+        "include/sys/shm.h",
+        "include/sys/signalfd.h",
+        "include/sys/statfs.h",
+        "include/sys/sysinfo.h",
+        "include/sys/time.h",
+        "include/sys/timerfd.h",
+        "include/sys/times.h",
+        "include/sys/un.h",
+        "include/sys/utsname.h",
+        "include/sys/wait.h",
+        "include/sys/xattr.h",
+
+        /* the following list of c files is automatically generated */
+        /* from all modules we are intrested in and the files we are */
+        /* not intrested in is commented out with a specific reason */
+
+        "src/complex/__cexp.c",
+        "src/complex/__cexpf.c",
+        "src/complex/cabs.c",
+        "src/complex/cabsf.c",
+        "src/complex/cabsl.c",
+        "src/complex/cacos.c",
+        "src/complex/cacosf.c",
+        "src/complex/cacosh.c",
+        "src/complex/cacoshf.c",
+        "src/complex/cacoshl.c",
+        "src/complex/cacosl.c",
+        "src/complex/carg.c",
+        "src/complex/cargf.c",
+        "src/complex/cargl.c",
+        "src/complex/casin.c",
+        "src/complex/casinf.c",
+        "src/complex/casinh.c",
+        "src/complex/casinhf.c",
+        "src/complex/casinhl.c",
+        "src/complex/casinl.c",
+        "src/complex/catan.c",
+        "src/complex/catanf.c",
+        "src/complex/catanh.c",
+        "src/complex/catanhf.c",
+        "src/complex/catanhl.c",
+        "src/complex/catanl.c",
+        "src/complex/ccos.c",
+        "src/complex/ccosf.c",
+        "src/complex/ccosh.c",
+        "src/complex/ccoshf.c",
+        "src/complex/ccoshl.c",
+        "src/complex/ccosl.c",
+        "src/complex/cexp.c",
+        "src/complex/cexpf.c",
+        "src/complex/cexpl.c",
+        "src/complex/cimag.c",
+        "src/complex/cimagf.c",
+        "src/complex/cimagl.c",
+        "src/complex/clog.c",
+        "src/complex/clogf.c",
+        "src/complex/clogl.c",
+        "src/complex/conj.c",
+        "src/complex/conjf.c",
+        "src/complex/conjl.c",
+        "src/complex/cpow.c",
+        "src/complex/cpowf.c",
+        "src/complex/cpowl.c",
+        "src/complex/cproj.c",
+        "src/complex/cprojf.c",
+        "src/complex/cprojl.c",
+        "src/complex/creal.c",
+        "src/complex/crealf.c",
+        "src/complex/creall.c",
+        "src/complex/csin.c",
+        "src/complex/csinf.c",
+        "src/complex/csinh.c",
+        "src/complex/csinhf.c",
+        "src/complex/csinhl.c",
+        "src/complex/csinl.c",
+        "src/complex/csqrt.c",
+        "src/complex/csqrtf.c",
+        "src/complex/csqrtl.c",
+        "src/complex/ctan.c",
+        "src/complex/ctanf.c",
+        "src/complex/ctanh.c",
+        "src/complex/ctanhf.c",
+        "src/complex/ctanhl.c",
+        "src/complex/ctanl.c",
+        "src/conf/confstr.c",
+        "src/conf/fpathconf.c",
+        "src/conf/pathconf.c",
+        "src/conf/sysconf.c",
+        "src/ctype/__ctype_b_loc.c",
+        "src/ctype/__ctype_get_mb_cur_max.c",
+        "src/ctype/__ctype_tolower_loc.c",
+        "src/ctype/__ctype_toupper_loc.c",
+        "src/ctype/isalnum.c",
+        "src/ctype/isalpha.c",
+        "src/ctype/isascii.c",
+        "src/ctype/isblank.c",
+        "src/ctype/iscntrl.c",
+        "src/ctype/isdigit.c",
+        "src/ctype/isgraph.c",
+        "src/ctype/islower.c",
+        "src/ctype/isprint.c",
+        "src/ctype/ispunct.c",
+        "src/ctype/isspace.c",
+        "src/ctype/isupper.c",
+        "src/ctype/iswalnum.c",
+        "src/ctype/iswalpha.c",
+        "src/ctype/iswblank.c",
+        "src/ctype/iswcntrl.c",
+        "src/ctype/iswctype.c",
+        "src/ctype/iswdigit.c",
+        "src/ctype/iswgraph.c",
+        "src/ctype/iswlower.c",
+        "src/ctype/iswprint.c",
+        "src/ctype/iswpunct.c",
+        "src/ctype/iswspace.c",
+        "src/ctype/iswupper.c",
+        "src/ctype/iswxdigit.c",
+        "src/ctype/isxdigit.c",
+        "src/ctype/toascii.c",
+        "src/ctype/tolower.c",
+        "src/ctype/toupper.c",
+        "src/ctype/towctrans.c",
+        "src/ctype/wcswidth.c",
+        "src/ctype/wctrans.c",
+        "src/ctype/wcwidth.c",
+        "src/dirent/__getdents.c",
+        "src/dirent/alphasort.c",
+        "src/dirent/closedir.c",
+        "src/dirent/dirfd.c",
+        "src/dirent/fdopendir.c",
+        "src/dirent/opendir.c",
+        "src/dirent/readdir.c",
+        "src/dirent/readdir_r.c",
+        "src/dirent/rewinddir.c",
+        "src/dirent/scandir.c",
+        "src/dirent/seekdir.c",
+        "src/dirent/telldir.c",
+        "src/dirent/versionsort.c",
+        "src/fcntl/creat.c",
+        "src/fcntl/fcntl.c",
+        "src/fcntl/open.c",
+        "src/fcntl/openat.c",
+        "src/fcntl/posix_fadvise.c",
+        "src/fcntl/posix_fallocate.c",
+        "src/fenv/fegetexceptflag.c",
+        "src/fenv/feholdexcept.c",
+        "src/fenv/fesetexceptflag.c",
+        "src/fenv/fesetround.c",
+        "src/fenv/feupdateenv.c",
+        "src/locale/catclose.c",
+        "src/locale/catgets.c",
+        "src/locale/catopen.c",
+        // "src/locale/duplocale.c", tainted by direct unknown locale_t struct usage
+        // "src/locale/freelocale.c", tainted by direct unknown locale_t struct usage
+        // "src/locale/iconv.c", let's not support this for now
+        "src/locale/intl.c",
+        "src/locale/isalnum_l.c",
+        "src/locale/isalpha_l.c",
+        "src/locale/isblank_l.c",
+        "src/locale/iscntrl_l.c",
+        "src/locale/isdigit_l.c",
+        "src/locale/isgraph_l.c",
+        "src/locale/islower_l.c",
+        "src/locale/isprint_l.c",
+        "src/locale/ispunct_l.c",
+        "src/locale/isspace_l.c",
+        "src/locale/isupper_l.c",
+        "src/locale/iswalnum_l.c",
+        "src/locale/iswalpha_l.c",
+        "src/locale/iswblank_l.c",
+        "src/locale/iswcntrl_l.c",
+        "src/locale/iswctype_l.c",
+        "src/locale/iswdigit_l.c",
+        "src/locale/iswgraph_l.c",
+        "src/locale/iswlower_l.c",
+        "src/locale/iswprint_l.c",
+        "src/locale/iswpunct_l.c",
+        "src/locale/iswspace_l.c",
+        "src/locale/iswupper_l.c",
+        "src/locale/iswxdigit_l.c",
+        "src/locale/isxdigit_l.c",
+        "src/locale/langinfo.c",
+        "src/locale/localeconv.c",
+        // "src/locale/newlocale.c", tainted by direct unknown locale_t struct usage
+        "src/locale/setlocale.c",
+        "src/locale/strcasecmp_l.c",
+        "src/locale/strcoll.c",
+        "src/locale/strerror_l.c",
+        "src/locale/strfmon.c",
+        "src/locale/strncasecmp_l.c",
+        "src/locale/strxfrm.c",
+        "src/locale/tolower_l.c",
+        "src/locale/toupper_l.c",
+        "src/locale/towctrans_l.c",
+        "src/locale/towlower_l.c",
+        "src/locale/towupper_l.c",
+        // "src/locale/uselocale.c", tainted by direct pthread struct usage (sets locale in tls) and unknown locale_t struct usage
+        "src/locale/wcscoll.c",
+        "src/locale/wcsxfrm.c",
+        "src/locale/wctrans_l.c",
+        "src/locale/wctype_l.c",
+        "src/math/__cos.c",
+        "src/math/__cosdf.c",
+        "src/math/__cosl.c",
+        "src/math/__expo2.c",
+        "src/math/__expo2f.c",
+        "src/math/__fpclassify.c",
+        "src/math/__fpclassifyf.c",
+        "src/math/__fpclassifyl.c",
+        "src/math/__invtrigl.c",
+        "src/math/__polevll.c",
+        "src/math/__rem_pio2.c",
+        "src/math/__rem_pio2_large.c",
+        "src/math/__rem_pio2f.c",
+        "src/math/__rem_pio2l.c",
+        "src/math/__signbit.c",
+        "src/math/__signbitf.c",
+        "src/math/__signbitl.c",
+        "src/math/__sin.c",
+        "src/math/__sindf.c",
+        "src/math/__sinl.c",
+        "src/math/__tan.c",
+        "src/math/__tandf.c",
+        "src/math/__tanl.c",
+        "src/math/acos.c",
+        "src/math/acosf.c",
+        "src/math/acosh.c",
+        "src/math/acoshf.c",
+        "src/math/acoshl.c",
+        "src/math/acosl.c",
+        "src/math/asin.c",
+        "src/math/asinf.c",
+        "src/math/asinh.c",
+        "src/math/asinhf.c",
+        "src/math/asinhl.c",
+        "src/math/asinl.c",
+        "src/math/atan.c",
+        "src/math/atan2.c",
+        "src/math/atan2f.c",
+        "src/math/atan2l.c",
+        "src/math/atanf.c",
+        "src/math/atanh.c",
+        "src/math/atanhf.c",
+        "src/math/atanhl.c",
+        "src/math/atanl.c",
+        "src/math/cbrt.c",
+        "src/math/cbrtf.c",
+        "src/math/cbrtl.c",
+        "src/math/ceil.c",
+        "src/math/ceilf.c",
+        "src/math/ceill.c",
+        "src/math/copysign.c",
+        "src/math/copysignf.c",
+        "src/math/copysignl.c",
+        "src/math/cos.c",
+        "src/math/cosf.c",
+        "src/math/cosh.c",
+        "src/math/coshf.c",
+        "src/math/coshl.c",
+        "src/math/cosl.c",
+        "src/math/erf.c",
+        "src/math/erff.c",
+        "src/math/erfl.c",
+        "src/math/exp.c",
+        "src/math/exp10.c",
+        "src/math/exp10f.c",
+        "src/math/exp10l.c",
+        "src/math/exp2.c",
+        "src/math/exp2f.c",
+        "src/math/exp2l.c",
+        "src/math/expf.c",
+        "src/math/expl.c",
+        "src/math/expm1.c",
+        "src/math/expm1f.c",
+        "src/math/expm1l.c",
+        "src/math/fabs.c",
+        "src/math/fabsf.c",
+        "src/math/fabsl.c",
+        "src/math/fdim.c",
+        "src/math/fdimf.c",
+        "src/math/fdiml.c",
+        "src/math/finite.c",
+        "src/math/finitef.c",
+        "src/math/floor.c",
+        "src/math/floorf.c",
+        "src/math/floorl.c",
+        "src/math/fma.c",
+        "src/math/fmaf.c",
+        "src/math/fmal.c",
+        "src/math/fmax.c",
+        "src/math/fmaxf.c",
+        "src/math/fmaxl.c",
+        "src/math/fmin.c",
+        "src/math/fminf.c",
+        "src/math/fminl.c",
+        "src/math/fmod.c",
+        "src/math/fmodf.c",
+        "src/math/fmodl.c",
+        "src/math/frexp.c",
+        "src/math/frexpf.c",
+        "src/math/frexpl.c",
+        "src/math/hypot.c",
+        "src/math/hypotf.c",
+        "src/math/hypotl.c",
+        "src/math/ilogb.c",
+        "src/math/ilogbf.c",
+        "src/math/ilogbl.c",
+        "src/math/j0.c",
+        "src/math/j0f.c",
+        "src/math/j1.c",
+        "src/math/j1f.c",
+        "src/math/jn.c",
+        "src/math/jnf.c",
+        "src/math/ldexp.c",
+        "src/math/ldexpf.c",
+        "src/math/ldexpl.c",
+        "src/math/lgamma.c",
+        "src/math/lgamma_r.c",
+        "src/math/lgammaf.c",
+        "src/math/lgammaf_r.c",
+        "src/math/lgammal.c",
+        "src/math/llrint.c",
+        "src/math/llrintf.c",
+        "src/math/llrintl.c",
+        "src/math/llround.c",
+        "src/math/llroundf.c",
+        "src/math/llroundl.c",
+        "src/math/log.c",
+        "src/math/log10.c",
+        "src/math/log10f.c",
+        "src/math/log10l.c",
+        "src/math/log1p.c",
+        "src/math/log1pf.c",
+        "src/math/log1pl.c",
+        "src/math/log2.c",
+        "src/math/log2f.c",
+        "src/math/log2l.c",
+        "src/math/logb.c",
+        "src/math/logbf.c",
+        "src/math/logbl.c",
+        "src/math/logf.c",
+        "src/math/logl.c",
+        "src/math/lrint.c",
+        "src/math/lrintf.c",
+        "src/math/lrintl.c",
+        "src/math/lround.c",
+        "src/math/lroundf.c",
+        "src/math/lroundl.c",
+        "src/math/modf.c",
+        "src/math/modff.c",
+        "src/math/modfl.c",
+        "src/math/nan.c",
+        "src/math/nanf.c",
+        "src/math/nanl.c",
+        "src/math/nearbyint.c",
+        "src/math/nearbyintf.c",
+        "src/math/nearbyintl.c",
+        "src/math/nextafter.c",
+        "src/math/nextafterf.c",
+        "src/math/nextafterl.c",
+        "src/math/nexttoward.c",
+        "src/math/nexttowardf.c",
+        "src/math/nexttowardl.c",
+        "src/math/pow.c",
+        "src/math/powf.c",
+        "src/math/powl.c",
+        "src/math/remainder.c",
+        "src/math/remainderf.c",
+        "src/math/remainderl.c",
+        "src/math/remquo.c",
+        "src/math/remquof.c",
+        "src/math/remquol.c",
+        "src/math/rint.c",
+        "src/math/rintf.c",
+        "src/math/rintl.c",
+        "src/math/round.c",
+        "src/math/roundf.c",
+        "src/math/roundl.c",
+        "src/math/scalb.c",
+        "src/math/scalbf.c",
+        "src/math/scalbln.c",
+        "src/math/scalblnf.c",
+        "src/math/scalblnl.c",
+        "src/math/scalbn.c",
+        "src/math/scalbnf.c",
+        "src/math/scalbnl.c",
+        "src/math/signgam.c",
+        "src/math/significand.c",
+        "src/math/significandf.c",
+        "src/math/sin.c",
+        "src/math/sincos.c",
+        "src/math/sincosf.c",
+        "src/math/sincosl.c",
+        "src/math/sinf.c",
+        "src/math/sinh.c",
+        "src/math/sinhf.c",
+        "src/math/sinhl.c",
+        "src/math/sinl.c",
+        "src/math/sqrt.c",
+        "src/math/sqrtf.c",
+        "src/math/sqrtl.c",
+        "src/math/tan.c",
+        "src/math/tanf.c",
+        "src/math/tanh.c",
+        "src/math/tanhf.c",
+        "src/math/tanhl.c",
+        "src/math/tanl.c",
+        "src/math/tgamma.c",
+        "src/math/tgammaf.c",
+        "src/math/tgammal.c",
+        "src/math/trunc.c",
+        "src/math/truncf.c",
+        "src/math/truncl.c",
+        "src/misc/a64l.c",
+        "src/misc/basename.c",
+        "src/misc/dirname.c",
+        "src/misc/ffs.c",
+        // "src/misc/forkpty.c", fork is not supported by librcd
+        "src/misc/get_current_dir_name.c",
+        "src/misc/getdomainname.c",
+        "src/misc/getgrouplist.c",
+        "src/misc/gethostid.c",
+        "src/misc/getopt.c",
+        "src/misc/getopt_long.c",
+        // "src/misc/getpriority.c", linux.c implements this
+        // "src/misc/getresgid.c", linux.c implements this
+        // "src/misc/getresuid.c", linux.c implements this
+        // "src/misc/getrlimit.c", linux.c implements this
+        // "src/misc/getrusage.c", linux.c implements this
+        "src/misc/getsubopt.c",
+        "src/misc/initgroups.c",
+        "src/misc/ioctl.c",
+        "src/misc/lockf.c",
+        // "src/misc/mntent.c", depends on src/stdio/scanf.c
+        "src/misc/nftw.c",
+        "src/misc/openpty.c",
+        "src/misc/ptsname.c",
+        "src/misc/pty.c",
+        "src/misc/realpath.c",
+        // "src/misc/setdomainname.c", linux.c implements this
+        // "src/misc/setpriority.c", linux.c implements this
+        // "src/misc/setrlimit.c", tainted by __synccall use
+        // "src/misc/syscall.c", we hard code this impl ourself in this code generator
+        // "src/misc/syslog.c", we disable this feature, code is broken (["+!pid, pid, "]"+!pid)
+        // "src/misc/uname.c", linux.c implements this
+        // "src/misc/wordexp.c", tainted by fork(), execve() etc..
+        "src/multibyte/btowc.c",
+        "src/multibyte/internal.c",
+        "src/multibyte/mblen.c",
+        "src/multibyte/mbrlen.c",
+        "src/multibyte/mbrtowc.c",
+        "src/multibyte/mbsinit.c",
+        "src/multibyte/mbsnrtowcs.c",
+        "src/multibyte/mbsrtowcs.c",
+        "src/multibyte/mbstowcs.c",
+        "src/multibyte/mbtowc.c",
+        "src/multibyte/wcrtomb.c",
+        "src/multibyte/wcsnrtombs.c",
+        "src/multibyte/wcsrtombs.c",
+        "src/multibyte/wcstombs.c",
+        "src/multibyte/wctob.c",
+        "src/multibyte/wctomb.c",
+        // "src/network/__dns.c", tainted by pthread and direct FILE struct usage
+        "src/network/__ipparse.c",
+        "src/network/accept.c",
+        // "src/network/accept4.c", linux.c implements this
+        // "src/network/bind.c", linux.c implements this
+        // "src/network/connect.c", linux.c implements this
+        "src/network/dn_comp.c",
+        "src/network/dn_expand.c",
+        "src/network/dn_skipname.c",
+        // "src/network/ent.c", not implemented in musl and declaration is invalid
+        "src/network/ether.c",
+        "src/network/freeaddrinfo.c",
+        "src/network/gai_strerror.c",
+        // "src/network/getaddrinfo.c", tainted by direct FILE struct usage - glibrcd implements this as a librcd wrapper
+        // "src/network/gethostbyaddr.c", // depends on src/network/gethostbyaddr_r.c
+        // "src/network/gethostbyaddr_r.c", depends on src/network/getnameinfo.c
+        "src/network/gethostbyname.c", // depends on src/network/gethostbyname2.c
+        "src/network/gethostbyname2.c", // depends on src/network/gethostbyname2_r.c
+        "src/network/gethostbyname2_r.c", // depends on src/network/getaddrinfo.c
+        "src/network/gethostbyname_r.c", // depends on src/network/gethostbyname2_r.c
+        "src/network/getifaddrs.c",
+        // "src/network/getnameinfo.c", depends on src/network/__dns.c
+        // "src/network/getpeername.c", linux.h defines this
+        "src/network/getservbyname.c", // depends on src/network/getservbyname_r.c
+        "src/network/getservbyname_r.c", // depends on src/network/getaddrinfo.c
+        // "src/network/getservbyport.c", // depends on src/network/getservbyport_r.c
+        // "src/network/getservbyport_r.c", // depends on src/network/getnameinfo.c
+        // "src/network/getsockname.c", linux.h defines this
+        // "src/network/getsockopt.c", linux.h defines this
+        "src/network/h_errno.c",
+        "src/network/herror.c",
+        "src/network/hstrerror.c",
+        "src/network/htonl.c",
+        "src/network/htons.c",
+        "src/network/if_freenameindex.c",
+        "src/network/if_indextoname.c",
+        "src/network/if_nameindex.c",
+        "src/network/if_nametoindex.c",
+        "src/network/in6addr_any.c",
+        "src/network/in6addr_loopback.c",
+        "src/network/inet_addr.c",
+        "src/network/inet_legacy.c",
+        "src/network/inet_ntoa.c",
+        "src/network/inet_ntop.c",
+        "src/network/inet_pton.c",
+        // "src/network/listen.c", linux.h defines this
+        "src/network/netname.c",
+        "src/network/ntohl.c",
+        "src/network/ntohs.c",
+        "src/network/proto.c",
+        // "src/network/recv.c", linux.h defines this
+        // "src/network/recvfrom.c", linux.h defines this
+        // "src/network/recvmsg.c", linux.h defines this
+        // "src/network/res_init.c", pointless without src/network/res_query.c
+        // "src/network/res_query.c", depends on src/network/__dns.c
+        // "src/network/res_state.c", linux.h should defines this
+        // "src/network/send.c", linux.h defines this
+        // "src/network/sendmsg.c", linux.h defines this
+        // "src/network/sendto.c", linux.h defines this
+        "src/network/serv.c",
+        // "src/network/setsockopt.c", linux.h defines this
+        // "src/network/shutdown.c", linux.h defines this
+        "src/network/sockatmark.c",
+        // "src/network/socket.c", linux.h defines this, we should definitely NOT use the musl implementation that is full of races
+        // "src/network/socketpair.c", linux.h defines this
+        "src/passwd/fgetgrent.c",
+        "src/passwd/fgetpwent.c",
+        "src/passwd/fgetspent.c",
+        "src/passwd/getgr_r.c",
+        "src/passwd/getgrent.c",
+        "src/passwd/getgrent_a.c",
+        "src/passwd/getpw_r.c",
+        "src/passwd/getpwent.c",
+        "src/passwd/getpwent_a.c",
+        "src/passwd/getspent.c",
+        "src/passwd/getspnam.c",
+        "src/passwd/getspnam_r.c",
+        "src/passwd/lckpwdf.c",
+        // "src/passwd/putgrent.c", tainted by flockfile/funlockfile use
+        "src/passwd/putpwent.c",
+        "src/passwd/putspent.c",
+        "src/search/hsearch.c",
+        "src/search/insque.c",
+        "src/search/lsearch.c",
+        "src/search/tdestroy.c",
+        "src/search/tsearch_avl.c",
+        "src/signal/block.c",
+        "src/signal/getitimer.c",
+        // "src/signal/kill.c", linux.h defines this
+        "src/signal/killpg.c",
+        "src/signal/psiginfo.c",
+        "src/signal/psignal.c",
+        "src/signal/raise.c",
+        "src/signal/restore.c",
+        "src/signal/setitimer.c",
+        "src/signal/sigaction.c",
+        "src/signal/sigaddset.c",
+        "src/signal/sigaltstack.c",
+        "src/signal/sigandset.c",
+        "src/signal/sigdelset.c",
+        "src/signal/sigemptyset.c",
+        "src/signal/sigfillset.c",
+        "src/signal/sighold.c",
+        "src/signal/sigignore.c",
+        "src/signal/siginterrupt.c",
+        "src/signal/sigisemptyset.c",
+        "src/signal/sigismember.c",
+        // "src/signal/siglongjmp.c", setjmp.h defines this
+        "src/signal/signal.c",
+        "src/signal/sigorset.c",
+        "src/signal/sigpause.c",
+        "src/signal/sigpending.c",
+        // "src/signal/sigprocmask.c", tained by pthread_sigmask use
+        // "src/signal/sigqueue.c", let's not support this for now, it uses macros we disable
+        // "src/signal/sigrelse.c", let's not support this for now, we shouldn't need it in librcd
+        "src/signal/sigrtmax.c",
+        "src/signal/sigrtmin.c",
+        "src/signal/sigset.c",
+        // "src/signal/sigsetjmp.c", tainted by pthread, not supported
+        "src/signal/sigsuspend.c",
+        "src/signal/sigtimedwait.c",
+        "src/signal/sigwait.c",
+        "src/signal/sigwaitinfo.c",
+        "src/stdlib/abs.c",
+        "src/stdlib/atof.c",
+        "src/stdlib/atoi.c",
+        "src/stdlib/atol.c",
+        "src/stdlib/atoll.c",
+        "src/stdlib/bsearch.c",
+        "src/stdlib/div.c",
+        "src/stdlib/ecvt.c",
+        "src/stdlib/fcvt.c",
+        "src/stdlib/gcvt.c",
+        "src/stdlib/imaxabs.c",
+        "src/stdlib/imaxdiv.c",
+        "src/stdlib/labs.c",
+        "src/stdlib/ldiv.c",
+        "src/stdlib/llabs.c",
+        "src/stdlib/lldiv.c",
+        "src/stdlib/qsort.c",
+        // "src/stdlib/strtod.c", tainted by direct FILE struct usage
+        // "src/stdlib/strtol.c", tainted by direct FILE struct usage
+        // "src/stdlib/wcstod.c", tainted by direct FILE struct usage
+        // "src/stdlib/wcstol.c", tainted by direct FILE struct usage
+        "src/string/bcmp.c",
+        "src/string/bcopy.c",
+        "src/string/bzero.c",
+        "src/string/index.c",
+        // "src/string/memccpy.c", defined by glibrcd.c
+        // "src/string/memchr.c", defined by glibrcd.c
+        // "src/string/memcmp.c", defined by glibrcd.c
+        // "src/string/memcpy.c", defined by glibrcd.c
+        // "src/string/memmem.c", defined by glibrcd.c
+        // "src/string/memmove.c", defined by glibrcd.c
+        // "src/string/mempcpy.c", defined by glibrcd.c
+        // "src/string/memrchr.c", defined by glibrcd.c
+        // "src/string/memset.c", defined by glibrcd.c
+        "src/string/rindex.c",
+        "src/string/stpcpy.c",
+        "src/string/stpncpy.c",
+        "src/string/strcasecmp.c",
+        "src/string/strcasestr.c",
+        "src/string/strcat.c",
+        "src/string/strchr.c",
+        "src/string/strchrnul.c",
+        "src/string/strcmp.c",
+        "src/string/strcpy.c",
+        "src/string/strcspn.c",
+        "src/string/strdup.c",
+        "src/string/strerror_r.c",
+        "src/string/strlcat.c",
+        "src/string/strlcpy.c",
+        "src/string/strlen.c",
+        "src/string/strncasecmp.c",
+        "src/string/strncat.c",
+        "src/string/strncmp.c",
+        "src/string/strncpy.c",
+        "src/string/strndup.c",
+        "src/string/strnlen.c",
+        "src/string/strpbrk.c",
+        "src/string/strrchr.c",
+        "src/string/strsep.c",
+        "src/string/strsignal.c",
+        "src/string/strspn.c",
+        "src/string/strstr.c",
+        "src/string/strtok.c",
+        "src/string/strtok_r.c",
+        "src/string/strverscmp.c",
+        "src/string/swab.c",
+        "src/string/wcpcpy.c",
+        "src/string/wcpncpy.c",
+        "src/string/wcscasecmp.c",
+        "src/string/wcscasecmp_l.c",
+        "src/string/wcscat.c",
+        "src/string/wcschr.c",
+        "src/string/wcscmp.c",
+        "src/string/wcscpy.c",
+        "src/string/wcscspn.c",
+        "src/string/wcsdup.c",
+        "src/string/wcslen.c",
+        "src/string/wcsncasecmp.c",
+        "src/string/wcsncasecmp_l.c",
+        "src/string/wcsncat.c",
+        "src/string/wcsncmp.c",
+        "src/string/wcsncpy.c",
+        "src/string/wcsnlen.c",
+        "src/string/wcspbrk.c",
+        "src/string/wcsrchr.c",
+        "src/string/wcsspn.c",
+        "src/string/wcsstr.c",
+        "src/string/wcstok.c",
+        "src/string/wcswcs.c",
+        "src/string/wmemchr.c",
+        "src/string/wmemcmp.c",
+        "src/string/wmemcpy.c",
+        "src/string/wmemmove.c",
+        "src/string/wmemset.c",
+        "src/temp/__randname.c",
+        "src/temp/mkdtemp.c",
+        "src/temp/mkostemp.c",
+        "src/temp/mkostemps.c",
+        "src/temp/mkstemp.c",
+        "src/temp/mkstemps.c",
+        "src/temp/mktemp.c",
+        "src/termios/cfgetospeed.c",
+        "src/termios/cfmakeraw.c",
+        "src/termios/cfsetospeed.c",
+        "src/termios/tcdrain.c",
+        "src/termios/tcflow.c",
+        "src/termios/tcflush.c",
+        "src/termios/tcgetattr.c",
+        "src/termios/tcgetsid.c",
+        "src/termios/tcsendbreak.c",
+        "src/termios/tcsetattr.c",
+        "src/time/__asctime.c",
+        "src/time/__map_file.c",
+        "src/time/__month_to_secs.c",
+        "src/time/__secs_to_tm.c",
+        "src/time/__tm_to_secs.c",
+        // "src/time/__tz.c", uses a global variable called "index" which collides with function declaration
+        "src/time/__year_to_secs.c",
+        "src/time/asctime.c",
+        "src/time/asctime_r.c",
+        "src/time/clock.c",
+        "src/time/clock_getcpuclockid.c",
+        // "src/time/clock_getres.c", linux.h defines this
+        "src/time/clock_gettime.c",
+        // "src/time/clock_nanosleep.c", glibrcd.c should implement this
+        // "src/time/clock_settime.c", linux.h defines this
+        "src/time/ctime.c",
+        "src/time/ctime_r.c",
+        "src/time/difftime.c",
+        "src/time/ftime.c",
+        "src/time/getdate.c",
+        // "src/time/gettimeofday.c", linux.h defines this
+        "src/time/gmtime.c",
+        "src/time/gmtime_r.c",
+        "src/time/localtime.c",
+        // "src/time/localtime_r.c", depends on src/time/__tz.c (__secs_to_zone), we implement this in glibrcd.c instead
+        // "src/time/mktime.c", depends on src/time/__tz.c (__secs_to_zone)
+        // "src/time/nanosleep.c", glibrcd.c should implement this
+        // "src/time/strftime.c", depends on src/time/__tz.c (__tm_to_tzname)
+        "src/time/strptime.c",
+        // "src/time/time.c", linux.h defines this
+        "src/time/timegm.c",
+        // "src/time/timer_create.c", timer_* is tainted by signal and pthread usage
+        // "src/time/timer_delete.c", timer_* is tainted by signal and pthread usage
+        // "src/time/timer_getoverrun.c", timer_* is tainted by signal and pthread usage
+        // "src/time/timer_gettime.c", timer_* is tainted by signal and pthread usage
+        // "src/time/timer_settime.c", timer_* is tainted by signal and pthread usage
+        // "src/time/times.c", linux.h defines this
+        // "src/time/utime.c", linux.h defines this
+        // "src/time/wcsftime.c", depends on src/time/strftime.c
+
+        /* we hand pick some features from stdio */
+        /* most stdio functions are unuseable for us as we implement our own */
+        /* library that redirects calls to the librcd io scheduler instead */
+
+        // "src/stdio/asprintf.c", vsnprintf.c defines this
+        "src/stdio/fprintf.c",
+        "src/stdio/printf.c",
+        "src/stdio/snprintf.c",
+        "src/stdio/sprintf.c",
+        // "src/stdio/scanf.c", scan is not supported - massively tainted by FILE access
+        // "src/stdio/sscanf.c", scan is not supported - massively tainted by FILE access
+        "src/stdio/tempnam.c",
+        "src/stdio/tmpfile.c",
+        "src/stdio/tmpnam.c",
+        "src/stdio/vprintf.c",
+        // "src/stdio/vscanf.c", scan is not supported - massively tainted by FILE access
+        "src/stdio/vsprintf.c",
+
+        /* we hand pick some minor unistd features we're intrested in */
+        "src/unistd/isatty.c",
+        "src/unistd/ttyname.c",
+        "src/unistd/ttyname_r.c",
+
+        /* we hand pick some internal features we're intrested in */
+        "src/internal/futex.h",
+        "src/internal/ksigaction.h",
+        "src/internal/syscall.c",
+        "src/internal/syscall_ret.c",
+        "src/internal/procfdname.c",
+
+        /* we hand pick some misc features from some */
+        /* misc modules that we are intrested in */
+        "src/exit/abort.c",
+        "src/linux/prctl.c",
+        "src/prng/rand.c",
+        "src/prng/rand_r.c",
+    );
+    $hard_ignore_files = array(
+        "memcpy.s",
+        "memmove.s",
+        "assert.h",
+        "limits.h",
+        "resolv.h",
+        "sched.h",
+        "stdarg.h",
+        "stdbool.h",
+        "stddef.h",
+        "stdint.h",
+        "stdio_impl.h",
+    );
+    $hard_include_dirs = array("src/internal", "arch/x86_64", "include");
+    $musl_completed_includes = array(
+        "arch/x86_64/bits/alltypes.h" => true
+    );
+    $out_data = get_licence_header($mode);
+    if ($is_c_mode) {
+        // Including rcd.h and musl.h.
+        $out_data .= get_musl_c_head();
+    } else if ($is_h_mode) {
+        $out_data .= get_musl_h_head();
+    }
+    /*
+    foreach (array(
+        "complex",
+        "conf",
+        "ctype",
+        "dirent",
+        "fcntl",
+        "fenv",
+        "locale",
+        "math",
+        "misc",
+        "multibyte",
+        "network",
+        "passwd",
+        "search",
+        "signal",
+        "stdlib",
+        "string",
+        "temp",
+        "termios",
+        "time",
+        ".",
+    ) as $hard_src_dir_name) {
+        $hard_src_path = "src/$hard_src_dir_name";
+        if (!is_dir($hard_src_path))
+            throw new Exception("failed to find musl path [$hard_src_path] - invalid cwd?");
+        $src_paths = array($hard_src_path);
+        $x86_64_src_path = "$hard_src_path/x86_64";
+        if (is_dir($x86_64_src_path))
+            $src_paths[] = $x86_64_src_path;
+        foreach ($src_paths as $src_path) {
+            foreach (scandir($src_path) as $file) {
+                if (preg_match('/\.[cs]$/', $file, $ext_matches) != 1)
+                    continue;
+                if (in_array($file, $hard_ignore_files))
+                    continue;
+                $src_file_path = "$src_path/$file";
+                if (($is_c_mode || $is_h_mode) && $ext_matches[0] === ".c") {
+                    echo "\"$src_file_path\",\n";
+                } else if ($is_s_mode && $ext_matches[0] === ".s") {}
+            }
+        }
+    }
+    exit(0);*/
+    foreach ($hard_src_files as $src_file_path) {
+        if (preg_match('/\.[csh]$/', $src_file_path, $ext_matches) != 1)
+            continue;
+        $src_path = dirname($src_file_path);
+        if ((($is_c_mode || $is_h_mode) && $ext_matches[0] === ".c") || ($is_h_mode && $ext_matches[0] === ".h")) {
+            // echo "$src_file_path\n";
+            if (isset($musl_completed_includes[$src_file_path]))
+                continue;
+            $musl_completed_includes[$src_file_path] = true;
+            $is_public = ($ext_matches[0] === ".h");
+            $file_content = file_get_contents($src_file_path);
+            $out_file_data = preprocess_source($is_h_mode, $src_path, $src_file_path, $is_public, $file_content, $hard_include_dirs, $hard_src_files, $hard_ignore_files, $musl_completed_includes, null);
+            $out_data .= $out_file_data;
+        } else if ($is_s_mode && $ext_matches[0] === ".s") {
+            $out_data .= file_get_contents($src_file_path);
+        }
+    }
+    if ($is_h_mode) {
+        $out_data .= "#endif\t/* MUSL_H */\n";
+    } else if ($is_c_mode) {
+        $out_data .= get_musl_c_foot();
+    }
+    // Post process the out data.
+    $out_data = preg_replace('/#ifdef __cplusplus\s*\n\s*(extern\s*"C"\s*\{|\})\s*\n\s*#endif/', "", $out_data);
+    $out_data = preg_replace('/\n(\s*\n){2,}/', "\n\n", $out_data);
+    $out_data = preg_replace('/\t/', "    ", $out_data);
+    $out_data = preg_replace('/(\n\s*[^#][^\n]+)\n\s*\{\s*\n/', "$1 {\n", $out_data);
+    if ($is_h_mode) {
+        // Fix strange _Noreturn declaration which doesn't declare it at all for some feature macros.
+        $out_data = str_replace("#if __STDC_VERSION__ >= 201112L\n#elif defined(__GNUC__)\n#define _Noreturn __attribute__((__noreturn__))\n#else\n#define _Noreturn\n#endif", "#define _Noreturn __attribute__((__noreturn__))", $out_data);
+    }
+    fwrite(STDOUT, $out_data);
+    return 0;
+}));
+
+function preprocess_source($is_h_mode, $src_path, $src_file_path, $is_public, $file_content, $hard_include_dirs, $hard_src_files, $hard_ignore_files, &$musl_completed_includes, $prev_src_file_path) {
+    $lines = preg_split('/\r?\n/', $file_content);
+    $musl_c_data_header = "/// >>> START $src_file_path\n";
+    $musl_c_data = $musl_c_data_header;
+    $unique_keyword_replacement = '$1' . str_replace(array(".", "-"), array("_", "_"), basename($src_file_path)) . '__$2$3';
+    switch (basename($src_file_path)) {
+    case "__invtrigl.h":
+    case "__invtrigl.c":
+    case "acosl.c":
+    case "asinl.c":
+    case "atan2l.c":
+        $do_general_rewrite = true;
+        $pio2_keyword_replacement = '$1acst2l__$2$3';
+        $do_buf_rewrite = false;
+        break;
+    case "internal.c":
+    case "internal.h":
+        $do_general_rewrite = true;
+        $unique_keyword_replacement = '$1mb_internal__$2$3';
+        $pio2_keyword_replacement = $unique_keyword_replacement;
+        $do_buf_rewrite = false;
+        break;
+    case "strfmon.c":
+        $do_general_rewrite = false;
+        $do_buf_rewrite = false;
+        break;
+    case "stderr.c":
+    case "stdin.c":
+    case "stdout.c":
+        $do_general_rewrite = true;
+        $pio2_keyword_replacement = $unique_keyword_replacement;
+        $do_buf_rewrite = true;
+        break;
+    default:
+        $do_general_rewrite = true;
+        $pio2_keyword_replacement = $unique_keyword_replacement;
+        $do_buf_rewrite = false;
+        break;
+    }
+    // Individual file pre-processing.
+    switch (basename($src_file_path)) {
+    case "mbrtowc.c":
+        $musl_c_data .= "#undef N\n";
+        break;
+    }
+    foreach ($lines as $line_no => $line) {
+        if (preg_match('/^#include\s+[<"]([^>"]+)[>"]/', $line, $matches) == 1) {
+            // Find the include file and preprocess it.
+            $include_file = $matches[1];
+            if (in_array(basename($include_file), $hard_ignore_files)) {
+                continue;
+            }
+            $line = false;
+            $local_include_dirs = array_merge(array($src_path), $hard_include_dirs);
+            foreach ($local_include_dirs as $include_dir) {
+                $include_path = "$include_dir/$include_file";
+                if (isset($musl_completed_includes[$include_path])) {
+                    $line = "";
+                    break;
+                }
+                if (is_file($include_path)) {
+                    $file_content = file_get_contents($include_path);
+                    $bad_header = "#warning redirecting incorrect";
+                    if (substr($file_content, 0, strlen($bad_header)) == $bad_header)
+                        continue;
+                    $include_is_public = (preg_match('/^(include|arch)\//', $include_path) == 1) || in_array($include_path, $hard_src_files);
+                    $musl_completed_includes[$include_path] = true;
+                    $line = preprocess_source($is_h_mode, $include_dir, $include_path, $include_is_public, $file_content, $hard_include_dirs, $hard_src_files, $hard_ignore_files, $musl_completed_includes, $src_file_path);
+                    break;
+                }
+            }
+            if ($line === false)
+                throw new Exception("[$src_file_path:$line_no]: failed to find include for '$include_file'");
+            $musl_c_data .= $line;
+            continue;
+        } else if ($is_h_mode != $is_public) {
+            // We only output slash include source in h mode and vice versa.
+            continue;
+        } else if (strpos($line, "#pragma STDC FENV_ACCESS ON") !== false) {
+            /// Ignoring these pragmas as clang does not support them and explodes on contact. They are probably not needed.
+            continue;
+        } else if (preg_match('/^typedef .* (intmax_t|uintmax_t)\s*;\s*$/', $line) == 1) {
+            // Remove simple typedefs that librcd includes.
+            continue;
+        } else if ($is_h_mode && preg_match('/^#define si_/', $line) == 1) {
+            // These declarations are atrocious and makes it impossible to reference certain struct elements.
+            continue;
+        } else if ($is_h_mode && $line === "long syscall(long, ...);") {
+            // This declaration does not make sense since syscall is a macro.
+            continue;
+        } else if ($is_h_mode && $line === "void syncfs(int);") {
+            // This declaration is invalid.
+            continue;
+        } else if ($is_h_mode && $line === "int waitid (idtype_t, id_t, siginfo_t *, int);") {
+            // This declaration is invalid.
+            continue;
+        } else if ($is_h_mode && $line === "int inotify_rm_watch(int, uint32_t);") {
+            // This declaration is simply invalid.
+            $line = "int inotify_rm_watch(int, int);";
+        } else if (!$is_h_mode && $line === "const char *__nl_langinfo(nl_item);") {
+            // This declaration is invalid, fix it.
+            $line = "char *__nl_langinfo(nl_item);";
+        } else if (!$is_h_mode && $line === "const char *__nl_langinfo_l(nl_item, locale_t);") {
+            // This declaration is invalid, fix it.
+            $line = "char *__nl_langinfo_l(nl_item, locale_t);";
+        } else if (!$is_h_mode && $line === "\t\t\t(-tm->__tm_gmtoff)/3600,") {
+            // Fix snprintf type error.
+            $line = "\t\t(int) (-tm->__tm_gmtoff)/3600,";
+        } else if (!$is_h_mode && $line === "const char *__langinfo(nl_item);") {
+            // This declaration is invalid and redundant.
+            continue;
+        } else if (!$is_h_mode && preg_match('/^(LFS64(_2)?)\(/', $line) == 1) {
+            // Ignoring these declarations as they fail with "attribute declaration must precede definition" (probably gcc hints) and serve no special purpose in librcd context.
+            continue;
+        } else if ($line === "weak_alias(__getdents, getdents);"
+        || $line === "int getdents(int, struct dirent *, size_t);"
+        || $line === "typedef void (*sighandler_t)(int);"
+        /* || $line === "int clone (int (*)(void *), void *, int, void *, ...);" */
+        || $line == "void *mremap (void *, size_t, size_t, int, ...);"
+        || $line === "int gettimeofday (struct timeval *__restrict, void *__restrict);"
+        || $line === "int settimeofday (const struct timeval *, void *);") {
+            // Ignoring declarations that are done by linux.h instead.
+            continue;
+        } else {
+            // Fix syntax that break editor.
+            $line = str_replace(", regmatch_t pmatch[restrict],", ", regmatch_t* pmatch,", $line);
+            $line = str_replace("base = (size_t [3]){0, c->pos, c->len}[whence];", "base = ((size_t [3]){0, c->pos, c->len})[whence];", $line);
+            if ($is_h_mode) {
+                // Fix predencene warning in header.
+                $line = str_replace("__x>>8&0xff00 | __x<<8&0xff0000", "(__x>>8&0xff00) | (__x<<8&0xff0000)", $line);
+                $line = str_replace("return __bswap32(__x)+0ULL<<32 |", "return (__bswap32(__x)+0ULL)<<32 |", $line);
+                $line = str_replace("return __bswap_32(__x)+0ULL<<32 |", "return (__bswap_32(__x)+0ULL)<<32 |", $line);
+            }
+            if (!$is_h_mode) {
+                // Force O_CLOEXEC in flags when using open/openat. Abuse the fact that musl insist on using O_LARGEFILE every time it does an open.
+                if (strpos($line, "open") !== false)
+                    $line = preg_replace('/(O_LARGEFILE)/', '$1|O_CLOEXEC', $line);
+            }
+            // There is no __uintXX_t, use uintXX_t instead.
+            $line = preg_replace('/([^\w\d_]|^)__(uint\d\d_t)([^\w\d_]|$)/', '$1$2$3', $line);
+            // Make standard identifiers/functions that linux or librcd declares non polluting (musl specific).
+            $line = preg_replace('/([^\w\d_]|^)(sort)([^\w\d_]|$)/', '$1__musl__$2$3', $line);
+            // We need __next to be called next in struct __ptcb for DL support.
+            $line = preg_replace('/([^\w\d_]|^)(__next)([^\w\d_]|$)/', '$1next$3', $line);
+            // Anti-keyword collision between c files and between musl and librcd.
+            $line = preg_replace('/([^a-zA-Z0-9_\']|^)(struct cookie)([^a-zA-Z0-9_\']|$)/', '$1struct cookie_struct$3', $line, -1, $count);
+            $line = preg_replace('/([^a-zA-Z0-9_\']|^)(__fdopen)([^a-zA-Z0-9_\']|$)/', '$1fdopen$3', $line, -1, $count);
+            if (!$is_h_mode) {
+                if ($do_general_rewrite) {
+                    do {
+                        $line = preg_replace('/([^a-zA-Z0-9_\']|^)(T|k|R|P|Q|S|B\d|erx|efx8|aT|kln2|try|DP\d|C\d|S\d|pS\d|qS\d|dummy|huge|exp_ovfl|cexp_ovfl|tiny|table|ptable'
+                        . '|two24|invpio2|pio2_1|pio2_1t|two24|invpio2|pio\d_?\d?t?|pio4lo|pi_o_\d|pi_lo|pi|atanhi|atanlo|[qparsb]{2,2}\d|erfc\d|P\d|redux|tbl|half|ln2_?hi'
+                        . '|ln2_?lo|invln2|o_threshold|Q\d|[Zz]ero|invsqrtpi|tpi|common|[RSuvr]0\d|[pq]R\d|s0\d|[UV]0|a\d\d?|[tuvsrw][cft\d]\d?|sin_pi|L[pg]\d|two\d\d'
+                        . '|ivln\d\d?hi|ivln\d\d?lo|log10_2hi|log10_2lo|bp|dp_h|dp_l|L\d|lg2|lg2_h|lg2_l|ovt|cp|cp_h|cp_l|ivln2|ivln2_h|ivln2_l|man[lh]_t'
+                        . '|s\dpio2|PIL|msgs|node|remove|cookie_struct|strtox|TRESH|TBLSIZE|SIGN|LOG2EA|sq|atou)([^a-zA-Z0-9_\']|$)/', $unique_keyword_replacement, $line, -1, $count);
+                    } while ($count > 0);
+                    do {
+                        $line = preg_replace('/([^a-zA-Z0-9_\']|^)(pio2_hi|pio2_lo)([^a-zA-Z0-9_\']|$)/', $pio2_keyword_replacement, $line, -1, $count);
+                    } while ($count > 0);
+                }
+                if ($do_buf_rewrite) {
+                    $line = preg_replace('/([^a-zA-Z0-9_\'>\.]|^)(buf)([^a-zA-Z0-9_\']|$)/', $unique_keyword_replacement, $line, -1, $count);
+                }
+            }
+            // Preprocess define statements.
+            if (preg_match('/^#define ([\w\d_]+)/', $line, $matches) == 1) {
+                if ($is_h_mode) {
+                    // Some defines are ignored in the public header as they are linux constants and so defined in linux.h,
+                    // but the header cannot be ignored since it contains other important (g)libc declarations.
+                    // We list those constants here so we can ignore them.
+                    $hard_ignore_defines = array(
+                        "isalpha" => true,
+                        "isdigit" => true,
+                        "islower" => true,
+                        "isupper" => true,
+                        "isprint" => true,
+                        "isgraph" => true,
+                        "pthread_cleanup_push" => true,
+                        "pthread_cleanup_pop" => true,
+                        "PTHREAD_ONCE_INIT" => true,
+                        "PTHREAD_MUTEX_INITIALIZER" => true,
+                        "PTHREAD_RWLOCK_INITIALIZER" => true,
+                        "PTHREAD_COND_INITIALIZER" => true,
+                        "NAN" => true,
+                        "INFINITY" => true,
+                    );
+                    if (isset($hard_ignore_defines[$matches[1]]))
+                        continue;
+                } else {
+                    $hard_ignore_defines = array(
+                        "LOCK" => true,
+                        "UNLOCK" => true,
+                    );
+                    if (isset($hard_ignore_defines[$matches[1]]))
+                        continue;
+                    // Fix multiple defines caused by .c merging by prefixing them with an undef statement.
+                    $line = "#undef " . $matches[1] . "\n$line";
+                }
+            }
+        }
+        $musl_c_data .= $line;
+        $musl_c_data .= "\n";
+    }
+    // Individual file post-processing.
+    switch (basename($src_file_path)) {
+    case "getifaddrs.c":
+        $musl_c_data .= "#undef next\n";
+        break;
+    }
+    if ($musl_c_data === $musl_c_data_header) {
+        // Don't include empty headers.
+        $musl_c_data = "";
+    } else {
+        $musl_c_data .= "\n";
+        if (!is_null($prev_src_file_path))
+            $musl_c_data .= "/// >>> CONTINUE $prev_src_file_path\n";
+    }
+    return $musl_c_data;
+}
+
+function get_licence_header($mode) {
+    $licence = <<<'EOS'
+# Automatically generated from musl (http://www.musl-libc.org/) by the
+# tools/musl-generator script. Do not edit.
+#
+# Copyright © 2005-2014 Rich Felker, et al.
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+EOS;
+    if ($mode === 'c' || $mode === 'h') {
+        $licence = preg_replace('/#/', "//", $licence);
+    }
+    return $licence;
+}
+
+function get_musl_h_head() {
+    return <<<'EOS'
+#ifndef MUSL_H
+#define MUSL_H
+
+#undef _GNU_SOURCE
+
+#define RCD_SYSCALL_EXCEPTION(name, rcd_exception_type) \
+    sub_heap_e(throw(fss(conc(#name "() failed with errno ", fss(fstr_from_int(errno, 10)), " (", ({const char* errno_str = strerror(errno); errno_str != 0? fstr_fix_cstr(errno_str): "";}), ")")), rcd_exception_type))
+
+typedef int wchar_t;
+typedef int wint_t;
+typedef unsigned long wctype_t;
+
+typedef int8_t int_fast8_t;
+typedef int int_fast16_t;
+typedef int int_fast32_t;
+typedef int64_t int_fast64_t;
+
+typedef unsigned char uint_fast8_t;
+typedef unsigned int uint_fast16_t;
+typedef unsigned int uint_fast32_t;
+typedef uint64_t uint_fast64_t;
+
+typedef int pid_t;
+typedef int id_t;
+typedef unsigned int uid_t;
+typedef unsigned int gid_t;
+typedef int key_t;
+
+typedef rcd_fid_t pthread_t;
+typedef lwt_once_t pthread_once_t;
+typedef int pthread_key_t;
+typedef int pthread_spinlock_t;
+
+typedef struct { int32_t value; } pthread_attr_t;
+typedef struct { int32_t value; } pthread_mutexattr_t;
+typedef struct { int32_t value; } pthread_condattr_t;
+typedef struct { int32_t value; } pthread_rwlockattr_t;
+typedef struct { int32_t value; } pthread_barrierattr_t;
+
+typedef struct { rcd_fid_t mutex_fid; pthread_once_t once_init; } pthread_mutex_t;
+typedef struct { rcd_fid_t cond_fid; pthread_once_t once_init; } pthread_cond_t;
+typedef struct { rcd_fid_t rwlock_fid; pthread_once_t once_init; } pthread_rwlock_t;
+typedef struct { rcd_fid_t barrier_fid; pthread_once_t once_init; } pthread_barrier_t;
+
+typedef long off_t;
+typedef unsigned int mode_t;
+typedef unsigned long nlink_t;
+typedef unsigned long long ino_t;
+typedef unsigned long dev_t;
+typedef long blksize_t;
+typedef long long blkcnt_t;
+typedef unsigned long long fsblkcnt_t;
+typedef unsigned long long fsfilcnt_t;
+typedef void* timer_t;
+typedef int clockid_t;
+typedef long clock_t;
+
+typedef struct {
+    unsigned long __bits[128 / sizeof (long) ];
+} sigset_t;
+
+typedef unsigned int socklen_t;
+typedef unsigned short sa_family_t;
+
+typedef struct __FILE_s FILE;
+
+typedef struct __locale* locale_t;
+
+struct iovec {void* iov_base; size_t iov_len;};
+
+typedef long time_t;
+typedef long suseconds_t;
+
+struct timeval { time_t tv_sec; long tv_usec; };
+struct timespec { time_t tv_sec; long tv_nsec; };
+
+#define __isoc_va_list va_list
+
+#define pthread_cleanup_push(routine, arg) do { \
+    void (*__cleanup_fn)(void *) = routine; \
+    void *__cleanup_arg = arg; \
+    try {
+
+#define pthread_cleanup_pop(execute) \
+    } catch (exception_any, e) { \
+        __cleanup_fn(__cleanup_arg); \
+        lwt_throw_exception(e); \
+    } \
+    if (execute) { \
+        __cleanup_fn(__cleanup_arg); \
+    } \
+} while (false);
+
+#define LOCK(int_ptr) __lock(int_ptr)
+#define UNLOCK(int_ptr) __unlock(int_ptr)
+
+#define PTHREAD_ONCE_INIT LWT_ONCE_INIT
+#define PTHREAD_MUTEX_INITIALIZER {0}
+#define PTHREAD_RWLOCK_INITIALIZER {0}
+#define PTHREAD_COND_INITIALIZER {0}
+
+struct sched_param {
+    int sched_priority;
+    int sched_ss_low_priority;
+    struct timespec sched_ss_repl_period;
+    struct timespec sched_ss_init_budget;
+    int sched_ss_max_repl;
+};
+
+EOS;
+}
+
+function get_musl_c_head() {
+    return <<<'EOS'
+#include "rcd.h"
+#include "musl.h"
+
+#pragma clang diagnostic ignored "-Wdangling-else"
+#pragma clang diagnostic ignored "-Wshift-op-parentheses"
+#pragma clang diagnostic ignored "-Wlogical-op-parentheses"
+#pragma clang diagnostic ignored "-Wunused-value"
+#pragma clang diagnostic ignored "-Wparentheses"
+
+#define weak_alias(old, new) \
+    extern __typeof(old) new __attribute__((weak, alias(#old)))
+
+#define LFS64(...)
+#define LFS64_2(...)
+#define __pthread_self_def(...)
+
+#define __mmap mmap
+
+/// START musl code
+
+
+EOS;
+}
+
+function get_musl_c_foot() {
+    return <<<'EOS'
+
+/// END musl code
+
+#undef __syscall_cp
+
+long __syscall_cp(long n, long a, long b, long c, long d, long e, long f) {
+    return __syscall(n, a, b, c, d, e, f);
+}
+
+#undef syscall
+
+long syscall(long n, ...) {
+    va_list ap;
+    long a, b, c, d, e, f;
+    va_start(ap, n);
+    a = va_arg(ap, long);
+    b = va_arg(ap, long);
+    c = va_arg(ap, long);
+    d = va_arg(ap, long);
+    e = va_arg(ap, long);
+    f = va_arg(ap, long);
+    va_end(ap);
+    return __syscall_ret(__syscall(n, a, b, c, d, e, f));
+}
+
+#undef __syscall
+
+weak_alias(syscall, __syscall);
+
+EOS;
+}

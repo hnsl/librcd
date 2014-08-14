@@ -1,0 +1,1826 @@
+#!/usr/bin/env php
+<?php
+####################################################################
+#
+#  The librcd post preprocessor © Jumpstarter 2014
+#
+#  SYNOPSIS:
+#      (gcc|clang) -E file | ./occpp > outfile.i
+#
+#  The main purpose for this preprocessor is to be run after gcc
+#  or clang (with option -E) to replace the occurrences of
+#  literal c strings with the corresponding fstring_t version
+#  (see fstring.h), generate code for concurrency tokens and
+#  regex patterns.
+#
+#  Copyright © 2014, Jumpstarter AB. This file is part of the librcd project.
+#  This Source Code Form is subject to the terms of the Mozilla Public
+#  License, v. 2.0. If a copy of the MPL was not distributed with this
+#  file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#  See the COPYING file distributed with this project for more information.
+#
+####################################################################
+
+exit(call_user_func(function() {
+    assert_options(ASSERT_BAIL, 1);
+    set_error_handler(function($errno, $errstr, $errfile, $errline) {
+        trigger_error("[$errfile:$errline] $errstr", E_USER_ERROR);
+    }, E_ALL);
+    $librcd_enabled = false;
+    $in_meta = 0;
+    $meta_triggers = array("asm(", "__asm__(", "__attribute__(", "__volatile__(", "volatile(");
+    /*if (file_exists("/tmp/rcd-pp-cache")) {
+        if (filemtime(__FILE__) > filemtime("/tmp/rcd-pp-cache")) {
+            unlink("/tmp/rcd-pp-cache");
+            touch("/tmp/rcd-pp-cache");
+        }
+    } else {
+        touch("/tmp/rcd-pp-cache");
+    }
+    $occ_cache_h = fopen("/tmp/rcd-pp-cache", "r+b");
+    if (!flock($occ_cache_h, LOCK_SH))
+        throw new Exception("librcd pp error: read locking cache failed");
+    $t0 = microtime(TRUE);
+    $occ_cache = array();
+    fseek($occ_cache_h, 0, SEEK_SET);
+    $occ_cache_tag = fread($occ_cache_h, 16);
+    $t1 = microtime(TRUE);
+    if (strlen($occ_cache_tag) == 16) {
+        $occ_cache_raw = stream_get_contents($occ_cache_h);
+        $t2 = microtime(TRUE);
+        if (!flock($occ_cache_h, LOCK_UN))
+            throw new Exception("librcd pp error: unlocking cache failed");
+        $occ_cache = eval($occ_cache_raw);
+        $t3 = microtime(TRUE);
+        if (!is_array($occ_cache))
+            throw new Exception("librcd pp error: cache corrupt - delete /tmp/rcd-pp-cache");
+        // throw new Exception("$t0\n$t1\n$t2\n$t3");
+    }
+    $occ_cache_updated = false;
+    if (!is_dir("/tmp/rcd-pp-cache"))
+        mkdir("/tmp/rcd-pp-cache");*/
+    for (;;) {
+        $line = "";
+        for (;;) {
+            if (feof(STDIN)) {
+                /*
+                if ($occ_cache_updated) {
+                    if (!flock($occ_cache_h, LOCK_EX))
+                        throw new Exception("librcd pp error: write locking cache failed");
+                    fseek($occ_cache_h, 0, SEEK_SET);
+                    $now_occ_cache_tag = fread($occ_cache_h, 16);
+                    if (strlen($now_occ_cache_tag) == 16 && $now_occ_cache_tag != $occ_cache_tag) {
+                        $occ_cache_raw = stream_get_contents($occ_cache_h);
+                        $updated_occ_cache = eval($occ_cache_raw);
+                        if (is_array($updated_occ_cache)) {
+                            $occ_cache = array_merge($updated_occ_cache, $occ_cache);
+                        }
+                    }
+                    for ($new_occ_cache_tag = ""; strlen($new_occ_cache_tag) < 16;)
+                        $new_occ_cache_tag .= uniqid("", true);
+                    $new_occ_cache_tag = substr($new_occ_cache_tag, 0, 16);
+                    ftruncate($occ_cache_h, 0);
+                    fseek($occ_cache_h, 0, SEEK_SET);
+                    fwrite($occ_cache_h, $new_occ_cache_tag);
+                    fwrite($occ_cache_h, "return ");
+                    fwrite($occ_cache_h, var_export($occ_cache, true));
+                    fwrite($occ_cache_h, ";\n");
+                }
+                fclose($occ_cache_h);*/
+                return 0;
+            }
+            $line .= fgets(STDIN, 80000);
+            assert(is_string($line));
+            if (substr($line, -2) != "\\\n")
+                break;
+            $line = substr($line, 0, -2) . "\n";
+        }
+        $line_in = $line;
+        /*$cached_line_out = ; apc_fetch(($librcd_enabled? "1": "0") . $line_in);*/
+        /*if (isset($occ_cache[$librcd_enabled][$line_in])) {
+            $line = $occ_cache[$librcd_enabled][$line_in];*/
+        /*if ($cached_line_out !== false) {*/
+        /*$line_in_key_path = "/tmp/rcd-pp-cache/" . dechex(crc32(($librcd_enabled? "1": "0") . $line_in)) . "-" . dechex(crc32($line_in));
+        if (file_exists($line_in_key_path)) {
+            $line = file_get_contents($line_in_key_path);
+            if ($line === "\x00")
+                $line = $line_in;
+        } else {*/
+            $post_librcd_enabled = $librcd_enabled;
+            $is_meta_begin = $in_meta;
+            if (strlen($line) > 0 && $line[0] === "#") {
+                if (!$librcd_enabled && preg_match('/^#pragma\s+librcd\s*/', $line) == 1)
+                    $librcd_enabled = true;
+                if (preg_match('/^#pragma\s+(oc)?re2c\s*\(([^),]+)(,([^),]+))?(,([^),]+))?\):(.*)/ms', $line, $matches)) {
+                    $config = new Re2cConfig();
+                    $config->regex = $matches[7];
+                    $config->scan_buffer_name = $matches[2];
+                    $no_refill = ($matches[4] == "");
+                    $config->refill_label_name = $no_refill? null: $matches[4];
+                    $config->refill_return_state_varname = $no_refill? null: $matches[6];
+                    $lines = re2c($config);
+                    $line = str_replace("\n", " ", implode("", $lines)) . str_repeat("\n", substr_count($line, "\n"));
+                }
+            } else {
+                $found_fstr_declarations = false;
+                // Translate fstr().
+                $fstr_replace_callback_fn = function($matches) use (&$found_fstr_declarations) {
+                    if (strpos($matches[2], "c_string") !== false)
+                        return $matches[0];
+                    $found_fstr_declarations = true;
+                    $str = str_replace('"', "\x01", $matches[2]);
+                    return $matches[1] . "((fstr_t) {.len = sizeof($str) - 1, .str = (uint8_t*) $str})";
+                };
+                $line = preg_replace_callback('/([^a-z_0-9\^])fstr\s*\(("(([^"\\\\]*|\\\\.)+)"\s*)+\)/', $fstr_replace_callback_fn, $line);
+                $line = preg_replace_callback('/([^a-z_0-9\^])fstr\s*\(([^\)]+)\)/', $fstr_replace_callback_fn, $line);
+                // Translate fstr_hash().
+                $fstr_hash_replace_callback_fn = function($matches) {
+                    $str_data = "";
+                    $str_data_replace_callback_fn = function($matches) use (&$str_data) {
+                        $str_data .= stripcslashes($matches[1]);
+                        return null;
+                    };
+                    preg_replace_callback('/"(([^"\\\\]*|\\\\.)+)"\s*/', $str_data_replace_callback_fn, $matches[2]);
+                    $hash_v = substr(sha1($str_data, true), 0, 16);
+                    $hash_hex_v = bin2hex($hash_v);
+                    $hash_padded_hex_v = str_repeat("0", 32 - strlen($hash_hex_v)) . $hash_hex_v;
+                    return $matches[1] . "((uint128_t) 0x$hash_padded_hex_v)";
+                };
+                $line = preg_replace_callback('/([^a-z_0-9\^])fstr_pphash\s*\((("(([^"\\\\]*|\\\\.)+)"\s*)+)\)/', $fstr_hash_replace_callback_fn, $line);
+                if ($librcd_enabled) {
+                    // Expand rcd_ syntatic sugar for fiber creation and communication.
+                    if (strpos($line, "rcd_pp_marker__") !== false) {
+                        // rcd_join_locked(fstr_t) pipe_fiber_read(fstr_t message_dst, rcd_server_params, ifc_pipe_ctrl_t* pipe)
+                        if (preg_match('/^\s*(rcd_pp_marker__join_locked|rcd_pp_marker__join_shared|rcd_pp_marker__join_locked_declare|rcd_pp_marker__join_shared_declare);\s*((struct\s+)?[^\s\*]+[\s*\*]*)([^\*\(\s]+)\s*\(([^\)]+)\)(.*)/', $line, $matches) == 1) {
+                            $pp_marker = $matches[1];
+                            $ret_type = trim($matches[2]);
+                            $fn_name = $matches[4];
+                            $arg_list = $matches[5];
+                            $line_tail = $matches[6];
+                            $arg_list_args = explode(",", $arg_list);
+                            $arg_list_client_side = array();
+                            $arg_list_server_state = array();
+                            $record_server_state = false;
+                            foreach ($arg_list_args as $arg) {
+                                $trimmed_arg = trim($arg);
+                                if (preg_match('/[a-zA-Z_][a-zA-Z_0-9]*$/', $trimmed_arg, $matches) == 0)
+                                    throw new Exception("librcd pp error: failed to match name of argument in argument list ($line)");
+                                $name = $matches[0];
+                                if ($record_server_state)
+                                    $arg_list_server_state[$name] = $trimmed_arg;
+                                else
+                                    $arg_list_client_side[$name] = $trimmed_arg;
+                                if ($trimmed_arg == "rcd_fid_t server_fiber_id") {
+                                    if ($record_server_state)
+                                        throw new Exception("librcd pp error: server side of argument list already started ($line)");
+                                    $record_server_state = true;
+                                }
+                            }
+                            if (!$record_server_state)
+                                throw new Exception("librcd pp error: server side of argument list never started ($line)");
+                            $arg_list_client_side_joined = implode(", ", $arg_list_client_side);
+                            $forward_list_arguments = array_keys($arg_list_client_side);
+                            $forward_list_parameters = $arg_list_client_side;
+                            $type_assert_pillars = array();
+                            $i = 0;
+                            $declare_only = (strpos($pp_marker, "_declare") !== false);
+                            $type_assert_pillars[] = ($declare_only? "extern ": "") . "int __librcd_ifc_server_arg__{$fn_name}__total_arg_count_is_" . count($arg_list_server_state) . ";";
+                            foreach ($arg_list_server_state as $key => $declaration) {
+                                $forward_list_arguments[] = "server_state->$key";
+                                $forward_list_parameters[] = $declaration;
+                                if (preg_match('/(.*[^a-zA-Z_0-9])[a-zA-Z_0-9]*$/', $declaration, $matches) == 0)
+                                    throw new Exception("librcd pp error: failed to match arg declaration '$arg_declaration' ($line)");
+                                $raw_type = $matches[1];
+                                $type_assert_pillars[] = ($declare_only? "extern ": "") . "$raw_type** __librcd_ifc_server_arg__{$fn_name}__{$i};";
+                                $i++;
+                            }
+                            $line = implode("", $type_assert_pillars);
+                            if ($declare_only) {
+                                $line .= "$ret_type $fn_name($arg_list_client_side_joined);";
+                            } else {
+                                $call_type = ($pp_marker == "rcd_pp_marker__join_locked")? "RCD_IFC_CALL_LOCK_SERVER": "RCD_IFC_CALL_SHARED";
+                                $line .= "static __inline $ret_type __librcd_ifc_join__$fn_name(" . implode(", ", $forward_list_parameters) . ");";
+                                $line .= "$ret_type $fn_name($arg_list_client_side_joined) {";
+                                $line .= "struct {" . implode(";", $arg_list_server_state) . ";}* server_state = __lwt_fiber_stack_push_ifc_call_join($fn_name, server_fiber_id, $call_type);";
+                                $r_value_assign = ($ret_type != "void"? "$ret_type r_value =": "");
+                                $line .= "$r_value_assign __librcd_ifc_join__$fn_name(" . implode(", ", $forward_list_arguments) . ");";
+                                $line .= "__lwt_fiber_stack_pop_ifc_call_join();";
+                                if ($ret_type != "void")
+                                    $line .= "return r_value;";
+                                $line .= "}";
+                                $line .= "static __inline $ret_type __librcd_ifc_join__$fn_name(" . implode(", ", $forward_list_parameters) . ")";
+                            }
+                            $line .= "$line_tail\n";
+                        } else if (preg_match('/^\s*(rcd_pp_marker__accept|rcd_pp_marker__auto_accept|rcd_pp_marker__server_accept|rcd_pp_marker__server_auto_accept)\s*\((.*)\),rcd_pp_marker__accept_end;(.*)/', $line, $matches) == 1) {
+                            $pp_marker = $matches[1];
+                            $arg_list = $matches[2];
+                            $line_tail = $matches[3];
+                            $functions_to_accept = array();
+                            $arg_list_server_state = array();
+                            $record_server_state = false;
+                            $arg_memory = "";
+                            $paranthesis_level = 0;
+                            foreach (explode(",", $arg_list) as $raw_arg) {
+                                $arg_memory .= $raw_arg;
+                                $paranthesis_level += substr_count($raw_arg, "(");
+                                $paranthesis_level -= substr_count($raw_arg, ")");
+                                if ($paranthesis_level == 0) {
+                                    $arg = trim($arg_memory);
+                                    $arg_memory = "";
+                                    if ($record_server_state) {
+                                        if ($arg === "") {
+                                            continue;
+                                        } else if ($arg == "rcd_fid_t server_fiber_id") {
+                                            throw new Exception("librcd pp error: server side of argument list already started ($line)");
+                                        }
+                                        $arg_list_server_state[] = $arg;
+                                    } else {
+                                        if ($arg == "rcd_fid_t server_fiber_id") {
+                                            if (count($functions_to_accept) == 0)
+                                                throw new Exception("librcd pp error: accept() specifies no functions to accept on ($line)");
+                                            $record_server_state = true;
+                                        } else if (preg_match('/^[a-zA-Z0-9_]+$/', $arg)) {
+                                            $functions_to_accept[$arg] = null;
+                                        } else if (preg_match('/^([a-zA-Z0-9_]+)\s+if\s+(.+)$/', $arg, $matches)) {
+                                            $functions_to_accept[$matches[1]] = $matches[2];
+                                        } else {
+                                            throw new Exception("librcd pp error: syntax error for function to accept on in accept list ($arg)");
+                                        }
+                                    }
+                                } else {
+                                    $arg_memory .= ",";
+                                }
+                            }
+                            if (!$record_server_state)
+                                throw new Exception("librcd pp error: server side of argument list never started ($line)");
+                            $line = "{";
+                            $line .= "while (0) {";
+                            $i = 0;
+                            foreach ($functions_to_accept as $fn_name => $cond)
+                                $line .= "__librcd_ifc_server_arg__{$fn_name}__total_arg_count_is_" . count($arg_list_server_state) . " = 0;";
+                            foreach ($arg_list_server_state as $server_state_arg) {
+                                $line .= "{";
+                                $line .= "__typeof($server_state_arg)** server_state_arg_$i;";
+                                $line .= "server_state_arg_$i";
+                                foreach ($functions_to_accept as $fn_name => $cond)
+                                    $line .= " = __librcd_ifc_server_arg__{$fn_name}__$i";
+                                $line .= ";}";
+                                $i++;
+                            }
+                            $line .= "}";
+                            $line .= "void* fn_list[] = {";
+                            foreach ($functions_to_accept as $fn_name => $cond) {
+                                $line .= ($cond === null? $fn_name: "(($cond)? $fn_name: 0)") . ", ";
+                            }
+                            $line .=  "};";
+                            $line .= "struct {";
+                            foreach ($arg_list_server_state as $i => $server_state_arg)
+                                $line .= "__typeof($server_state_arg) x$i;";
+                            $line .= "} ifc_server_state = {";
+                            foreach ($arg_list_server_state as $server_state_arg)
+                                $line .= "$server_state_arg,";
+                            $line .= "};";
+                            $auto_reaccept = (strpos($pp_marker, "_auto_") !== false)? "1": "0";
+                            $server_side_accept = (strpos($pp_marker, "_server_") !== false)? "1": "0";
+                            $line .= "__lwt_ifc_accept(fn_list, sizeof(fn_list) / sizeof(*fn_list), &ifc_server_state, $auto_reaccept, $server_side_accept);";
+                            $line .= "}";
+                            $line .= $line_tail;
+                            str_replace("\n", "", $line);
+                            $line .= "\n";
+                        } else if (preg_match('/^\s*(rcd_pp_marker__fiber_main|rcd_pp_marker__fiber_main_declare)\s*([^;]*); rcd_fid_t\s+([^\(\s]+)\s*\(([^\)]+)\)\s*{(.*)/', $line, $matches) == 1) {
+                            $pp_marker = $matches[1];
+                            $sf_t_name = $matches[2];
+                            $fn_name = $matches[3];
+                            $arg_list = $matches[4];
+                            $line_tail = $matches[5];
+                            $arg_list_args = explode(",", $arg_list);
+                            $main_args = array();
+                            foreach ($arg_list_args as $arg) {
+                                $trimmed_arg = trim($arg);
+                                if (preg_match('/[a-zA-Z_][a-zA-Z_0-9]*$/', $trimmed_arg, $matches) == 0)
+                                    throw new Exception("librcd pp error: failed to match name of argument in argument list ($line)");
+                                $name = $matches[0];
+                                $main_args[$name] = $trimmed_arg;
+                            }
+                            $sf_t_name = trim($sf_t_name);
+                            $default_sf_t = (strlen($sf_t_name) == 0);
+                            $sf_t = ($default_sf_t? "rcd_sub_fiber_t*": "struct {$sf_t_name}__rcd_sf_t*");
+                            $declare_only = (strpos($pp_marker, "_declare") !== false);
+                            if ($declare_only) {
+                                $line = "rcd_fid_t __librcd_fiber_mitosis__$fn_name($arg_list);";
+                                $line .= "$sf_t __librcd_fiber_sf_mitosis__$fn_name($arg_list);";
+                            } else {
+                                $line = "struct __librcd_fiber_main_state__$fn_name {";
+                                $line .= implode(";", $main_args) . ";";
+                                $line .= "};";
+                                $line .= "void _$fn_name(void* arg_ptr);";
+                                $line .= "rcd_fid_t __librcd_fiber_mitosis__$fn_name($arg_list) {";
+                                $line .= "struct __librcd_fiber_main_state__$fn_name* fiber_args = lwt_alloc_new(sizeof(struct __librcd_fiber_main_state__$fn_name));";
+                                $line .= "*fiber_args = (struct __librcd_fiber_main_state__$fn_name) {" . implode(",", array_keys($main_args)) . "};";
+                                $line .= "static struct lwt_fiber_options fiber_options = {.name = \"$fn_name\"};";
+                                $line .= "return __lwt_fiber_stack_pop_mitosis(_$fn_name, fiber_args, fiber_name, &fiber_options);";
+                                $line .= "}";
+                                $line .= "$sf_t __librcd_fiber_sf_mitosis__$fn_name($arg_list) {";
+                                $line .= "return " . ($default_sf_t? "": "($sf_t)") . "lwt_wrap_sub_fiber(__librcd_fiber_mitosis__$fn_name(" . implode(",", array_keys($main_args)) . "));";
+                                $line .= "}";
+                                $line .= "void _$fn_name(void* arg_ptr) {";
+                                foreach ($main_args as $name => $declaration)
+                                    $line .= "$declaration = ((struct __librcd_fiber_main_state__$fn_name*) arg_ptr)->$name;";
+                            }
+                            $line .= "$line_tail\n";
+                        }
+                    }
+                    $line_prefix_out = "";
+                    if ($in_meta == 0) {
+                        exit_in_asm:
+                        // fwrite(STDERR, "parsing line [$line]\n");
+                        $post_meta_line = null;
+                        $earliest_meta_offs = null;
+                        $earliest_meta_trigger = null;
+                        foreach ($meta_triggers as $meta_trigger) {
+                            $meta_offs = strpos($line, $meta_trigger);
+                            if ($meta_offs !== false) {
+                                if ($earliest_meta_offs === null || $meta_offs < $earliest_meta_offs) {
+                                    $earliest_meta_offs = $meta_offs;
+                                    $earliest_meta_trigger = $meta_trigger;
+                                }
+                            }
+                        }
+                        if ($earliest_meta_offs !== null) {
+                            $earliest_meta_offs += strlen($earliest_meta_trigger);
+                            // fwrite(STDERR, "in meta was triggered\n");
+                            $post_meta_line = substr($line, $earliest_meta_offs);
+                            $line = substr($line, 0, $earliest_meta_offs);
+                        }
+                        $line = preg_replace_callback('/\'\\\\.\'|\'.\'|("(([^"\\\\]*|\\\\.)+)"\s*)+/', function($matches) {
+                            $match = trim($matches[0]);
+                            if ($match[0] == '\'')
+                                return $matches[0];
+                            preg_match('/\s*$/', $matches[0], $matches2);
+                            $trailing_ws = $matches2[0];
+                            return (strlen($match) > 2 ? "((fstr_t) {.len = sizeof($match) - 1, .str = (uint8_t*) $match})" : "((fstr_t) {0})") . $trailing_ws;
+                        }, $line);
+                        if ($post_meta_line !== null) {
+                            $in_meta = 1;
+                            $line_prefix_out .= $line;
+                            $line = $post_meta_line;
+                            goto enter_in_asm;
+                        }
+                    } else {
+                        enter_in_asm:
+                        while (strlen($line) > 0) {
+                            // fwrite(STDERR, "in meta [$in_meta]: matching remaining line [$line]\n");
+                            if (preg_match('/^(([^"\)]+)|"(([^"\\\\]*|\\\\.)+)")/', $line, $matches) != 0) {
+                                $in_meta += (isset($matches[2])? substr_count($matches[2], "("): 0);
+                                // fwrite(STDERR, "in meta [$in_meta]: found string or range not containing end of paranthesis [$matches[0]]\n");
+                                $line_prefix_out .= $matches[0];
+                                $line = substr($line, strlen($matches[0]));
+                            } else {
+                                $in_meta -= 1;
+                                // fwrite(STDERR, "in meta [$in_meta]: found end of paranthesis\n");
+                                $line_prefix_out .= $line[0];
+                                $line = substr($line, 1);
+                                if ($in_meta == 0)
+                                    goto exit_in_asm;
+                            }
+                        }
+                    }
+                    // throw new Exception(var_export(array($line_prefix_out, $line), true));
+                    if (strlen($line_prefix_out) > 0)
+                        $line = $line_prefix_out . $line;
+                }
+                if ($found_fstr_declarations)
+                    $line = str_replace("\x01", '"', $line);
+            /*}
+            // Can only cache lines which does not open with is_meta and does not leave in_meta open.
+            if ($is_meta_begin == 0 && $in_meta == 0 && $post_librcd_enabled === $librcd_enabled) {
+                /*$occ_cache[$librcd_enabled][$line_in] = ($line === $line_in? true: $line);
+                $occ_cache_updated = true;*/
+                /*apc_store(($librcd_enabled? "1": "0") . $line_in, ($line === $line_in? true: $line));*/
+                /*$tmp_name = "/tmp/rcd-pp-cache/" . uniqid("_tmp_", true);
+                file_put_contents($tmp_name, ($line === $line_in? "\x00": $line));
+                rename($tmp_name, $line_in_key_path);
+            }*/
+        }
+        fwrite(STDOUT, $line);
+    }
+    return 0;
+}));
+
+class TypeException extends Exception {
+    public function __construct($message) {
+        $message = "type error: " . (is_object($message)? get_class($message): gettype($message));
+        parent::__construct($message, 0, null);
+    }
+}
+
+class Re2cConfig {
+    public $regex;
+    public $scan_buffer_name;
+    public $refill_label_name;
+    public $refill_return_state_varname;
+}
+
+class LexState {
+    public $regex;
+    public $offset;
+}
+
+class RegexRef {
+    // RegexBranches|RegexRune|RegexFin|RegexRef
+    public $ref = null;
+}
+
+class RegexFin {
+    // Offset of fin point. Can be both integer (physical offset) and string (virtual offset).
+    public $offset;
+    // Label to jump to after reaching this point.
+    public $jump_name;
+}
+
+class RegexCaptureSlice {
+    // Name of fstring to populate. Must be unique.
+    public $name;
+    // Array of RegexCaptureSlices that are used by the StatePosition. Used to calculate storage dynamically.
+    public $used_by_state_positions = array();
+}
+
+class RegexRune {
+    const SPECIAL_RUNE_SOF = -2;
+    const SPECIAL_RUNE_EOF = -1;
+
+    const RUNE_MIN = -2;
+    const RUNE_MAX = 255;
+
+    /** @var mixed ID of rune (offset in regex source). */
+    public $offset;
+    /** @var integer Rune value to match (-2 - 255). */
+    public $match;
+    /** @var integer Range of to match. Usually one. */
+    public $range;
+    /** @var RegexRef */
+    public $next;
+
+    public function __construct($offset, $match, $range) {
+        $this->offset = $offset;
+        $this->match = is_string($match)? ord($match): intval($match);
+        $this->range = intval($range);
+        $this->next = new RegexRef();
+    }
+}
+
+class RegexBrancher {
+    /** @var RegexCaptureSlice Start of capture or NULL. */
+    public $capture_start = null;
+    /** @var RegexCaptureSlice End of capture or NULL. */
+    public $capture_end = null;
+    // Branches of possible new paths to explore. [RegexBranches|RegexRune|RegexFin] Can be a single branch if only used as a capture indicator.
+    public $branches = array();
+    /** @var RegexRef[] Loose ends to populate with whatever comes after the branch. Used when constructing the regex pattern. */
+    public $_loose_ends = array();
+
+    public function indexLooseEnds($branch_end) {
+        if ($branch_end instanceof RegexBrancher) {
+            foreach ($branch_end->_loose_ends as $loose_end)
+                $this->_loose_ends[] = $loose_end;
+        } else if ($branch_end instanceof RegexRune) {
+            $this->_loose_ends[] = $branch_end->next;
+        } else if ($branch_end instanceof RegexRef) {
+            $this->_loose_ends[] = $branch_end;
+        } else {
+            throw new TypeException($branch_end);
+        }
+    }
+
+    public function __construct(array $branches) {
+        $this->branches = $branches;
+        foreach ($branches as $branch)
+            $this->indexLooseEnds($branch);
+    }
+
+    public function lexAddBranchOption($branch) {
+        $this->branches[] = $branch;
+        $this->indexLooseEnds($branch);
+    }
+
+    public function lexAddLine($line_start, $line_end) {
+        $this->branches[] = $line_start;
+        $this->indexLooseEnds($line_end);
+    }
+}
+
+class Re2cState {
+    /** @var RegexBrancher Root branches. */
+    public $root_brancher;
+    /** @var ScenarioLocation Root scenario location. */
+    public $root_scenario_location;
+    /** @var DFAState The root state. Where the FSM goes when it starts. */
+    public $root_dfa_state = null;
+    /** @var DFAState The null state. Where the FSM goes when it matches nothing.
+     * This is not theoretically required to be handled as an exception but
+     * in practice it's a pretty good approach to treat this specially
+     * (as the default arc) as most of the arcs will usually be those that
+     * makes the entire machine fail and restart without any match. This is due
+     * to the fact that the alphabet is usually much larger than the possible
+     * runes that can be matched at any given time in a standard regular
+     * expression. One possible way to solve this would be to use a range
+     * object to build and merge the arcs so arc objects can be wider than
+     * one rune. Then we can simply skip creating this state with an exception
+     * and it will create itself as encountered by the expression. This however
+     * will require rewriting a lot of code and has few practical uses except
+     * perhaps for doing human text (unicode) matching with a huge alphabet
+     * and avoiding the ugly max 128-size range hack. However we will primarily
+     * be using this pre-processor to generate code that matches raw memory
+     * and ascii-encoded strings of data. Worst case is probably that the
+     * data is UTF-8 but even then standard ascii matching is fine as long
+     * as ranges aren't used. */
+    public $null_dfa_state = null;
+    /** @var array All DFA states (or arcs if state was redirected due to
+     * internal identity collision) indexed by external identity hash. */
+    public $external_dfa_state_arc_index = array();
+    /** @var array DFA arcs indexed by internal identity hash. Since the
+     * internal identity hash is both the scenario locations and the capture
+     * operations this is a list of arcs (containing both) and not just the
+     * DFA state. */
+    public $internal_dfa_state_arc_index = array();
+    /** @var array Index of all capture slices by name. */
+    public $all_capture_slices = array();
+    /** @var array Total size of capture memory (number of fstr structs allocated). */
+    public $capture_memory = 0;
+    /** @var integer Counter that generates the next flat dfa state jump id. */
+    public $flat_dfa_state_jump_id_counter = 0;
+}
+
+class DFAState {
+    public $id;
+
+    // RegexRune id's mapped to DFAArcs that siginfy transisions to other states.
+    public $arcs = array();
+
+    /** @var DFAFinArc Final arc set for the state where a match has been found. If non null $arcs is empty and this arc needs to be taken. */
+    public $fin_arc = null;
+
+    /** @var array RegexRune offsets mapped to ScenarioLocation instances that are currently searched in parallel. Indexed by ScenarioLocation->location->offset. */
+    public $scenario_locations = array();
+
+    // Set to true when code generation has been completed for dfa state and referals for state should rather use the codegen label pointer (and create it on demand).
+    public $_codegen_complete = false;
+
+    public function __construct(Re2cState $re2c_state) {
+        static $next_dfa_state_id = 0;
+        $next_dfa_state_id++;
+        $this->id = $next_dfa_state_id;
+        // All dfa states has a root scenario location.
+        $this->scenario_locations[-1] = $re2c_state->root_scenario_location;
+    }
+
+    public function getCodegenLabel() {
+        return "re2c_state_" . sprintf("%06x", $this->id);
+    }
+
+    public static function getExternalIdentityHash($scenario_locations) {
+        sort($scenario_locations);
+        return serialize($scenario_locations);
+    }
+
+    public static function getInternalIdentityHash($scenario_location_rune_map, DFAArc $inbound_dfa_arc) {
+        ksort($scenario_location_rune_map);
+        foreach ($scenario_location_rune_map as &$scenario_locations)
+            sort($scenario_locations);
+        $capture_scenario_events_identity = array();
+        foreach ($inbound_dfa_arc->capture_scenario_events as $scenario_id => $capture_scenario_event) {
+            assert($capture_scenario_event instanceof DFACaptureScenarioEvent);
+            $op_queue_identity = array();
+            foreach ($capture_scenario_event->op_queue as $op) {
+                list($start_capture, $capture_slice) = $op;
+                assert($capture_slice instanceof RegexCaptureSlice);
+                $op_queue_identity[$capture_slice->name] = $start_capture;
+            }
+            ksort($op_queue_identity);
+            $capture_scenario_events_identity[$scenario_id] = $op_queue_identity;
+        }
+        ksort($capture_scenario_events_identity);
+        return serialize(array($scenario_location_rune_map, $capture_scenario_events_identity));
+    }
+}
+
+class DFAArc {
+    /** @var DFAState */
+    public $destination_state = null;
+    /** @var array Array of scenario ids mapped to DFACaptureScenarioEvent. */
+    public $capture_scenario_events = array();
+}
+
+class DFAFinArc {
+    /** @var RegexFin */
+    public $regex_fin = null;
+    /** @var Scenario The chosen scenario or null if no scenario had time to be created. */
+    public $scenario = null;
+    /** @var DFACaptureScenarioEvent Final scenario id or null. */
+    public $capture_scenario_event = null;
+}
+
+class DFACaptureScenarioEvent {
+    /** @var Scenario */
+    public $scenario;
+    /** @var array Queue of operations to execute on different RegexCaptureSlices and this scenario.
+     * Contains values of the form array($start_capture (boolean), RegexCaptureSlice). */
+    public $op_queue = array();
+    /** @var Scenario Scenario to copy capture data from or null. */
+    public $copy_from_scenario = null;
+
+    public function __construct(Scenario $scenario) {
+        $this->scenario = $scenario;
+    }
+}
+
+class ScenarioLocation {
+    /** @var Scenario of theoretical DFA path state. */
+    public $scenario;
+    /** @var RegexRune of theoretical DFA path state or RegexFin if the path is completed. */
+    public $location;
+
+    public function __construct(Scenario $scenario, $location) {
+        $this->scenario = $scenario;
+        $this->location = $location;
+    }
+}
+
+/*
+class TheoreticalArcs {
+    /** @var DFAState set mapped by the rune ids that get them there. *
+    public $arcs = array();
+}*/
+
+class Scenario {
+    public $id;
+    public $generation;
+    /** @var array Allocated offset instances that are used by the StatePosition indexed by RegexCaptureSlice spl object hash. Used to calculate storage dynamically. */
+    public $capture_mem = array();
+    /** @var A Scenario is not useful until it either merges into another useful Scenario or is complete. Non useful Scenarios can be ignored.
+     * The reason non useful scenarios exists is because we return the first match found (lazy instead of greedy) which allows us to discard all
+     * existing scenarios if an exit point is found during the generation. */
+    public $is_useful = false;
+    /** @var array Scenarios this scenario is copied from. Used to cascade allocations of capture memory as scenarios need to copy over capture data for scenarios that copies from them. */
+    public $copied_to_scenarios = array();
+    /** @var array Array of scenarios that copies into this scenario. Used when recursivly marking scenarios as useful. */
+    public $copied_from_scenarios = array();
+
+    public function __construct(Scenario $fork_from = null) {
+        static $next_scenario_id = 0;
+        $next_scenario_id++;
+        $this->id = $next_scenario_id;
+        $this->generation = ($fork_from !== 0)? $next_scenario_id: $fork_from->generation;
+    }
+}
+
+class StringGenerator {
+    public $to_string_fn;
+
+    public function __construct($to_string_fn) {
+        $this->to_string_fn = $to_string_fn;
+    }
+
+    public function __toString() {
+        $to_string_fn = $this->to_string_fn;
+        return $to_string_fn($this);
+    }
+}
+
+function re2c_lex_error(LexState $lex_state, $msg) {
+    fwrite(STDERR, "re2c syntax error at offset " . ($lex_state->offset - 1) . ": $msg\n");
+    debug_print_backtrace();
+    exit(1);
+}
+
+
+function re2c_lex_next_char(LexState $lex_state, &$c) {
+    if ($lex_state->offset >= strlen($lex_state->regex))
+        return false;
+    $c = $lex_state->regex[$lex_state->offset];
+    $lex_state->offset++;
+    return true;
+}
+
+function re2c_lex_hex(LexState $lex_state) {
+    $hex_match = "";
+    while (re2c_lex_next_char($lex_state, $c)) {
+        $c = strtolower($c);
+        if (($c >= "a" && $c <= "f") || ($c >= "0" && $c <= "9")) {
+            $hex_match .= $c;
+            if (strlen($hex_match) == 2)
+                return chr(hexdec($hex_match));
+        } else {
+            re2c_lex_error($lex_state, "unexpected character $c in hex range");
+        }
+    }
+    re2c_lex_error($lex_state, "unexpected end of regex in hex range");
+}
+
+function re2c_case_adjusted_token(LexState $lex_state, $c, $case_sensitivity_mode) {
+    if ($case_sensitivity_mode || (strtoupper($c) == strtolower($c))) {
+        return new RegexRune($lex_state->offset, $c, 1);
+    } else {
+        return new RegexBrancher(array(
+            new RegexRune($lex_state->offset . "U", strtoupper($c), 1),
+            new RegexRune($lex_state->offset . "d", strtolower($c), 1),
+        ));
+    }
+}
+
+function re2c_lex_escape(LexState $lex_state, &$case_sensitivity_mode) {
+    while (re2c_lex_next_char($lex_state, $c)) {
+        switch ($c) {
+        case '0':
+            return new RegexRune($lex_state->offset, "0", 1);
+        case 'i': // enable case sensitivity
+        case '!': // disable case sensitivity
+            $case_sensitivity_mode = ($c === '!');
+            return null;
+        case 'n':
+            return new RegexRune($lex_state->offset, "\n", 1);
+        case 'r':
+            return new RegexRune($lex_state->offset, "\r", 1);
+        case 't':
+            return new RegexRune($lex_state->offset, "\t", 1);
+        case 'd':
+            return new RegexRune($lex_state->offset, "0", 10);
+        case 'w':
+            return new RegexBrancher(array(
+                new RegexRune($lex_state->offset . "a", "a", 26),
+                new RegexRune($lex_state->offset . "A", "A", 26),
+                new RegexRune($lex_state->offset . "0", "0", 10),
+            ));
+        case 's':
+            return new RegexRune($lex_state->offset, "\x00", 0x21);
+        case 'a':
+            return new RegexRune($lex_state->offset, "\x07", 1);
+        case 'f':
+            return new RegexRune($lex_state->offset, "\x0c", 1);
+        case 'X':
+        case 'x':
+            return new RegexRune($lex_state->offset, re2c_lex_hex($lex_state), 1);
+        default:
+            return re2c_case_adjusted_token($lex_state, $c, $case_sensitivity_mode);
+        }
+    }
+}
+
+function re2c_lex_braces_content(LexState $lex_state) {
+    $content = "";
+    while (re2c_lex_next_char($lex_state, $c)) {
+        switch ($c) {
+        case ' ':
+        case "\n":
+        case "\r":
+            break;
+        case "}":
+            if ($content === "")
+                re2c_lex_error($lex_state, "unexpected braces end");
+            return $content;
+        default:
+            $content .= $c;
+            break;
+        }
+    }
+    re2c_lex_error($lex_state, "unexpected braces end");
+}
+
+function re2c_lex_rune_set(LexState $lex_state, $case_sensitivity_mode) {
+    $regex_lex_branches = new RegexBrancher(array());
+    $pending_rune = null;
+    $pending_range = false;
+    $invert_enabled = false;
+    $push_pending_rune_fn = function($new_pending_token = null) use ($lex_state, $regex_lex_branches, &$pending_rune, &$pending_range) {
+        if ($pending_rune !== null) {
+            if ($pending_range) {
+                if ($new_pending_token instanceof RegexRune && $new_pending_token->range == 1 && $new_pending_token->match >= 0) {
+                    $range_ok = true;
+                    if ($pending_rune->match > $new_pending_token->match) {
+                        $_flip = $new_pending_token;
+                        $new_pending_token = $pending_rune;
+                        $pending_rune = $_flip;
+                    }
+                    $pending_rune->range = $new_pending_token->match - $pending_rune->match + 1;
+                } else {
+                    $range_ok = false;
+                }
+            }
+            $regex_lex_branches->lexAddBranchOption($pending_rune);
+            if ($pending_range) {
+                if (!$range_ok) {
+                    $dash_rune = new RegexRune($lex_state->offset, "-", 1);
+                    if ($new_pending_token === null) {
+                        $regex_lex_branches->lexAddBranchOption($dash_rune);
+                        $pending_rune = null;
+                    } else {
+                        $pending_rune = $dash_rune;
+                    }
+                } else {
+                    $pending_range = false;
+                    $pending_rune = null;
+                }
+                return;
+            }
+        }
+        $pending_rune = $new_pending_token;
+    };
+    while (re2c_lex_next_char($lex_state, $c)) {
+        $new_pending_rune = null;
+        switch ($c) {
+        case '-':
+            if (!$pending_range && $pending_rune !== null) {
+                assert($pending_rune instanceof RegexRune);
+                if ($pending_rune->range == 1 && $pending_rune->match >= 0) {
+                    $pending_range = true;
+                    break;
+                }
+            }
+            $push_pending_rune_fn(new RegexRune($lex_state->offset, "-", 1));
+            break;
+        case '\\':
+            $token = re2c_lex_escape($lex_state, $case_sensitivity_mode);
+            if ($token !== null)
+                $push_pending_rune_fn($token);
+            break;
+        case ']':
+            $push_pending_rune_fn(null);
+            if (count($regex_lex_branches->branches) == 0)
+                re2c_lex_error($lex_state, "unexpected braces end");
+            if ($invert_enabled) {
+                $inverted_regex_lex_branches = new RegexBrancher(array());
+                $invert_match_from = null;
+                $invert_match_fn = function($invert_match_to) use ($lex_state, $inverted_regex_lex_branches, &$invert_match_from) {
+                    if ($invert_match_from === null)
+                        return;
+                    $inverted_regex_lex_branches->lexAddBranchOption(new RegexRune($lex_state->offset . "-!$invert_match_from", $invert_match_from, $invert_match_to - $invert_match_from));
+                    $invert_match_from = null;
+                };
+                $rune_id = 0;
+                for (; $rune_id <= RegexRune::RUNE_MAX; $rune_id++) {
+                    $check_match_over_branch_fn = function(RegexBrancher $brancher) use ($rune_id, &$check_match_over_branch_fn) {
+                        foreach ($brancher->branches as $token) {
+                            if ($token instanceof RegexRune) {
+                                if ($rune_id >= $token->match && $token->range > $rune_id - $token->match)
+                                    return true;
+                            } else {
+                                assert($token instanceof RegexBrancher);
+                                if ($check_match_over_branch_fn($token))
+                                    return true;
+                            }
+                        }
+                        return false;
+                    };
+                    $match = $check_match_over_branch_fn($regex_lex_branches);
+                    if ($match) {
+                        $invert_match_fn($rune_id);
+                    } else {
+                        if ($invert_match_from === null)
+                            $invert_match_from = $rune_id;
+                    }
+                }
+                $invert_match_fn($rune_id);
+                if (count($inverted_regex_lex_branches->branches) == 0)
+                    re2c_lex_error($lex_state, "inverted rune set does not match any runes");
+                return $inverted_regex_lex_branches;
+            } else {
+                return $regex_lex_branches;
+            }
+        case '.':
+            $push_pending_rune_fn(new RegexRune($lex_state->offset, 0, RegexRune::RUNE_MAX));
+            break;
+        case '^':
+            if ($invert_enabled || count($regex_lex_branches->branches) > 0)
+                re2c_lex_error($lex_state, "invert rune set operatior must be first in rune set");
+            $invert_enabled = true;
+            break;
+        case '$':
+        case '*':
+        case '+':
+        case '?':
+        case '[':
+        case '{':
+        case '}':
+        case ')':
+        case '(':
+        case '|':
+            re2c_lex_error($lex_state, "operator $c not allowed in rune set");
+        default:
+            $push_pending_rune_fn(new RegexRune($lex_state->offset, $c, 1));
+            break;
+        }
+    }
+    re2c_lex_error($lex_state, "unexpected braces end");
+}
+
+function re2c_lex_next_root_branch(LexState $lex_state) {
+    while (re2c_lex_next_char($lex_state, $c)) {
+        switch ($c) {
+        case ' ':
+        case "\n":
+        case "\r":
+            break;
+        case "|":
+            return true;
+        }
+    }
+    return false;
+
+}
+
+function re2c_lex_bind($src, $dst) {
+    if ($src instanceof RegexBrancher) {
+        assert($src->_loose_ends > 0);
+        foreach ($src->_loose_ends as $loose_end) {
+            assert($loose_end instanceof RegexRef);
+            $loose_end->ref = $dst;
+        }
+    } else if ($src instanceof RegexRune) {
+        $src->next->ref = $dst;
+    } else {
+        throw new TypeException($src);
+    }
+}
+
+/** Recusively copies the lex branch and all the loose ends and creates virtual offsets. */
+function re2c_copy_branch($branch, &$loose_ends = null) {
+    if (isset($branch->_tmp_copy_ref))
+        return $branch->_tmp_copy_ref;
+    static $copy_id = 0;
+    $copy_id++;
+    if ($branch instanceof RegexBrancher) {
+        $branch_copy = new RegexBrancher(array());
+        $branch->_tmp_copy_ref = $branch_copy;
+        $branch_copy->capture_start = $branch->capture_start;
+        $branch_copy->capture_end = $branch->capture_end;
+        $sub_loose_ends = array();
+        foreach ($branch->branches as $sub_branch)
+            $branch_copy->branches[] = re2c_copy_branch($sub_branch, $sub_loose_ends);
+        $branch_copy->_loose_ends = $sub_loose_ends;
+        if ($loose_ends !== null)
+            $loose_ends = $sub_loose_ends;
+    } else if ($branch instanceof RegexRune) {
+        $branch_copy = new RegexRune($branch->offset . "-c$copy_id", $branch->match, $branch->range);
+        $branch->_tmp_copy_ref = $branch_copy;
+        if ($branch->next->ref === null) {
+            if ($loose_ends !== null)
+                $loose_ends[] = $branch_copy->next;
+        } else {
+            $branch_copy->next->ref = re2c_copy_branch($branch->next->ref, $loose_ends);
+        }
+    } else if ($branch instanceof RegexRef) {
+        $branch_copy = new RegexRef();
+        $branch->_tmp_copy_ref = $branch_copy;
+        if ($branch->ref === null) {
+            if ($loose_ends !== null)
+                $loose_ends[] = $branch_copy;
+        } else {
+            $branch_copy->ref = re2c_copy_branch($branch->ref, $loose_ends);
+        }
+    } else {
+        throw new TypeException($branch);
+    }
+    unset($branch->_tmp_copy_ref);
+    return $branch_copy;
+}
+
+function re2c_lex(LexState $lex_state, $is_sub_match, array &$all_capture_slices, $case_sensitivity_mode) {
+    $regex_lex_branches = new RegexBrancher(array());
+    // Simply the token where the line starts.
+    $regex_lex_line_start = null;
+    $regex_lex_line_end = null;
+    // The line append is a dangling token that is not really attached as we might want to work with it (like wrap it in a branch etc).
+    $regex_lex_pending = null;
+    $regex_lex_append_to_line_fn = function($rune_or_branch) use (&$regex_lex_line_start, &$regex_lex_line_end, &$regex_lex_pending) {
+        if ($regex_lex_pending !== null) {
+            // Append the dangling lex rune or branch.
+            if ($regex_lex_line_end !== null) {
+                re2c_lex_bind($regex_lex_line_end, $regex_lex_pending);
+                $regex_lex_line_end = $regex_lex_pending;
+            } else {
+                $regex_lex_line_start = $regex_lex_pending;
+                $regex_lex_line_end = $regex_lex_pending;
+            }
+        }
+        $regex_lex_pending = $rune_or_branch;
+    };
+    $regex_lex_complete_sub_line_fn = function() use ($lex_state, $regex_lex_append_to_line_fn, $regex_lex_branches, &$regex_lex_line_start, &$regex_lex_line_end) {
+        // Solder any pending tokens.
+        $regex_lex_append_to_line_fn(null);
+        // If we have a lex line to be finalized - do it.
+        if ($regex_lex_line_start !== null) {
+            // Add the branch with one or more loose references to the collection of branches in this sub match.
+            $regex_lex_branches->lexAddLine($regex_lex_line_start, $regex_lex_line_end);
+            // Reset lex line buffer.
+            $regex_lex_line_start = null;
+            $regex_lex_line_end = null;
+        } else if (count($regex_lex_branches->branches) === 0)
+            re2c_lex_error($lex_state, "unexpected end of branch");
+    };
+    // Parse the regular expressions we are currently trying to match.
+    while (re2c_lex_next_char($lex_state, $c)) {
+        switch ($c) {
+        case ' ':
+        case "\n":
+        case "\r":
+            // Whitespace is ignored which is a pretty unusual regex feature.
+            break;
+        case '(':
+            // Lex the inner branch and append.
+            $regex_lex_append_to_line_fn(re2c_lex($lex_state, true, $all_capture_slices, $case_sensitivity_mode));
+            break;
+        case ')':
+            if (!$is_sub_match)
+                re2c_lex_error($lex_state, "unexpected operator $c");
+            $regex_lex_complete_sub_line_fn();
+            return $regex_lex_branches;
+        case '{': // Picks up iterators, capture markers and fin blocks.
+            // We're now matching whatever is in the {...} block.
+            $braces_content = re2c_lex_braces_content($lex_state);
+            if (preg_match('/^([0-9]*),?([0-9]*)$/', $braces_content, $matches) == 1) {
+                if ($regex_lex_pending === null)
+                    re2c_lex_error($lex_state, "unexpected operator $c");
+                // Got ourselves an iterator.
+                $min = intval($matches[1]);
+                $max = intval($matches[2]);
+                if ($min === 0 && $max === 0) {
+                    // Optional and loop forever (*)
+                    goto loop_symbol;
+                } else {
+                    if ($min > $max && $max !== 0)
+                        re2c_lex_error($lex_state, "match iterator need to have lower min value than max value");
+                    $inner_loop = $regex_lex_pending;
+                    $regex_lex_pending = null;
+                    // Loop at minimum $min times. (full expansion)
+                    $i = 0;
+                    for (; $i < $min ; $i++)
+                        $regex_lex_append_to_line_fn(re2c_copy_branch($inner_loop));
+                    if ($max === 0) {
+                        // The rest shall be infinitely looped.
+                        $regex_lex_append_to_line_fn($inner_loop);
+                        goto loop_symbol;
+                    } else if ($i < $max) {
+                        // Loop a minimum of min times and a maximum of max times. (min expansion with optional branch out expansion to max followed by regular infinite loop)
+                        $first_loop_brancher = null;
+                        $global_exit = new RegexRef();
+                        $prev_inner_loop = null;
+                        for (; $i < $max; $i++) {
+                            $inner_loop_clone = re2c_copy_branch($inner_loop);
+                            $loop_brancher = new RegexBrancher(array());
+                            $loop_brancher->branches[] = $inner_loop_clone;
+                            // We can safely ignore branching to the next inner loop if matching fails as it's an exact copy - branching to the main loop exit instead.
+                            $loop_brancher->branches[] = $global_exit;
+                            if ($prev_inner_loop === null) {
+                                // Using the first loop brancher to the main loop brancher.
+                                $first_loop_brancher = $loop_brancher;
+                            } else {
+                                // Binding the previous inner loop to the new loop brancher.
+                                re2c_lex_bind($prev_inner_loop, $loop_brancher);
+                            }
+                            $prev_inner_loop = $inner_loop_clone;
+                        }
+                        // If matching succeeded all the way it's finally safe to exit.
+                        re2c_lex_bind($prev_inner_loop, $global_exit);
+                        $first_loop_brancher->indexLooseEnds($global_exit);
+                        $regex_lex_append_to_line_fn($first_loop_brancher);
+                    }
+                }
+                // Prevent complex and probably buggy semantics from being allowed by soldering the last pending lex here.
+                $regex_lex_append_to_line_fn(null);
+            } else if (preg_match('/^[a-z_0-9\[\]]+$/', $braces_content, $matches) == 1) {
+                if ($regex_lex_pending === null)
+                    re2c_lex_error($lex_state, "unexpected operator $c");
+                // Got ourselves a capture or fin (depending on is_sub_match). Wrap the current pending lex in a capture branch here.
+                $capture_slice = new RegexCaptureSlice();
+                $capture_slice->name = $matches[0];
+                if (isset($all_capture_slices[$capture_slice->name]))
+                    re2c_lex_error($lex_state, "capture slice name collision, \"$capture_slice->name\" already exists");
+                $all_capture_slices[$capture_slice->name] = $capture_slice;
+                $captured_branch = $regex_lex_pending;
+                $regex_lex_pending = null;
+                // Create wrapper head that just linkes itself with the captured branch and inherits the loose ends.
+                $capture_wrap_start = new RegexBrancher(array());
+                $capture_wrap_start->capture_start = $capture_slice;
+                $capture_wrap_start->lexAddBranchOption($captured_branch);
+                $regex_lex_append_to_line_fn($capture_wrap_start);
+                // Now create wrapper tail that just contains an empty ref so a loose end can connect with the next token.
+                $capture_wrap_end = new RegexBrancher(array());
+                $capture_wrap_end->capture_end = $capture_slice;
+                $capture_wrap_end->lexAddBranchOption(new RegexRef());
+                $regex_lex_append_to_line_fn($capture_wrap_end);
+                // Prevent complex and probably buggy semantics from being allowed by soldering the last pending lex here.
+                $regex_lex_append_to_line_fn(null);
+            } else if (preg_match('/^@([a-z_0-9]+)$/', $braces_content, $matches) == 1) {
+                if ($is_sub_match)
+                    re2c_lex_error($lex_state, "unexpected finalizer - can only finalize on main level");
+                // Creating final regex fin node and terminating root branch.
+                $fin = new RegexFin();
+                $fin->jump_name = $matches[1];
+                $fin->offset = $lex_state->offset;
+                $regex_lex_append_to_line_fn($fin);
+                $regex_lex_append_to_line_fn(null);
+                $regex_lex_branches->branches[] = $regex_lex_line_start;
+                // Scan to any optional | that indicates new root branch.
+                if (!re2c_lex_next_root_branch($lex_state))
+                    return $regex_lex_branches;
+                // Reset lex line and scan next.
+                $regex_lex_line_start = null;
+                $regex_lex_line_end = null;
+            } else {
+                re2c_lex_error($lex_state, "unrecognized braces content \"$braces_content\"");
+            }
+            break;
+        case '}':
+        case ']':
+            re2c_lex_error($lex_state, "unexpected operator $c");
+            break;
+        case '[':
+            $regex_lex_append_to_line_fn(re2c_lex_rune_set($lex_state, $case_sensitivity_mode));
+            break;
+        case '+':
+            // Macro like (expr)+ -> (expr)(expr)*
+            if ($regex_lex_pending === null)
+                re2c_lex_error($lex_state, "unexpected operator $c");
+            // Copy the pending token once and then looping the copy. Throwing away loose ends as $regex_lex_pending is either
+            // a branch in which case it tracks those loose ends itself, or a rune/ref in which case it's tracked by standard bind.
+            $regex_lex_append_to_line_fn(re2c_copy_branch($regex_lex_pending));
+            goto loop_symbol;
+        case '?':
+            // The lazy match operator that branches past the previous expression and into it.
+            if ($regex_lex_pending === null)
+                re2c_lex_error($lex_state, "unexpected operator $c");
+            $regex_lex_pending = new RegexBrancher(array(
+                $regex_lex_pending,
+                new RegexRef(),
+            ));
+            // Prevent complex and probably buggy semantics from being allowed by soldering the last pending lex here.
+            $regex_lex_append_to_line_fn(null);
+            break;
+        case '*':
+            // The repating lazy match fundamental operator that branches past the expression and into it. When leaving it, branches around to the start and out of it.
+            if ($regex_lex_pending === null)
+                re2c_lex_error($lex_state, "unexpected operator $c");
+            loop_symbol:
+            // Working with the inner loop.
+            $inner_loop = $regex_lex_pending;
+            // Make the inner loop jump back to the initial brancher. (hack that removes the loose end)
+            $loop_brancher = new RegexBrancher(array());
+            re2c_lex_bind($inner_loop, $loop_brancher);
+            $loop_brancher->branches[] = $inner_loop;
+            // Then add the loose ref to the branch which essentially makes the whole branch optional for every iteration.
+            $loop_brancher->lexAddBranchOption(new RegexRef());
+            // Replace the inner loop on the lex line with the loop brancher.
+            $regex_lex_pending = $loop_brancher;
+            // Prevent complex and probably buggy semantics from being allowed by soldering the last pending lex here.
+            $regex_lex_append_to_line_fn(null);
+            break;
+        case '|':
+            if (!$is_sub_match)
+                re2c_lex_error($lex_state, "| is invalid on main level without first finalizing with {@jump}");
+            // Complete the lex line and branch a new one.
+            $regex_lex_complete_sub_line_fn();
+            break;
+        case '\\':
+            $regex_lex_append_to_line_fn(re2c_lex_escape($lex_state, $case_sensitivity_mode));
+            break;
+        case '^':
+            $regex_lex_append_to_line_fn(new RegexRune($lex_state->offset, RegexRune::SPECIAL_RUNE_SOF, 1));
+            break;
+        case '$':
+            $regex_lex_append_to_line_fn(new RegexRune($lex_state->offset, RegexRune::SPECIAL_RUNE_EOF, 1));
+            break;
+        case '.':
+            $regex_lex_append_to_line_fn(new RegexRune($lex_state->offset, 0, RegexRune::RUNE_MAX));
+            break;
+        default:
+            // Just a plain symbol we should match. Add it to the line.
+            $regex_lex_append_to_line_fn(re2c_case_adjusted_token($lex_state, $c, $case_sensitivity_mode));
+        }
+    }
+    re2c_lex_error($lex_state, "unexpected end of branch");
+}
+
+function re2c_dfa_mark_scenario_useful(Scenario $scenario) {
+    if ($scenario->is_useful)
+        return;
+    $scenario->is_useful = true;
+    // If destination is useful, so is the source.
+    foreach ($scenario->copied_from_scenarios as $src_scenario)
+        re2c_dfa_mark_scenario_useful($src_scenario);
+}
+
+class DFACollectedPaths {
+    /** @var mixed If FIN was found during the search, set to an object that
+     * consists of array(RegexFin, ScenarioLocation, $capture_queue).
+     * Used to abort search and reset it so paths only contains one path. */
+    public $fin_found = false;
+    /** @var array All possible source scenarios mapped by spl object hash. */
+    public $source_scenarios = array();
+    /** @var array Collection of possible paths where rune ids are mapped to
+     * source scenario locations (mapped by spl object hash) or null
+     * (if new scenario, mapped by 0) is mapped to ararys indexed by
+     * regex offset and values of RegexRune or RegexFin where those scenarios
+     * could potentially go. After this data has been gathered it has to be
+     * further refined to determine which scenarios should be selected for
+     * all potential rune scenarios where regex offsets intersects. */
+    public $paths = array();
+    /** @var array Same index as above but set to array of captures that shall
+     * be enabled if the corresponding path is taken. Contains values of the
+     * form array($start_capture (boolean), RegexCaptureSlice). */
+    public $captures = array();
+}
+
+function re2c_dfa_collect_scenario_paths(DFACollectedPaths $collected_paths, DFAState $source_dfa_state, $by_token, $ignore_identity, $capture_queue, ScenarioLocation $source_scenario_location) {
+    follow_ref:
+    if ($by_token instanceof RegexBrancher) {
+        if ($by_token->capture_start !== null)
+            $capture_queue[] = array(true, $by_token->capture_start);
+        if ($by_token->capture_end !== null)
+            $capture_queue[] = array(false, $by_token->capture_end);
+        foreach ($by_token->branches as $next_token) {
+            re2c_dfa_collect_scenario_paths($collected_paths, $source_dfa_state, $next_token, false, $capture_queue, $source_scenario_location);
+            if ($collected_paths->fin_found !== false)
+                return;
+        }
+    } else if ($by_token instanceof RegexRef) {
+        $by_token = $by_token->ref;
+        goto follow_ref;
+    } else if ($by_token instanceof RegexFin) {
+        // Encountered fin. Paths are no longer useful as we can immediatly abort search.
+        $collected_paths->fin_found = array($by_token, $source_scenario_location, $capture_queue);
+    } else if ($by_token instanceof RegexRune) {
+        if ($ignore_identity) {
+            re2c_dfa_collect_scenario_paths($collected_paths, $source_dfa_state, $by_token->next, false, $capture_queue, $source_scenario_location);
+        } else {
+            $insert_path_fn = function($rune_id, $new_location) use ($collected_paths, $source_scenario_location, $capture_queue) {
+                $source_scenario_loc_key = spl_object_hash($source_scenario_location);
+                $new_offset = $new_location->offset;
+                assert(!isset($collected_paths->paths[$rune_id][$source_scenario_loc_key][$new_offset]));
+                $collected_paths->paths[$rune_id][$source_scenario_loc_key][$new_offset] = $new_location;
+                if (count($capture_queue) > 0)
+                    $collected_paths->captures[$rune_id][$source_scenario_loc_key][$new_offset] = $capture_queue;
+            };
+            for ($rune_id = $by_token->match, $i = 0; $i < $by_token->range; $rune_id++, $i++)
+                $insert_path_fn($rune_id, $by_token);
+        }
+    } else {
+        throw new TypeException($by_token);
+    }
+}
+
+/** @return DFACollectedPaths */
+function re2c_dfa_collect_paths(Re2cState $re2c_state, DFAState $source_dfa_state) {
+    // Check where all existing scenario locations can go.
+    $collected_paths = new DFACollectedPaths();
+    foreach ($source_dfa_state->scenario_locations as $scenario_location) {
+        assert($scenario_location instanceof ScenarioLocation);
+        $collected_paths->source_scenarios[spl_object_hash($scenario_location)] = $scenario_location;
+        re2c_dfa_collect_scenario_paths($collected_paths, $source_dfa_state, $scenario_location->location, true, array(), $scenario_location);
+        if ($collected_paths->fin_found !== false)
+            return $collected_paths;
+    }
+    return $collected_paths;
+}
+
+function re2c_dfa_compute_graph(Re2cState $re2c_state, DFAState $source_dfa_state, DFAArc $inbound_dfa_arc = null) {
+    $collected_paths = re2c_dfa_collect_paths($re2c_state, $source_dfa_state);
+    if ($collected_paths->fin_found !== false) {
+        // Create a single fin arc in source dfa state.
+        list($regex_fin, $source_scenario_location, $capture_queue) = $collected_paths->fin_found;
+        assert($regex_fin instanceof RegexFin);
+        $fin_arc = new DFAFinArc();
+        $fin_arc->regex_fin = $regex_fin;
+        assert($source_scenario_location instanceof ScenarioLocation);
+        $source_scenario = $source_scenario_location->scenario;
+        $fin_arc->scenario = $source_scenario;
+        re2c_dfa_mark_scenario_useful($source_scenario);
+        if (count($capture_queue) > 0) {
+            $capture_scenario_event = new DFACaptureScenarioEvent($source_scenario);
+            $capture_scenario_event->op_queue = $capture_queue;
+            $fin_arc->capture_scenario_event = $capture_scenario_event;
+        }
+        $source_dfa_state->fin_arc = $fin_arc;
+        // Creating single scenario location.
+        $source_dfa_state->scenario_locations[] = new ScenarioLocation($source_scenario, $regex_fin);
+        return null;
+    }
+    $source_dfa_is_root = ($source_dfa_state === $re2c_state->root_dfa_state);
+    if ($source_dfa_is_root) {
+        // If we're at the root dfa state we can use it to match only the SOF,
+        // but then we can't use it as the null dfa state, so we only do that
+        // if we actually have expressions that matches the SOF.
+        if (isset($collected_paths->paths[RegexRune::SPECIAL_RUNE_SOF])) {
+            $collected_paths->paths = array_intersect_key($collected_paths->paths, array(RegexRune::SPECIAL_RUNE_SOF => true));
+            // It's important that the SOF rune does not eat any characher
+            // from the buffer - let the code generation take care of this
+            // exception.
+        } else {
+            $re2c_state->null_dfa_state = $source_dfa_state;
+        }
+    } else {
+        // We remove the SOF for other states... as SOF can only be matched by the root dfa state.
+        if (isset($collected_paths->paths[RegexRune::SPECIAL_RUNE_SOF])) {
+            $collected_paths->paths = array_diff_key($collected_paths->paths, array(RegexRune::SPECIAL_RUNE_SOF => true));
+            // The paths count might be null now which means that we're
+            // building an expression which has a SOF where it could not
+            // possible match but that's the users problem, not ours.
+        }
+    }
+    // Go through all collected paths and create a map of what happens to
+    // existing scenarios and where new scenarios map if a particular new rune is encountered.
+    // This involves arbitating between scenarios that conflict as they map to the same new offset.
+    // This arbitation is done by only using the state with the lowest generation and discarding all other states.
+    $rune_jump_map = array();
+    foreach ($collected_paths->paths as $rune_id => $source_scenarios) {
+        foreach ($source_scenarios as $source_scenario_loc_key => $dfa_offsets) {
+            $src_scenario_loc = $collected_paths->source_scenarios[$source_scenario_loc_key];
+            assert($src_scenario_loc instanceof ScenarioLocation);
+            foreach ($dfa_offsets as $dfa_offset => $dfa_token) {
+                if (isset($rune_jump_map[$rune_id][$dfa_offset])) {
+                    list($existing_source_scenario_loc, $dfa_token) = $rune_jump_map[$rune_id][$dfa_offset];
+                    if ($existing_source_scenario_loc !== null) {
+                        if ($existing_source_scenario_loc->scenario->generation < $src_scenario_loc->scenario->generation)
+                            continue;
+                        if ($existing_source_scenario_loc->scenario->generation === $src_scenario_loc->scenario->generation
+                        && $existing_source_scenario_loc->scenario->id < $src_scenario_loc->scenario->id)
+                            continue;
+                    }
+                }
+                $capture_queue = isset($collected_paths->captures[$rune_id][$source_scenario_loc_key][$dfa_offset])? $collected_paths->captures[$rune_id][$source_scenario_loc_key][$dfa_offset]: array();
+                $rune_jump_map[$rune_id][$dfa_offset] = array($src_scenario_loc, $dfa_token, $capture_queue);
+            }
+        }
+    }
+    /// TODO: Fix this optimization.
+    /*
+    // Calculate internal identity hash for the DFA state and inbound arc now.
+    // If there is a conflict, return the existing DFA state to reduce graph size.
+    // See external identity hash call below for more information.
+    if ($inbound_dfa_arc !== null) {
+        assert($inbound_dfa_arc->destination_state == $source_dfa_state);
+        $internal_identity_tokens = array();
+        foreach ($rune_jump_map as $rune_id => $rune_jump_scenarios)
+            $internal_identity_tokens[$rune_id] = array_keys($rune_jump_scenarios);
+        $internal_identity_hash = DFAState::getInternalIdentityHash($internal_identity_tokens, $inbound_dfa_arc);
+        if (isset($re2c_state->internal_dfa_state_arc_index[$internal_identity_hash])) {
+            return $re2c_state->internal_dfa_state_arc_index[$internal_identity_hash];
+        } else {
+            $re2c_state->internal_dfa_state_arc_index[$internal_identity_hash] = $inbound_dfa_arc;
+        }
+    }*/
+    // Go through the rune jump maps to determine if it should create a new
+    // state with corresponding new scenarios or if it can use an existing
+    // state and possibly reusing their assoicated existing scenarios.
+    foreach ($rune_jump_map as $rune_id => $rune_jump_scenarios) {
+        // Creating an arc now in the source dfa state. This can't be previously set as
+        // all unique arcs for the specific $source_dfa_state is created in this loop.
+        assert(!isset($source_dfa_state->arcs[$rune_id]));
+        $arc = new DFAArc();
+        $register_capture_scenario_event_fn = function(Scenario $capture_scenario, $capture_queue, Scenario $capture_copy_from_scenario = null) use (&$arc) {
+            if ($capture_copy_from_scenario !== null) {
+                // Register scenario copying.
+                $capture_scenario->copied_from_scenarios[] = $capture_copy_from_scenario;
+                $capture_copy_from_scenario->copied_to_scenarios[] = $capture_scenario;
+                // If destination is useful, so is the source.
+                if ($capture_scenario->is_useful)
+                    re2c_dfa_mark_scenario_useful($capture_scenario);
+            }
+            if (count($capture_queue) > 0 || $capture_copy_from_scenario !== null) {
+                $capture_scenario_event = new DFACaptureScenarioEvent($capture_scenario);
+                $capture_scenario_event->op_queue = $capture_queue;
+                $capture_scenario_event->copy_from_scenario = $capture_copy_from_scenario;
+                assert(!isset($arc->capture_scenario_events[$capture_scenario->id]));
+                $arc->capture_scenario_events[$capture_scenario->id] = $capture_scenario_event;
+            }
+        };
+        // Determine the hash (identity) of the new state determine by the set
+        // of scenario offsets (the set of parallel NFA positions). Then we
+        // just specify the capture information for the arc and reference an
+        // existing or new dfa state depending if it already exists.
+        // Notice that this is the external identity of the DFA state,
+        // there may still be a collision as the internal identity is the same
+        // as another state (the identity of the function that maps runes
+        // to new rune jump scenarios) but we cannot determine the internal
+        // identity yet as we would have to explore the state first. Merging
+        // external identity collisions is neccessary as graph cycles would
+        // otherwise make this search loop forever, merging internal identity
+        // collisions though is just an optimization that reduces the
+        // size of the final graph.
+        $external_identity_hash = DFAState::getExternalIdentityHash(array_keys($rune_jump_scenarios));
+        if (isset($re2c_state->external_dfa_state_arc_index[$external_identity_hash])) {
+            $indexed_dfa_state = $re2c_state->external_dfa_state_arc_index[$external_identity_hash];
+            if ($indexed_dfa_state instanceof DFAArc) {
+                $redirected_dfa_arc = $indexed_dfa_state;
+                goto redirected_dfa_arc;
+            }
+            $dfa_state = $indexed_dfa_state;
+            $arc->destination_state = $dfa_state;
+            $used_existing_src_scenarios = array();
+            foreach ($rune_jump_scenarios as $dfa_offset => $rune_jump_scenario) {
+                list($src_scenario_loc, $dfa_token, $capture_queue) = $rune_jump_scenario;
+                assert($src_scenario_loc instanceof ScenarioLocation);
+                assert($dfa_token instanceof RegexRune);
+                // Now there are three possibilities:
+                // 1. The source scenario is the same as the destination scenario in which case no required mapping to take place.
+                // 2. The source scenario is different as the destination scenario in which case we have to register that copying is required.
+                // 3. The source scenario is the same as an already used destination scenario in which case we have to clone it and register that copying is required.
+                $src_scenario = $src_scenario_loc->scenario;
+                $dfa_scenario_loc = $dfa_state->scenario_locations[$dfa_token->offset];
+                assert($dfa_scenario_loc instanceof ScenarioLocation);
+                $dfa_scenario = $dfa_scenario_loc->scenario;
+                if ($src_scenario !== $dfa_scenario) {
+                    $capture_copy_from_scenario = $src_scenario;
+                } else if (isset($used_existing_src_scenarios[$src_scenario->id])) {
+                    $dfa_scenario = new Scenario($src_scenario);
+                    $capture_copy_from_scenario = $src_scenario;
+                } else {
+                    $capture_copy_from_scenario = null;
+                }
+                $used_existing_src_scenarios[$dfa_scenario->id] = true;
+                $register_capture_scenario_event_fn($dfa_scenario, $capture_queue, $capture_copy_from_scenario);
+            }
+        } else {
+            // Create a new state and index it into the the global fsm array.
+            $dfa_state = new DFAState($re2c_state);
+            $arc->destination_state = $dfa_state;
+            $dfa_state->fingerprint_hash = $external_identity_hash;
+            $re2c_state->external_dfa_state_arc_index[$external_identity_hash] = $dfa_state;
+            // Populate the state with scenario locations basd on rune jump scenarios.
+            $used_existing_src_scenarios = array();
+            foreach ($rune_jump_scenarios as $dfa_offset => $rune_jump_scenario) {
+                list($src_scenario_loc, $dfa_token, $capture_queue) = $rune_jump_scenario;
+                assert($src_scenario_loc instanceof ScenarioLocation);
+                assert($dfa_token instanceof RegexRune);
+                // Now there are two possibilities:
+                // 1. The source scenario is not previously used in which case no required mapping to take place.
+                // 2. The source scenario is previously used in which case we have to clone it and register that copying is required.
+                $src_scenario = $src_scenario_loc->scenario;
+                if (isset($used_existing_src_scenarios[$src_scenario->id])) {
+                    $dfa_scenario = new Scenario($src_scenario);
+                    $capture_copy_from_scenario = $src_scenario;
+                } else {
+                    $dfa_scenario = $src_scenario;
+                    $capture_copy_from_scenario = null;
+                }
+                $used_existing_src_scenarios[$dfa_scenario->id] = true;
+                $register_capture_scenario_event_fn($dfa_scenario, $capture_queue, $capture_copy_from_scenario);
+                // Register this scenario location on new dfa state.
+                assert(!isset($dfa_state->scenario_locations[$dfa_token->offset]));
+                $dfa_state->scenario_locations[$dfa_token->offset] = new ScenarioLocation($dfa_scenario, $dfa_token);
+            }
+            // Explore the new state.
+            $redirected_dfa_arc = re2c_dfa_compute_graph($re2c_state, $dfa_state, $arc);
+            if ($redirected_dfa_arc !== null) {
+                redirected_dfa_arc:
+                // The dfa state + arc we thought was new had its internal identity colliding with an existing dfa state + arc, use the returned arc and the state it points to instead.
+                assert($redirected_dfa_arc instanceof DFAArc);
+                $source_dfa_state->arcs[$rune_id] = $redirected_dfa_arc;
+                // Reindex the external identity hash to use the returned arc directly instead.
+                $re2c_state->external_dfa_state_arc_index[$external_identity_hash] = $redirected_dfa_arc;
+                continue;
+            }
+        }
+        $source_dfa_state->arcs[$rune_id] = $arc;
+    }
+    // If there where unused runes above we need to check that the null dfa state really is used as we need it later as a default option.
+    if ($re2c_state->null_dfa_state === null) {
+        $re2c_state->null_dfa_state = new DFAState($re2c_state);
+        // Explore the STM from the null state POV.
+        re2c_dfa_compute_graph($re2c_state, $re2c_state->null_dfa_state, null);
+    }
+    return null;
+}
+
+function re2c_gen_capture_offset(Re2cState $re2c_state, Scenario $scenario, $capture_slice_name) {
+    if (isset($scenario->capture_mem[$capture_slice_name]))
+        return $scenario->capture_mem[$capture_slice_name];
+    $next_offset = $re2c_state->capture_memory;
+    $re2c_state->capture_memory++;
+    $scenario->capture_mem[$capture_slice_name] = $next_offset;
+    // Cascade allocation if this scenario merges into another scenario.
+    foreach ($scenario->copied_to_scenarios as $dfa_scenario)
+        re2c_gen_capture_offset($re2c_state, $dfa_scenario, $capture_slice_name);
+    return $next_offset;
+}
+
+function re2c_gen_code_capture(Re2cConfig $config, Re2cState $re2c_state, DFACaptureScenarioEvent $capture_scenario_event, array &$out_code, $pass, $has_scanned_forward) {
+    if ($pass < 3) {
+        if ($capture_scenario_event->copy_from_scenario !== null) {
+            $src_scenario = $capture_scenario_event->copy_from_scenario;
+            assert($src_scenario instanceof Scenario);
+            $dfa_scenario = $capture_scenario_event->scenario;
+            assert($dfa_scenario instanceof Scenario);
+            // Cascade pre-allocating memory for the capture in destination if this is not done yet so all capture sources are ready when it's time to generate code.
+            foreach ($src_scenario->capture_mem as $capture_slice_name => $offset)
+                re2c_gen_capture_offset($re2c_state, $dfa_scenario, $capture_slice_name);
+            // Wrap code generation so this is done as a last pass when all capture memory is ready.
+            $out_code[] = new StringGenerator(function() use ($re2c_state, $pass, $src_scenario, $dfa_scenario) {
+                $out_code = array();
+                foreach ($src_scenario->capture_mem as $capture_slice_name => $src_offset) {
+                    $dfa_offset = re2c_gen_capture_offset($re2c_state, $dfa_scenario, $capture_slice_name);
+                    if ($pass == 1) {
+                        // Creating a temporary variable to transfer the memory.
+                        // This is usually not needed but low hanging fruit for the optimizer in those cases.
+                        $out_code[] = "    fstr_t capture_mem_xfer_{$src_offset}_$dfa_offset = capture_mem[$src_offset];";
+                    } else {
+                        $out_code[] = "    capture_mem[$dfa_offset] = capture_mem_xfer_{$src_offset}_$dfa_offset;";
+                    }
+                }
+                return implode("\n", $out_code);
+            });
+        }
+    } else if ($pass == 3) {
+        foreach ($capture_scenario_event->op_queue as $capture_op) {
+            // Ignore non-useful events.
+            if (!isset($capture_scenario_event->scenario->is_useful))
+                continue;
+            list($start_capture, $capture_slice) = $capture_op;
+            $capture_offset = re2c_gen_capture_offset($re2c_state, $capture_scenario_event->scenario, $capture_slice->name);
+            assert($capture_slice instanceof RegexCaptureSlice);
+            $negative_correction = ($has_scanned_forward? "1": "0");
+            if ($start_capture) {
+                $out_code[] = "    capture_mem[$capture_offset].str = $config->scan_buffer_name.str - $negative_correction;";
+            } else {
+                $out_code[] = "    capture_mem[$capture_offset].len = $config->scan_buffer_name.str - capture_mem[$capture_offset].str - $negative_correction;";
+            }
+        }
+    }
+}
+
+function re2c_gen_match(Re2cConfig $config, Re2cState $re2c_state, DFAArc $arc, array &$next_dfa_states, array &$out_code, $has_scanned_forward) {
+    if (count($arc->capture_scenario_events) > 0) {
+        $out_code[] = "    {";
+        for ($pass = 1; $pass <= 3; $pass++)
+        foreach ($arc->capture_scenario_events as $capture_scenario_event)
+            re2c_gen_code_capture($config, $re2c_state, $capture_scenario_event, $out_code, $pass, $has_scanned_forward);
+        $out_code[] = "    }";
+    }
+    $dfa_state_label = $arc->destination_state->getCodegenLabel();
+    $out_code[] = "    goto $dfa_state_label;";
+    $next_dfa_states[$arc->destination_state->id] = $arc->destination_state;
+}
+
+function re2c_gen_rune_id($rune_id) {
+    assert($rune_id >= 0);
+    if ($rune_id === ord("'"))
+        return "'\\''";
+    if ($rune_id === ord("\\"))
+        return "'\\\\'";
+    return ($rune_id >= 0x20 && $rune_id < 0x7f? "'" . chr($rune_id) . "'": sprintf("0x%02x", $rune_id));
+}
+
+function re2c_gen_code(Re2cConfig $config, Re2cState $re2c_state, DFAState $dfa_state, array &$out_code) {
+    if ($dfa_state->_codegen_complete)
+        return;
+    static $debug = 0;$debug++;
+    $next_dfa_states = array();
+    $dfa_state->_codegen_complete = true;
+    $dfa_state_label = $dfa_state->getCodegenLabel();
+    $out_code[] = "$dfa_state_label:";
+    if ($dfa_state->fin_arc !== null) {
+        // Reached end - no further matching required. Return whatever match we found.
+        if ($dfa_state->fin_arc->capture_scenario_event !== null) {
+            for ($pass = 1; $pass <= 3; $pass++)
+                re2c_gen_code_capture($config, $re2c_state, $dfa_state->fin_arc->capture_scenario_event, $out_code, $pass, false);
+        }
+        $scenario =  $dfa_state->fin_arc->scenario;
+        // Copy all scenario memory to their proper locations.
+        foreach ($re2c_state->all_capture_slices as $capture_slice_name => $capture_slice) {
+            assert($capture_slice instanceof RegexCaptureSlice);
+            if (isset($scenario->capture_mem[$capture_slice_name])) {
+                $src_offset = $scenario->capture_mem[$capture_slice_name];
+                $out_code[] = "$capture_slice->name = capture_mem[$src_offset];";
+            } else {
+                $out_code[] = "$capture_slice->name = (fstr_t) {0};";
+            }
+        }
+        // Jump to point specified by fin to indicate successful regex match.
+        $regex_fin = $dfa_state->fin_arc->regex_fin;
+        $out_code[] = "goto $regex_fin->jump_name;";
+    } else {
+        // Eat another rune from the buffer unless this is a start of file state.
+        $all_arcs = $dfa_state->arcs;
+        $is_sof_state = isset($all_arcs[RegexRune::SPECIAL_RUNE_SOF]);
+        if ($is_sof_state) {
+            re2c_gen_match($config, $re2c_state, $all_arcs[RegexRune::SPECIAL_RUNE_SOF], $next_dfa_states, $out_code, false);
+        } else {
+            if ($config->refill_label_name !== null) {
+                $re2c_state->flat_dfa_state_jump_id_counter++;
+                $flat_dfa_state_jump_id = $re2c_state->flat_dfa_state_jump_id_counter;
+                $out_code[] = "if ($config->scan_buffer_name.len == 0) {";
+                $out_code[] = "    $config->refill_return_state_varname = $flat_dfa_state_jump_id;";
+                $out_code[] = "    goto $config->refill_label_name;";
+                $out_code[] = "    case $flat_dfa_state_jump_id:;";
+                $out_code[] = "}";
+            }
+            $out_code[] = "if ($config->scan_buffer_name.len == 0) {";
+            if (isset($all_arcs[RegexRune::SPECIAL_RUNE_EOF])) {
+                re2c_gen_match($config, $re2c_state, $all_arcs[RegexRune::SPECIAL_RUNE_EOF], $next_dfa_states, $out_code, false);
+            } else {
+                $out_code[] = "    break;";
+            }
+            $out_code[] = "}";
+            $out_code[] = "cur_rune = *$config->scan_buffer_name.str;";
+            $out_code[] = "$config->scan_buffer_name.str++;";
+            $out_code[] = "$config->scan_buffer_name.len--;";
+            // Merge all arcs that are the same.
+            $unique_arcs = array();
+            $grouped_arcs = array();
+            foreach ($all_arcs as $rune_id => $arc) {
+                if ($rune_id < 0)
+                    continue;
+                assert($arc instanceof DFAArc);
+                foreach ($unique_arcs as $unique_arc) {
+                    if ($arc == $unique_arc) {
+                        $grouped_arcs[spl_object_hash($unique_arc)][$rune_id] = $arc;
+                        goto ok_next_arc;
+                    }
+                }
+                $unique_arcs[] = $arc;
+                $arc_spl_hash = spl_object_hash($arc);
+                assert(!isset($grouped_arcs[$arc_spl_hash][$rune_id]));
+                $grouped_arcs[$arc_spl_hash][$rune_id] = $arc;
+                ok_next_arc:
+            }
+            if (count($grouped_arcs) >= 1) {
+                foreach ($grouped_arcs as $arcs) {
+                    // Always use range code-size optimization and leave jump table optimization for the compiler.
+                    $out_code_branches = array();
+                    $prev_rune_id = null;
+                    $largest_range = 1;
+                    $dump_out_code_branch_fn = function($from_rune_id, $to_rune_id) use (&$out_code_branches, &$largest_range) {
+                        if ($from_rune_id == $to_rune_id) {
+                            $out_code_branches[] = "cur_rune == " . re2c_gen_rune_id($from_rune_id);
+                        } else {
+                            $out_code_branches[] = "(cur_rune >= " . re2c_gen_rune_id($from_rune_id) . " && cur_rune <= " . re2c_gen_rune_id($to_rune_id) . ")";
+                            $range_size = $to_rune_id - $from_rune_id + 1;
+                            if ($range_size > $largest_range)
+                                $largest_range = $range_size;
+                        }
+                    };
+                    foreach ($arcs as $rune_id => $arc) {
+                        if ($prev_rune_id === null || $prev_rune_id != $rune_id - 1) {
+                            if ($prev_rune_id !== null)
+                                $dump_out_code_branch_fn($start_rune_id, $prev_rune_id);
+                            $start_rune_id = $rune_id;
+                        }
+                        $prev_rune_id = $rune_id;
+                    }
+                    if (count($arcs) == 1 || count($out_code_branches) < $largest_range) {
+                        // The number of arcs was few enough or largest range was large enough to motivate the use of an if statment.
+                        $dump_out_code_branch_fn($start_rune_id, $prev_rune_id);
+                        $out_code[] = "if (" . implode(" || ", $out_code_branches) . ") {";
+                        re2c_gen_match($config, $re2c_state, $arc, $next_dfa_states, $out_code, true);
+                        $out_code[] = "}";
+                    } else {
+                        // The if statment use is unsuitable due to fragmentation.
+                        $out_code[] = "switch (cur_rune) {";
+                        foreach ($arcs as $rune_id => $arc)
+                            $out_code[] = "case " . re2c_gen_rune_id($rune_id) . ": ";
+                        re2c_gen_match($config, $re2c_state, $arc, $next_dfa_states, $out_code, true);
+                        $out_code[] = "}";
+                    }
+                }
+            }
+            // Failed to match any arc - go to null state if there is one and this isn't already the null state and there are no outgoing arcs.
+            if ($re2c_state->null_dfa_state === null || (count($grouped_arcs) == 0 && $dfa_state === $re2c_state->null_dfa_state)) {
+                // No match and already at null state.
+                // We leave the scan buffer in place to indicate the position where we stopped matching.
+                /*{
+                    // Eat all remaining charachers and break.
+                    $out_code[] = "$config->scan_buffer_name.str += $config->scan_buffer_name.len;";
+                    $out_code[] = "$config->scan_buffer_name.len = 0;";
+                }*/
+                $out_code[] = "break;";
+            } else {
+                $dfa_state_label = $re2c_state->null_dfa_state->getCodegenLabel();
+                $out_code[] = "goto $dfa_state_label;";
+                $next_dfa_states[$re2c_state->null_dfa_state->id] = $re2c_state->null_dfa_state;
+            }
+        }
+    }
+    foreach ($next_dfa_states as $next_dfa_state)
+        re2c_gen_code($config, $re2c_state, $next_dfa_state, $out_code);
+}
+
+function re2c(Re2cConfig $config) {
+    // Lex regex.
+    $lex_state = new LexState();
+    $lex_state->regex = $config->regex;
+    $lex_state->offset = 0;
+    $re2c_state = new Re2cState();
+    $all_capture_slices = array();
+    $re2c_state->root_brancher = re2c_lex($lex_state, false, $all_capture_slices, true);
+    /* _visualize_asg($re2c_state->root_brancher); */
+    assert($re2c_state->root_brancher instanceof RegexBrancher);
+    $re2c_state->all_capture_slices = $all_capture_slices;
+    // Create initial state and compute graph from it.
+    $re2c_state->root_scenario_location = new ScenarioLocation(new Scenario(null), $re2c_state->root_brancher);
+    $re2c_state->root_dfa_state = new DFAState($re2c_state);
+    re2c_dfa_compute_graph($re2c_state, $re2c_state->root_dfa_state);
+    /*
+    if ($re2c_state->root_dfa_state !== $re2c_state->null_dfa_state)
+        _visualize_fsm($re2c_state->null_dfa_state, 1);
+    _visualize_fsm($re2c_state->root_dfa_state); */
+    // Convert FSM to deterministic turing machine tape instructions expressed as C.
+    $out_code = array();
+    if ($config->refill_return_state_varname === null) {
+        $out_code[] = "do {";
+    } else {
+        $out_code[] = "switch ($config->refill_return_state_varname) {";
+        $out_code[] = "case 0:;";
+    }
+    $out_code[] = "uint8_t cur_rune;";
+    $out_code[] = new StringGenerator(function() use ($re2c_state) {
+        return ($re2c_state->capture_memory > 0)? "fstr_t capture_mem[$re2c_state->capture_memory];": "";
+    });
+    re2c_gen_code($config, $re2c_state, $re2c_state->root_dfa_state, $out_code);
+    if ($config->refill_label_name === null) {
+        $out_code[] = "} while (0);";
+    } else {
+        $out_code[] = "}";
+    }
+    return $out_code;
+}
+
+function  _visualize_rune_id($rune_id) {
+    return $rune_id < 0? "$rune_id": ($rune_id > 0x20 && $rune_id < 0x7f? "'" . chr($rune_id) . "'": sprintf("\x%02x", $rune_id));
+}
+
+/** Visualizes abstract semantic graph for debugging purposes. */
+function _visualize_asg($node, $indent = 0) {
+    fwrite(STDERR, str_repeat(" |", $indent) . " " . (is_object($node)? get_class($node): gettype($node)));
+    if (isset($node->_tmp_visualize)) {
+        fwrite(STDERR, " (#$node->_tmp_visualize) *REF*\n");
+        return;
+    }
+    static $id = 0;
+    $id++;
+    $node->_tmp_visualize = $id;
+    fwrite(STDERR, " (#$id) ");
+    if ($node instanceof RegexBrancher) {
+        if ($node->capture_start !== null)
+            fwrite(STDERR, " [cap_start=" . $node->capture_start->name . "]");
+        if ($node->capture_end !== null)
+            fwrite(STDERR, " [cap_end=" . $node->capture_end->name . "]");
+        fwrite(STDERR, " [n=" . count($node->branches) . "]\n");
+        foreach ($node->branches as $sub_branch)
+            _visualize_asg($sub_branch, $indent + 1);
+    } else if ($node instanceof RegexRune) {
+        fwrite(STDERR, " [offs=$node->offset] [match=" . _visualize_rune_id($node->match) . "] [range=$node->range]\n");
+        _visualize_asg($node->next->ref, $indent + 1);
+    } else if ($node instanceof RegexRef) {
+        fwrite(STDERR, "\n");
+        _visualize_asg($node->ref, $indent + 1);
+    } else if ($node instanceof RegexFin) {
+        fwrite(STDERR, " [jump_name=$node->jump_name]\n");
+    } else {
+        fwrite(STDERR, " *UNKNOWN*\n");
+    }
+}
+
+/** Visualizes finite state machine for debugging purposes. */
+function _visualize_fsm(DFAState $state = null, $max_depth = -1) {
+    if ($state === null) {
+        fwrite(STDERR, "[NULL]\n");
+        return;
+    }
+    if (isset($state->_tmp_visualize) || $max_depth == 0)
+        return;
+    $state->_tmp_visualize = true;
+    fwrite(STDERR, "[#$state->id]");
+    foreach ($state->scenario_locations as $scenario_location) {
+        assert($scenario_location instanceof ScenarioLocation);
+        $scenario = $scenario_location->scenario;
+        $location = $scenario_location->location;
+        $indicator = $scenario !== null? (($scenario->is_useful? "u": "!") . "/$scenario->id"): "n/a";
+        if ($location instanceof RegexRune) {
+            fwrite(STDERR, " [$indicator@$location->offset]");
+        } else if ($location instanceof RegexFin) {
+            $scenario_id = $scenario !== null? $scenario->id: "n/a";
+            fwrite(STDERR, " [$indicator@$location->offset(FIN#$location->jump_name)]");
+        } else {
+            fwrite(STDERR, " *UNKNOWN*");
+        }
+    }
+    $visualized_arcs = array();
+    foreach ($state->arcs as $rune => $arc) {
+        assert($arc instanceof DFAArc);
+        $visualized_transfers = array();
+        foreach ($arc->capture_scenario_events as $capture_scenario_event) {
+            assert($capture_scenario_event instanceof DFACaptureScenarioEvent);
+            if ($capture_scenario_event->copy_from_scenario !== null) {
+                $src_scenario = $capture_scenario_event->copy_from_scenario;
+                $dfa_scenario = $capture_scenario_event->scenario;
+                $visualized_transfers[] = " (#$src_scenario->id->#$dfa_scenario->id)";
+            }
+        }
+        $dfa_state = $arc->destination_state;
+        $visualized_arcs[] = _visualize_rune_id($rune) . " => [#$dfa_state->id]" . implode("", $visualized_transfers);
+    }
+    fwrite(STDERR, ": ");
+    fwrite(STDERR, implode(", ", $visualized_arcs));
+    fwrite(STDERR, "\n");
+    foreach ($state->arcs as $rune => $arc)
+        _visualize_fsm($arc->destination_state, max($max_depth - 1, -1));
+}

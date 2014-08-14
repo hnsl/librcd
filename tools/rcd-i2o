@@ -1,0 +1,41 @@
+#!/bin/bash
+####################################################################
+#
+#  Converts a preprocessed input file (should be the clang preprocessor output
+#  streamed through rcd-pp) and uses various clang tools to process it into
+#  a valid librcd object file.
+#
+#  SYNOPSIS:
+#      ./rcd-i2o outfile.o [compiler arguments] < infile.i
+#
+#  Copyright © 2014, Jumpstarter AB. This file is part of the librcd project.
+#  This Source Code Form is subject to the terms of the Mozilla Public
+#  License, v. 2.0. If a copy of the MPL was not distributed with this
+#  file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#  See the COPYING file distributed with this project for more information.
+#
+####################################################################
+
+set -e
+set -o pipefail
+
+DISPLAY_OPTS=-fcolor-diagnostics
+if [ -n "$COLUMNS" ]; then
+    DISPLAY_OPTS="$DISPLAY_OPTS -fmessage-length=$COLUMNS"
+fi
+
+if [[ $INPUT_FORMAT == "assembler" ]]; then
+    TFILE="/tmp/$(basename $INPUT_FILE).$$.o"
+    as $INCLUDE_ARGS --fatal-warnings -g -o $TFILE $INPUT_FILE
+    rcd-o-ssw $TFILE $TFILE
+    cat $TFILE
+    unlink $TFILE
+else
+    clang -nostdlib -std=gnu11 -mno-red-zone -fno-omit-frame-pointer -Xclang $DISPLAY_OPTS -o - -emit-llvm -S -c $@ \
+    \
+    < /dev/stdin | \
+    \
+    llc --disable-fp-elim -segmented-stacks -librcd-stack-segmentation $LLC_ARGS - | \
+    \
+    clang -nostdlib -Xclang $DISPLAY_OPTS -x assembler -o - -c -
+fi

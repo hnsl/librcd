@@ -1,0 +1,290 @@
+#!/usr/bin/env pypy
+####################################################################
+#
+#  The librcd "project linker".
+#
+#  Asside from wrapping a standard object files/libraries to linked elf
+#  procedure it does some post linking where it generates tables that
+#  allows simple and fast lookup of debug information directly from
+#  memory without requiring complex libraries.
+#
+#  SYNOPSIS:
+#      ./rcd-pl in1.o in2.o lib.a -o out-elf
+#
+#  Copyright © 2014, Jumpstarter AB. This file is part of the librcd project.
+#  This Source Code Form is subject to the terms of the Mozilla Public
+#  License, v. 2.0. If a copy of the MPL was not distributed with this
+#  file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#  See the COPYING file distributed with this project for more information.
+#
+####################################################################
+
+import sys
+import os
+import shutil
+import uuid
+import subprocess
+
+'''
+# Overriding elftools.common.utils.struct_parse to one that saves the stream offset so we can seek back to that position later if we want to overwrite the struct.
+###### <override> ######
+from elftools.construct import ConstructError
+import elftools.common.utils
+
+def _custom_struct_parse(struct, stream, stream_pos=None):
+    try:
+        if stream_pos is not None:
+            stream.seek(stream_pos)
+        else:
+            stream_pos = stream.tell()
+        ent = struct.parse_stream(stream)
+        if isinstance(ent, Container):
+            ent['__tell'] = stream_pos
+        return ent
+    except ConstructError as e:
+        raise ELFParseError(e.message)
+
+elftools.common.utils.struct_parse = _custom_struct_parse
+###### </override> ######
+'''
+
+from elftools.common.py3compat import maxint, bytes2str
+from elftools.elf.elffile import ELFFile
+from elftools.construct import (
+    UBInt8, UBInt16, UBInt32, UBInt64, ULInt8, ULInt16, ULInt32, ULInt64,
+    SBInt8, SBInt16, SBInt32, SBInt64, SLInt8, SLInt16, SLInt32, SLInt64,
+    Struct, Container
+)
+from elftools.construct.lib.py3compat import BytesIO
+
+import pprint
+
+rfl_addr_index_t = Struct('rfl_addr_index_t',
+    ULInt64('addr_line_map_ptr'),
+    ULInt64('addr_line_map_n'),
+    ULInt64('addr_file_map_ptr'),
+    ULInt64('addr_file_map_n'),
+    ULInt64('addr_func_map_ptr'),
+    ULInt64('addr_func_map_n'),
+)
+
+rfl_addr_line_mapping_t = Struct('rfl_addr_line_mapping_t',
+    ULInt32('addr'),
+    ULInt32('len'),
+    ULInt32('line'),
+)
+
+rfl_addr_fstr_mapping_t = Struct('rfl_addr_file_mapping_t',
+    ULInt32('addr'),
+    ULInt32('len'),
+    ULInt16('fstr_len'),
+    ULInt64('fstr_ptr'),
+)
+
+def pprint_to_file(file, data):
+    f = open(file, 'w')
+    f.write(pprint.pformat(data))
+    f.close()
+
+def trim_addr_map(addr_map, v_key):
+    sorted_addr_map = sorted(addr_map, cmp=lambda x,y: cmp(x['addr'], y['addr']))
+    prev_ent = None
+    final_addr_map = []
+    for ent in sorted_addr_map:
+        if (ent['addr'] > 0x7fffffff):
+            raise Exception('unsupported address size [' + str(ent['addr']) + ']')
+        # Filter out entries with zero length.
+        if ent['len'] <= 0:
+            continue
+        # Modify entries based on previous entry.
+        if prev_ent:
+            if prev_ent[v_key] == ent[v_key]:
+                # Collision, merge the two entries.
+                new_end_addr = ent['addr'] + ent['len']
+                prev_ent['len'] = max(new_end_addr - prev_ent['addr'], prev_ent['len'])
+                continue
+            elif ent['addr'] < prev_end_addr:
+                # Intersection, move the address forward.
+                offset = prev_end_addr - ent['addr']
+                ent['len'] -= offset
+                if ent['len'] <= 0:
+                    continue;
+                ent['addr'] += offset
+        final_addr_map.append(ent)
+        prev_ent = ent
+        prev_end_addr = ent['addr'] + ent['len']
+    return final_addr_map
+
+def strings_blob_ref(strings_blob, str):
+    str = str.encode('utf-8')
+    if not str in strings_blob['refs']:
+        strings_blob['refs'][str] = strings_blob['addr'] + strings_blob['io'].tell()
+        strings_blob['io'].write(str)
+    return {'len': len(str), 'ptr': strings_blob['refs'][str]}
+
+def main(argv):
+    # Go through argv and look for -o for output and break it out.
+    elf_out = None
+    prev_arg = None
+    del argv[0]
+    for i in range(len(argv)):
+        if i > 0 and argv[i - 1] == '-o':
+            elf_out = argv[i]
+            del argv[i]
+            del argv[i - 1]
+            break
+    if elf_out is None:
+        raise Exception("no elf output file specified")
+    # Generate temporary elf in and out names.
+    tmp_elf_in = "/tmp/rcd-pl-elfin-" + str(uuid.uuid1())
+    tmp_elf_out = "/tmp/rcd-pl-elfout-" + str(uuid.uuid1())
+    try:
+        # Generate the temporary "elf in" file by linking (for real).
+        link_cmd = "clang -nostdlib " + " ".join(argv) + " -o " + tmp_elf_in
+        subprocess.check_output(link_cmd, shell=True)
+        if not os.path.isfile(tmp_elf_in):
+            raise Exception("linker generated no output");
+        addr_line_map = []
+        addr_file_map = []
+        addr_func_map = []
+        # Open the temporary elf files.
+        with open(tmp_elf_in, 'rb') as f_in, open(tmp_elf_out, 'w+b') as f_out:
+            # Read ELF DWARF information.
+            elffile = ELFFile(f_in)
+            if not elffile.has_dwarf_info():
+                raise Exception("no dwarf info present in elf");
+            # Find the rfl_addr_index section and get the section header offsets so we can manipulate it later.
+            rfl_addr_index_shdr = elffile.get_section_by_name('rfl_addr_index')
+            if (rfl_addr_index_shdr is None):
+                raise Exception('missing rfl_addr_index section, is this really a librcd executable?')
+            if (rfl_addr_index_shdr.header['sh_size'] != 8):
+                raise Exception('invalid size of rfl_addr_index section, is this really a librcd executable?')
+            # Go through all segments and find next free address where we can put the addr index segment.
+            addr_index_ptr_base = 0
+            for segment in elffile.iter_segments():
+                end_addr = segment.header['p_vaddr'] + segment.header['p_memsz']
+                addr_index_ptr_base = max(addr_index_ptr_base, end_addr)
+            # Page align the address.
+            addr_index_ptr_base = (addr_index_ptr_base + 0xFFF) & ~0xFFF
+            # Index address -> file/line information for compilation unit.
+            dwarfinfo = elffile.get_dwarf_info()
+            for CU in dwarfinfo.iter_CUs():
+                lineprog = dwarfinfo.line_program_for_CU(CU)
+                prevstate = None
+                for entry in lineprog.get_entries():
+                    # We're interested in those entries where a new state is assigned.
+                    if entry.state is None or entry.state.end_sequence:
+                        continue
+                    if prevstate:
+                        length = entry.state.address - prevstate.address
+                        line = prevstate.line
+                        addr_line_map.append({'addr': prevstate.address, 'len': length, 'line': line})
+                        file = lineprog['file_entry'][prevstate.file - 1].name
+                        addr_file_map.append({'addr': prevstate.address, 'len': length, 'file': file})
+                    prevstate = entry.state
+            # Index address -> function information for compilation unit.
+            for CU in dwarfinfo.iter_CUs():
+                for DIE in CU.iter_DIEs():
+                    if DIE.tag == 'DW_TAG_subprogram':
+                        try:
+                            lowpc = DIE.attributes['DW_AT_low_pc'].value
+                            highpc = DIE.attributes['DW_AT_high_pc'].value
+                            length = highpc - lowpc
+                            func = DIE.attributes['DW_AT_name'].value
+                            addr_func_map.append({'addr': lowpc, 'len': length, 'func': func})
+                        except KeyError:
+                            pass
+            # Sort, merge and cut away collisions in the respective maps.
+            addr_line_map = trim_addr_map(addr_line_map, 'line')
+            addr_file_map = trim_addr_map(addr_file_map, 'file')
+            addr_func_map = trim_addr_map(addr_func_map, 'func')
+            # Create binary fast sorted lookup table structures and link them together.
+            addr_line_map_n = len(addr_line_map)
+            addr_file_map_n = len(addr_file_map)
+            addr_func_map_n = len(addr_func_map)
+            strings_blob = {'refs': {}, 'io': BytesIO(), 'addr': addr_index_ptr_base + rfl_addr_index_t.sizeof()}
+            for ent in addr_file_map:
+                ent['file'] = strings_blob_ref(strings_blob, ent['file'])
+            for ent in addr_func_map:
+                ent['func'] = strings_blob_ref(strings_blob, ent['func'])
+            while (strings_blob['io'].tell() % 16) != 0:
+                strings_blob['io'].write('\x00')
+            addr_line_blob = BytesIO()
+            for ent in addr_line_map:
+                rfl_addr_line_mapping_t.build_stream(Container(addr = ent['addr'], len = ent['len'], line = ent['line']), addr_line_blob)
+            addr_file_blob = BytesIO()
+            for ent in addr_file_map:
+                rfl_addr_fstr_mapping_t.build_stream(Container(addr = ent['addr'], len = ent['len'], fstr_len = ent['file']['len'], fstr_ptr = ent['file']['ptr']), addr_file_blob)
+            addr_func_blob = BytesIO()
+            for ent in addr_func_map:
+                rfl_addr_fstr_mapping_t.build_stream(Container(addr = ent['addr'], len = ent['len'], fstr_len = ent['func']['len'], fstr_ptr = ent['func']['ptr']), addr_func_blob)
+            addr_line_map_ptr = strings_blob['addr'] + strings_blob['io'].tell()
+            addr_file_map_ptr = addr_line_map_ptr + addr_line_blob.tell()
+            addr_func_map_ptr = addr_file_map_ptr + addr_file_blob.tell()
+            addr_index_blob = BytesIO()
+            rfl_addr_index_t.build_stream(Container(
+                addr_line_map_ptr = addr_line_map_ptr,
+                addr_line_map_n = len(addr_line_map),
+                addr_file_map_ptr = addr_file_map_ptr,
+                addr_file_map_n = len(addr_file_map),
+                addr_func_map_ptr = addr_func_map_ptr,
+                addr_func_map_n = len(addr_func_map),
+            ), addr_index_blob)
+            assert(rfl_addr_index_t.sizeof() == addr_index_blob.tell())
+            # Build the new ELF.
+            f_in.seek(0)
+            shutil.copyfileobj(f_in, f_out)
+            f_out.seek(0, os.SEEK_END)
+            ua_addr_index_offs_base = f_out.tell()
+            addr_index_offs_base = (ua_addr_index_offs_base + 0xfff) & ~0xfff
+            f_out.truncate(addr_index_offs_base)
+            f_out.seek(0, os.SEEK_END)
+            addr_index_blob.seek(0)
+            f_out.write(addr_index_blob.read())
+            strings_blob['io'].seek(0)
+            f_out.write(strings_blob['io'].read())
+            addr_line_blob.seek(0)
+            f_out.write(addr_line_blob.read())
+            addr_file_blob.seek(0)
+            f_out.write(addr_file_blob.read())
+            addr_func_blob.seek(0)
+            f_out.write(addr_func_blob.read())
+            addr_index_total_size = f_out.tell() - addr_index_offs_base
+            # Building a new list of program headers so we can inject the memory mapping.
+            new_e_phoff = f_out.tell()
+            for segment in elffile.iter_segments():
+                elffile.structs.Elf_Phdr.build_stream(segment.header, f_out)
+            elffile.structs.Elf_Phdr.build_stream(Container(
+                p_type = 'PT_LOAD',
+                p_flags = 4, # read-only, no execute
+                p_offset = addr_index_offs_base,
+                p_vaddr = addr_index_ptr_base,
+                p_paddr = addr_index_ptr_base,
+                p_filesz = addr_index_total_size,
+                p_memsz = addr_index_total_size,
+                p_align = 0x1000,
+            ), f_out)
+            f_out.seek(0)
+            elffile.header['e_phoff'] = new_e_phoff
+            elffile.header['e_phnum'] += 1
+            elffile.structs.Elf_Ehdr.build_stream(elffile.header, f_out)
+            # Write pointer to the rfl_addr_index_t.
+            f_out.seek(rfl_addr_index_shdr.header['sh_offset'])
+            ULInt64('rfl_addr_index').build_stream(addr_index_ptr_base, f_out)
+            # Output the final executable.
+            with open(elf_out, 'w+b') as f_out_fin:
+                f_out.seek(0)
+                shutil.copyfileobj(f_out, f_out_fin)
+                os.chmod(elf_out, 0755)
+    finally:
+        try:
+            os.remove(tmp_elf_in)
+        except OSError:
+            pass
+        try:
+            os.remove(tmp_elf_out)
+        except OSError:
+            pass
+    exit(0)
+
+main(sys.argv)
