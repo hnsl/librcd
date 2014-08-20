@@ -6,7 +6,8 @@ The librcd project contains two classes of files with source code:
 
  * Files that is originally part of the librcd project. These files are
    Copyright © 2014, Jumpstarter AB. They can be copied, distributed and used
-   under the terms of the MPLv2 license which is found in the "LICENSE" file.
+   under the terms of the Mozilla Public License v. 2.0 which is found
+   attached in this file as "Licence [1]".
 
  * Files that origin from other sources and have 3rd party authors and
    licenses. The original source code may have been modified in which case they
