@@ -24,7 +24,7 @@ _start:
 
         // allocate physical thread
         sub lwt_physical_thread_size, %rsp
-	and $-16, %rsp
+        and $-16, %rsp
 
         // initialize phys_thread identity (&phys_thread->identity @ 0x0)
         mov %rsp, %rsi
@@ -74,7 +74,7 @@ SEG_STACK_FN_PRLG _start_new_thread, 0x80
         push %rcx
 
         // align child stack pointer so it's a multiple of 16
-	and $-16, %rsi
+        and $-16, %rsi
 
         // read io_phys_thread to determine if allocation is required
         mov (%r8), %rdi
@@ -83,7 +83,7 @@ SEG_STACK_FN_PRLG _start_new_thread, 0x80
 
         // allocate physical thread on child stack
         sub lwt_physical_thread_size, %rsi
-	and $-16, %rsi
+        and $-16, %rsi
 
         // return pointer to it to io_phys_thread, freeing %r8
         mov %rsi, (%r8)
@@ -144,27 +144,27 @@ SEG_STACK_FN_PRLG _start_new_thread, 0x80
         r8: thread pointer */
 
         // saving callback function (func arg) in %r9 for the child process
-  	mov %rdi, %r9
+        mov %rdi, %r9
 
         // storing flags in arg 1 (%rdi)
-	mov %rdx, %rdi
+        mov %rdx, %rdi
         // align the stack entry point and store in arg 2 (%rsi)
         mov %rax, %rsi
-	and $-16, %rsi
+        and $-16, %rsi
         // storing ptid in arg 3 (%rdx) (&phys_thread->linux_tid @ 0xd8)
-	lea 0xd8(%rax), %rdx
+        lea 0xd8(%rax), %rdx
         // storing ctid in arg 4 (%r10) (&phys_thread->linux_tid @ 0xd8)
-	mov %rdx, %r10
+        mov %rdx, %r10
         // storing tls in arg 5 (%r8) (&phys_thread)
-	mov %rax, %r8
+        mov %rax, %r8
 
         // call clone()
-	mov $56,  %eax
-	syscall
+        mov $56,  %eax
+        syscall
 
         // if clone() return 0 we're executing in the new thread or else we return the syscall return code
         test %eax, %eax
-	jz 3f
+        jz 3f
 
         // return from _start_new_thread with normal function epilogue
         pop %rbp
@@ -172,17 +172,17 @@ SEG_STACK_FN_PRLG _start_new_thread, 0x80
 
         // we're executing in the new thread
         // we initialize %rbp to 0 to indicate that this is the lowest frame (as also specified by the ABI)
-3: 	xor %ebp, %ebp
+3:      xor %ebp, %ebp
         // fetch the argument pointer from (&phys_thread->stack_pinj_jmp_buf @ 0x10)
         mov %fs:0x10, %rdi
         // align stack pointer so it's a multiple of 16
         andq $-16, %rsp
 
         // call the main function with the arg_ptr as its first argument
-	call *%r9
+        call *%r9
 
         // call exit() to terminate the thread
-	mov %eax, %edi
-	mov $60, %eax
-	syscall
-	hlt
+        mov %eax, %edi
+        mov $60, %eax
+        syscall
+        hlt
