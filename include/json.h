@@ -133,38 +133,38 @@ inline json_value_t json_new_object_in(json_value_t parent, fstr_t key) {
     return obj;
 }
 
-/// Returns a number from a JSON value, throwing exception_arg if the type is wrong.
+/// Returns a number from a JSON value, throwing exception_io if the type is wrong.
 inline double json_get_number(json_value_t value) {
     if (value.type != JSON_NUMBER)
-        throw(fstr("expected number in JSON"), exception_arg);
+        throw(fstr("expected number in JSON"), exception_io);
     return value.number_value;
 }
 
-/// Returns a string from a JSON value, throwing exception_arg if the type is wrong.
+/// Returns a string from a JSON value, throwing exception_io if the type is wrong.
 inline fstr_t json_get_string(json_value_t value) {
     if (value.type != JSON_STRING)
-        throw(fstr("expected string in JSON"), exception_arg);
+        throw(fstr("expected string in JSON"), exception_io);
     return value.string_value;
 }
 
-/// Returns a boolean from a JSON value, throwing exception_arg if the type is wrong.
+/// Returns a boolean from a JSON value, throwing exception_io if the type is wrong.
 inline bool json_get_bool(json_value_t value) {
     if (value.type != JSON_BOOL)
-        throw(fstr("expected boolean in JSON"), exception_arg);
+        throw(fstr("expected boolean in JSON"), exception_io);
     return value.bool_value;
 }
 
-/// Returns an list (array) from a JSON value, throwing exception_arg if the type is wrong.
+/// Returns an list (array) from a JSON value, throwing exception_io if the type is wrong.
 inline list(json_value_t)* json_get_array(json_value_t value) {
     if (value.type != JSON_ARRAY)
-        throw(fstr("expected array in JSON"), exception_arg);
+        throw(fstr("expected array in JSON"), exception_io);
     return value.array_value;
 }
 
-/// Returns a dict (object) from a JSON value, throwing exception_arg if the type is wrong.
+/// Returns a dict (object) from a JSON value, throwing exception_io if the type is wrong.
 inline dict(json_value_t)* json_get_object(json_value_t value) {
     if (value.type != JSON_OBJECT)
-        throw(fstr("expected object in JSON"), exception_arg);
+        throw(fstr("expected object in JSON"), exception_io);
     return value.object_value;
 }
 
