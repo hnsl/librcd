@@ -5,7 +5,7 @@ Librcd is a new C standard library and POSIX replacement for x86_64 Linux. It co
 
 ```c
 #include "rcd.h"
-#pragma rcd
+#pragma librcd
 
 join_locked(int) switcheroo(int next, join_server_params, int* current) {
   int prev = *current;
@@ -14,9 +14,9 @@ join_locked(int) switcheroo(int next, join_server_params, int* current) {
   return prev;
 }
 
-fiber_main void worker(fiber_main_attr, int value, rcd_fid_t fid) {
+fiber_main worker(fiber_main_attr, int value, rcd_fid_t fid) {
   for (;;) {
-    rio_wait(prng_rand() % RIO_SEC_NS);
+    rio_wait(prng_rand() % RIO_NS_SEC);
     value = switcheroo(value, fid);
   }
 }
@@ -28,7 +28,7 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env) {
     }
   }
   int free_value = 0;
-  auto_accept_join(&switcheroo, join_server_params, &free_value);
+  auto_accept_join(switcheroo, join_server_params, &free_value);
 }
 ```
 XXX replace with something smaller and more interesting. Maybe strings + memory allocation + exceptions?
