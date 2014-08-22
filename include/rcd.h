@@ -191,6 +191,11 @@
 /// Repeats a macro once for each argument passed in.
 #define FOR_EACH_ARG(F, ...) GLUE(_FOR_EACH_ARG_, VA_NARGS(__VA_ARGS__))(F, __VA_ARGS__)
 
+/// Declare variable(s) within an inner scope. The empty condition proves to clang that the
+/// loop will be run at least once, avoiding warnings about missing returns after the block
+/// when there are unconditional returns within it.
+#define LET(...) for(__VA_ARGS__; ; ({break;}))
+
 __attribute__((const, always_inline))
 static inline float __get_nan_float() {
     return __builtin_nanf("");
