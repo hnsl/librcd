@@ -17,10 +17,21 @@
 #define json_array_v(x) json_array_value(x)
 #define json_object_v(x) json_object_value(x)
 
+/// Enter a scope with 'this' assigned to a particular JSON object value. This can be
+/// be helpful in making creation of JSON structures feel more natural.
 #define json_for_obj(obj) \
     for (uint8_t __i = 0; __i == 0;) \
     for (json_value_t this = (obj); (__i++) == 0;)
 
+/// Create a new object as a property of 'this', and enter a scope with it set as 'this'.
+/// Example usage:
+///
+/// json_value_t val = json_new_object();
+/// json_for_obj(val) {
+///     json_for_new_obj("property") {
+///         JSON_SET(this, "leaf", json_string_value("value"));
+///     }
+/// }
 #define json_for_new_obj(key) \
     for (uint8_t __i = 0; __i == 0;) \
     for (json_value_t new_obj = json_new_object_in(this, (key)); __i == 0;) \
@@ -103,7 +114,7 @@ typedef struct json_tree {
     lwt_heap_t* heap;
 } json_tree_t;
 
-/// Parse a string into a json_tree_t. Throws exception_arg on failure.
+/// Parse a string into a json_tree_t. Throws exception_io on failure.
 json_tree_t* json_parse(fstr_t str);
 
 /// Stringify a JSON tree structure.
@@ -115,6 +126,7 @@ inline json_value_t json_new_object() {
     return json_object_value(new_dict(json_value_t));
 }
 
+/// Create a new object and assign it as a property of another object.
 inline json_value_t json_new_object_in(json_value_t parent, fstr_t key) {
     json_value_t obj = json_new_object();
     JSON_SET(parent, key, obj);
