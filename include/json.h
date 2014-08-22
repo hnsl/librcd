@@ -3,19 +3,12 @@
 
 #include "rcd.h"
 
-#define json_null_value ((json_value_t){.type = JSON_NULL})
-#define json_bool_value(x)   ((json_value_t){.type = JSON_BOOL,   .bool_value   = x})
-#define json_number_value(x) ((json_value_t){.type = JSON_NUMBER, .number_value = x})
-#define json_string_value(x) ((json_value_t){.type = JSON_STRING, .string_value = x})
-#define json_array_value(x)  ((json_value_t){.type = JSON_ARRAY,  .array_value  = x})
-#define json_object_value(x) ((json_value_t){.type = JSON_OBJECT, .object_value = x})
-
-#define json_null_v json_null_value
-#define json_bool_v(x) json_bool_value(x)
-#define json_number_v(x) json_number_value(x)
-#define json_string_v(x) json_string_value(x)
-#define json_array_v(x) json_array_value(x)
-#define json_object_v(x) json_object_value(x)
+#define json_null_v ((json_value_t){.type = JSON_NULL})
+#define json_bool_v(x)   ((json_value_t){.type = JSON_BOOL,   .bool_value   = x})
+#define json_number_v(x) ((json_value_t){.type = JSON_NUMBER, .number_value = x})
+#define json_string_v(x) ((json_value_t){.type = JSON_STRING, .string_value = x})
+#define json_array_v(x)  ((json_value_t){.type = JSON_ARRAY,  .array_value  = x})
+#define json_object_v(x) ((json_value_t){.type = JSON_OBJECT, .object_value = x})
 
 /// Enter a scope with 'this' assigned to a particular JSON object value. This can be
 /// be helpful in making creation of JSON structures feel more natural.
@@ -29,7 +22,7 @@
 /// json_value_t val = json_new_object();
 /// json_for_obj(val) {
 ///     json_for_new_obj("property") {
-///         JSON_SET(this, "leaf", json_string_value("value"));
+///         JSON_SET(this, "leaf", json_string_v("value"));
 ///     }
 /// }
 #define json_for_new_obj(key) \
@@ -51,7 +44,7 @@
     for (int64_t __i = 0; __i < LENGTHOF(__path); __i++) { \
         json_value_t* __next_value = (__value.type == JSON_OBJECT? \
             dict_read(__value.object_value, json_value_t, __path[__i]): 0); \
-        __value = (__next_value == 0? json_null_value: *__next_value); \
+        __value = (__next_value == 0? json_null_v: *__next_value); \
     } \
     __value; \
 })
@@ -64,7 +57,7 @@
     for (int64_t __i = 0; __i < LENGTHOF(__path); __i++) { \
         json_value_t* __next_value = (__value.type == JSON_OBJECT? \
             dict_read(__value.object_value, json_value_t, __path[__i]): 0); \
-        __value = (__next_value == 0? json_null_value: *__next_value); \
+        __value = (__next_value == 0? json_null_v: *__next_value); \
         if (json_is_null(__value)) \
             json_fail_missing_property(__path[__i]); \
     } \
@@ -74,7 +67,7 @@
 /// Set a property of a JSON object to some value. Example usage:
 ///
 /// json_value_t obj = json_new_object();
-/// JSON_SET(obj, "property", json_string_value("value"));
+/// JSON_SET(obj, "property", json_string_v("value"));
 #define JSON_SET(parent, prop, value) ({ \
     assert(parent.type == JSON_OBJECT); \
     dict_replace(parent.object_value, json_value_t, prop, value); \
@@ -123,7 +116,7 @@ fstr_mem_t* json_stringify(json_value_t value);
 void json_fail_missing_property(fstr_t prop_name);
 
 inline json_value_t json_new_object() {
-    return json_object_value(new_dict(json_value_t));
+    return json_object_v(new_dict(json_value_t));
 }
 
 /// Create a new object and assign it as a property of another object.
