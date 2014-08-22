@@ -39,6 +39,15 @@ end
 # Break on assert failure.
 break __assert_fail
 
+# For disabling parallelism:
+## break __lwthreads_main
+## commands
+## silent
+## call lwt_debug_choke_fibers(1)
+## printf "NOTICE: Choking all but a single thread to not confuse gdb. To enable multi threaded execution, enter: call lwt_debug_choke_fibers(0)\n"
+## cont
+## end
+
 ###### ADDITIONAL DEBUG COMMANDS START ######
 
 
