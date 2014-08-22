@@ -498,22 +498,19 @@ typedef struct __rcd_try_prop {
 } __rcd_try_prop_t;
 
 /// rcd-macro: Runs a try block and catches the exceptions specified in
-/// the rcd_catch block after the try statement.
+/// the catch block after the try statement.
 #define try \
-    for (uint8_t __rcd_try_i = 0, __rcd_try_i_last = 0; __rcd_try_i == 0;) \
-    for (rcd_exception_type_t __rcd_etype_catch = 0, __rcd_etype_final = 0; __rcd_try_i == 0;) \
-    for (jmp_buf __rcd_finally_jbuf; __rcd_try_i == 0;) \
-    for (__rcd_try_prop_t __rcd_try_prop; (__rcd_try_i == 0? ({ \
-        __rcd_try_prop.caught_exception = 0; \
-        __rcd_try_prop.has_finally = false; \
+    LET(__rcd_try_prop_t __rcd_try_prop = {.caught_exception = 0, .has_finally = false}) \
+    LET(rcd_exception_type_t __rcd_etype_catch = 0, __rcd_etype_final = 0) \
+    for (uint8_t __rcd_try_i = 0; __rcd_try_i <= 6; __rcd_try_i++) \
+    if (__rcd_try_i == 2) { \
         if (setjmp(__rcd_try_prop.try_jbuf) != 0) { \
             __rcd_try_i = 4; \
         } \
-    }): 0), __rcd_try_i <= 6; (__rcd_try_i == __rcd_try_i_last? __rcd_try_i++: 0), __rcd_try_i_last = __rcd_try_i) \
-    if (__rcd_try_i == 2) \
+    } else if (__rcd_try_i == 3) { \
         __lwt_fiber_stack_push_try_catch(&__rcd_try_prop.try_jbuf, __rcd_etype_final, &__rcd_try_prop.caught_exception); \
-    else if (__rcd_try_i == 3) \
-        for (__rcd_try_prop_t* __rcd_try_scope __attribute__((cleanup(__rcd_escape_try))) = &__rcd_try_prop; (__rcd_try_i == 3)? (__rcd_try_i++, true): (__rcd_try_scope = 0, false);)
+    } else if (__rcd_try_i == 4) \
+        for (__rcd_try_prop_t* __rcd_try_scope __attribute__((cleanup(__rcd_escape_try))) = &__rcd_try_prop; ; ({__rcd_try_scope = 0; break;}))
 
 /// rcd-macro: Specifies a finally block. Must follow a try or catch block.
 #define finally \
@@ -521,27 +518,22 @@ typedef struct __rcd_try_prop {
         __rcd_try_prop.has_finally = true; \
         __rcd_etype_final |= exception_any; \
     } else if (__rcd_try_i == 5) \
-        for (; (__rcd_try_i == 5)? true: ({ \
-            if (__rcd_try_prop.caught_exception == 0) { \
-                /* return from the try blocks */ \
-                __rcd_try_i = 7; \
-            } else { \
-                /* do not pass the exception to the catch if the catch block does not accept it */ \
-                if ((__rcd_try_prop.caught_exception->type & __rcd_etype_catch) == 0) \
-                    lwt_throw_exception(__rcd_try_prop.caught_exception); \
+        for (;; ({ \
+            /* rethrow exceptions without matching catch block */ \
+            if (__rcd_try_prop.caught_exception != 0 && (__rcd_try_prop.caught_exception->type & __rcd_etype_catch) == 0) { \
+                lwt_throw_exception(__rcd_try_prop.caught_exception); \
             } \
-            false; \
-        });) \
-        for (; (__rcd_try_i == 5)? (__rcd_try_i++, true): false;)
+            break; \
+        })) \
+            LET() /* allow break within finally */
 
 /// rcd-macro: Specifies a catch block. Must follow a try or finally block.
 #define catch(catch_exception_mask, exception_name) \
-    else if (__rcd_try_i == 1) \
+    else if (__rcd_try_i == 1) { \
         __rcd_etype_final |= catch_exception_mask; \
-    else if (__rcd_try_i == 4) \
         __rcd_etype_catch = catch_exception_mask; \
-    else if (__rcd_try_i == 6) \
-        for (rcd_exception_t* exception_name = __rcd_try_prop.caught_exception; (__rcd_try_i++) == 6 && exception_name != 0;)
+    } else if (__rcd_try_i == 6) \
+        for (rcd_exception_t* exception_name = __rcd_try_prop.caught_exception; exception_name != 0; ({break;}))
 
 /// rcd-macro: Specifies an uninterruptible block. In this block join races
 /// and cancellations are suppressed and never thrown.
