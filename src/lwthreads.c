@@ -146,7 +146,7 @@ typedef struct lwt_edata_try_catch {
     /// The top stack allocation at the jbuf context for restoring the stack allocation state.
     struct lwt_stack_alloc* stack_alloc_top;
     rcd_exception_type_t exceptions_to_catch;
-    rcd_exception_t** exception_caught_out;
+    rcd_exception_t* volatile* exception_caught_out;
 } lwt_edata_try_catch_t;
 
 typedef struct lwt_edata_unintr {
@@ -2541,7 +2541,7 @@ void __lwt_fiber_stack_pop_flip_server_heap(void* arg_ptr) {
    FLIP(fiber->current_heap, edata_ifc_call_join->ifc_client->ifc_server->heap);
 }
 
-void __lwt_fiber_stack_push_try_catch(jmp_buf* jbuf, rcd_exception_type_t exceptions_to_catch, rcd_exception_t** exception_caught_out) {
+void __lwt_fiber_stack_push_try_catch(jmp_buf* jbuf, rcd_exception_type_t exceptions_to_catch, rcd_exception_t* volatile* exception_caught_out) {
     LWT_GET_LOCAL_FIBER(fiber);
     lwt_fiber_event_data_t edata;
     edata.try_catch = lwt_edata_try_catch_allocate();

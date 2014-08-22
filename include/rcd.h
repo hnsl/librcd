@@ -493,7 +493,7 @@ extern int rcd_pp_marker__fiber_main_declare;
 /// Internal librcd structure that contains try block properties.
 typedef struct __rcd_try_prop {
     jmp_buf try_jbuf;
-    rcd_exception_t* caught_exception;
+    rcd_exception_t* volatile caught_exception;
     bool has_finally;
 } __rcd_try_prop_t;
 

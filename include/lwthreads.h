@@ -140,7 +140,7 @@ void* __lwt_fiber_stack_push_ifc_call_join(void* ifc_fn_ptr, rcd_fid_t fiber_id,
 void __lwt_fiber_stack_pop_ifc_call_join();
 void __lwt_fiber_stack_push_flip_server_heap();
 void __lwt_fiber_stack_pop_flip_server_heap(void* arg_ptr);
-void __lwt_fiber_stack_push_try_catch(jmp_buf* jbuf, rcd_exception_type_t exceptions_to_catch, rcd_exception_t** exception_caught_out);
+void __lwt_fiber_stack_push_try_catch(jmp_buf* jbuf, rcd_exception_type_t exceptions_to_catch, rcd_exception_t* volatile* exception_caught_out);
 void __rcd_escape_try(__rcd_try_prop_t** prop_ptr);
 void __lwt_fiber_stack_push_uninterruptible();
 void __lwt_fiber_stack_pop_uninterruptible(void* arg_ptr);
