@@ -166,7 +166,7 @@ uint32_t rio_unserial_addr4(fstr_t ipv4_addr_serial) {
     fstr_t c_4oct[4];
     {
         fstr_t match_s = ipv4_addr_serial;
-#pragma ocre2c(match_s): ^ (\d{1,3}){c_4oct[0]} \. (\d{1,3}){c_4oct[1]} \. (\d{1,3}){c_4oct[2]} \. (\d{1,3}){c_4oct[3]} $ {@match}
+#pragma re2c(match_s): ^ (\d{1,3}){c_4oct[0]} \. (\d{1,3}){c_4oct[1]} \. (\d{1,3}){c_4oct[2]} \. (\d{1,3}){c_4oct[3]} $ {@match}
         rio_unserial4_failed(ipv4_addr_serial);
     } match:; {
         return rio_unserial_octs4(c_4oct, ipv4_addr_serial);
@@ -182,7 +182,7 @@ rio_in_addr4_t rio_unserial_in_addr4(fstr_t in_addr4_serial) {
     fstr_t c_port;
     {
         fstr_t match_s = in_addr4_serial;
-#pragma ocre2c(match_s): ^ (\d{1,3}){c_4oct[0]} \. (\d{1,3}){c_4oct[1]} \. (\d{1,3}){c_4oct[2]} \. (\d{1,3}){c_4oct[3]} \: (\d{1,5}){c_port} $ {@match}
+#pragma re2c(match_s): ^ (\d{1,3}){c_4oct[0]} \. (\d{1,3}){c_4oct[1]} \. (\d{1,3}){c_4oct[2]} \. (\d{1,3}){c_4oct[3]} \: (\d{1,5}){c_port} $ {@match}
         rio_unserial4_failed(in_addr4_serial);
     } match:; {
         uint128_t port;
@@ -2189,12 +2189,12 @@ list(uint32_t)* rio_resolve_host_ipv4_addr(fstr_t host_name) {
             if (!etc_host_ok)
                 break;
             fstr_t host_addr_c, host_names_c;
-#pragma ocre2c(etc_host_content): ^ [\s]* ([\d\.]+){host_addr_c} ([\s]+ (([^\s]+))+){host_names_c} [\s]* \n {@matched_host_line}
+#pragma re2c(etc_host_content): ^ [\s]* ([\d\.]+){host_addr_c} ([\s]+ (([^\s]+))+){host_names_c} [\s]* \n {@matched_host_line}
             break;
             matched_host_line:;
             for (;;) {
                 fstr_t host_name_c;
-#pragma ocre2c(host_names_c): ^ [\s]* ([^\s]+){host_name_c} (\s|$) {@matched_host_name}
+#pragma re2c(host_names_c): ^ [\s]* ([^\s]+){host_name_c} (\s|$) {@matched_host_name}
                 break;
                 matched_host_name:;
                 if (fstr_equal(host_name_c, host_name)) {

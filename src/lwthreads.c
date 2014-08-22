@@ -1662,7 +1662,7 @@ uint32_t lwt_system_cpu_count() {
     sub_heap {
         fstr_t content = rio_read_virtual_file_contents(cpuinfo_path, fss(fstr_alloc(100 * PAGE_SIZE)));
         for (fstr_t scan_offs = content; scan_offs.len > 0;) {
-#pragma ocre2c(scan_offs): (^|\n)processor\s*:\s+(\d+)\s*(\n|$) {@found_cpu}
+#pragma re2c(scan_offs): (^|\n)processor\s*:\s+(\d+)\s*(\n|$) {@found_cpu}
             break;
             found_cpu:
             core_count++;

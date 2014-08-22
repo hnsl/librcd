@@ -42,7 +42,7 @@ static inline void skip_ws(parser_t* parser) {
 }
 
 static void validate_number(fstr_t str) {
-#pragma ocre2c(str): ^ -? (0|[1-9][0-9]*) (\.[0-9]+)? ([eE][-\+]?[0-9]+)? $ {@match}
+#pragma re2c(str): ^ -? (0|[1-9][0-9]*) (\.[0-9]+)? ([eE][-\+]?[0-9]+)? $ {@match}
     fail();
 match:;
 }

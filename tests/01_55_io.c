@@ -64,7 +64,7 @@ fiber_main io_test_peek_lookahead(fiber_main_attr, int listen_port) {
             }
             consumed_chunk = chunk;
             list_push_end(chunk_log, fstr_t, fss(fstr_cpy(chunk)));
-#pragma ocre2c(chunk, refill_buffer_lbl, refill_return_state): \s*velit[ ]velit {@found_match}
+#pragma re2c(chunk, refill_buffer_lbl, refill_return_state): \s*velit[ ]velit {@found_match}
             // No match.
             atest(false);
 found_match:
