@@ -424,7 +424,7 @@ extern int rcd_pp_marker__fiber_main_declare;
 
 /// rcd-macro: Creates a sub heap and uses it in the following block.
 #define sub_heap \
-    for (uint8_t __rcd_sh_i __attribute__((cleanup(__lwt_fiber_stack_pop_sub_heap))) = (__lwt_fiber_stack_push_sub_heap(), 0); (__rcd_sh_i++) == 0;)
+    LET(uint8_t __rcd_sh_cl __attribute__((cleanup(__lwt_fiber_stack_pop_sub_heap))) = (__lwt_fiber_stack_push_sub_heap(), 0))
 
 /// rcd-macro: Let an allocation escape the sub heap, importing it into the parent heap so it survives.
 #define escape(alloc0) ({ \
@@ -466,13 +466,12 @@ extern int rcd_pp_marker__fiber_main_declare;
 /// is exited orderly. The alternative heap is merged with the current sub
 /// heap as it is thrown away.
 #define sub_heap_txn(__rcd_txn_aheap_name) \
-    for (uint8_t __rcd_sh_txn_i = 0; __rcd_sh_txn_i == 0;) \
     sub_heap \
-    for (lwt_heap_t* __rcd_txn_aheap_name __attribute__((cleanup(__rcd_escape_sh_txn))) = lwt_alloc_heap(); (__rcd_sh_txn_i++) == 0;)
+    LET(lwt_heap_t* __rcd_txn_aheap_name __attribute__((cleanup(__rcd_escape_sh_txn))) = lwt_alloc_heap())
 
 /// rcd-macro: Switches to an alternative heap and uses it in the following block.
 #define switch_heap(__rcd_aheap_name) \
-    for (uint8_t _rcd_switch_heap_i __attribute__((cleanup(__lwt_fiber_stack_pop_switch_heap))) = (__lwt_fiber_stack_push_switch_heap(__rcd_aheap_name), 0); (_rcd_switch_heap_i++) == 0;) \
+    LET(uint8_t _rcd_switch_heap_cl __attribute__((cleanup(__lwt_fiber_stack_pop_switch_heap))) = (__lwt_fiber_stack_push_switch_heap(__rcd_aheap_name), 0))
 
 /// rcd-macro: Equiviallent to sub_heap_txn(heap_name) switch_heap(heap_name)
 #define switch_txn(__rcd_txn_aheap_name) sub_heap_txn(__rcd_txn_aheap_name) switch_heap(__rcd_txn_aheap_name)
@@ -485,9 +484,8 @@ extern int rcd_pp_marker__fiber_main_declare;
 /// to expose even a thread static heap as the fiber could jump between threads
 /// as it is scheduled.
 #define global_heap \
-    for (uint8_t __rcd_gh_txn_i = 0; __rcd_gh_txn_i == 0;) \
     sub_heap \
-    for (lwt_heap_t* __rcd_global_heap_tail __attribute__((cleanup(__rcd_escape_gh_txn))) = lwt_alloc_heap(); (__rcd_gh_txn_i++) == 0;) \
+    LET(lwt_heap_t* __rcd_global_heap_tail __attribute__((cleanup(__rcd_escape_gh_txn))) = lwt_alloc_heap()) \
     switch_heap(__rcd_global_heap_tail)
 
 /// Internal librcd structure that contains try block properties.
@@ -541,7 +539,7 @@ typedef struct __rcd_try_prop {
 /// Can be used for critical I/O and side effects garbage collection where
 /// full execution is critical before the program can continue.
 #define uninterruptible \
-    for (uint8_t __rcd_ui_i __attribute__((cleanup(__lwt_fiber_stack_pop_uninterruptible))) = (__lwt_fiber_stack_push_uninterruptible(), 0); (__rcd_ui_i++) == 0;)
+    LET(uint8_t __rcd_ui_cl __attribute__((cleanup(__lwt_fiber_stack_pop_uninterruptible))) = (__lwt_fiber_stack_push_uninterruptible(), 0))
 
 /// rcd-macro: Throws a new exception.
 #define throw(message, exception_type) \
@@ -558,9 +556,8 @@ typedef struct __rcd_try_prop {
 /// If the block is exited without spawning a fiber the fiber becomes a zombie
 /// and will terminate asynchronously.
 #define fmitosis \
-    for (uint8_t _rcd_fm_i = 0; _rcd_fm_i == 0;) \
-    for (rcd_fid_t new_fid = __lwt_fiber_stack_push_mitosis(); _rcd_fm_i == 0;) \
-    for (uint8_t _rcd_mitosis_used __attribute__((cleanup(__lwt_fiber_stack_pop_mitosis_and_abort))) = 0; (_rcd_fm_i++) == 0;)
+    LET(rcd_fid_t new_fid = __lwt_fiber_stack_push_mitosis()) \
+    LET(uint8_t _rcd_mitosis_used __attribute__((cleanup(__lwt_fiber_stack_pop_mitosis_and_abort))) = 0)
 
 /// rcd-line-pp-marker: Starts a new static fiber. A call to the main function
 /// of the new fiber defined with rcd_fiber should immediately follow on the
@@ -649,7 +646,7 @@ extern int rcd_pp_marker__join_shared_declare;
 /// rcd-macro: Switches to the server heap context when executing in a join
 /// or back to the client heap if nested.
 #define server_heap_flip \
-    for (uint8_t _rcd_shf_i = (__lwt_fiber_stack_push_flip_server_heap(), 0), _rcd_mitosis_used __attribute__((cleanup(__lwt_fiber_stack_pop_flip_server_heap))) = 0; (_rcd_shf_i++) == 0;)
+    LET(uint8_t _rcd_shf_cl __attribute__((cleanup(__lwt_fiber_stack_pop_flip_server_heap))) = (__lwt_fiber_stack_push_flip_server_heap(), 0))
 
 // *** Libraries with headers that declare implementation (.c file) specific types and functions. ***
 
