@@ -5,7 +5,7 @@
 /* See the COPYING file distributed with this project for more information. */
 
 #ifndef RCD_H
-#define	RCD_H
+#define RCD_H
 
 // Hard coded feature macro that librcd uses to enable all other feature macros.
 // Feature macros is not used but librcd itself but used and defined by musl.h,
@@ -195,6 +195,15 @@
 /// loop will be run at least once, avoiding warnings about missing returns after the block
 /// when there are unconditional returns within it.
 #define LET(...) for(__VA_ARGS__; ; ({break;}))
+
+/// Hack for making clang not think a branch exists for the purpose of generating warnings.
+#define _CLANG_HIDE_CONTROL_FLOW(stmts) { \
+    enum __rcd_single_enum { __rcd_single_enum_value = 1 }; \
+    switch((enum __rcd_single_enum)0) { \
+        default: stmts; \
+        case __rcd_single_enum_value: break; \
+    } \
+}
 
 __attribute__((const, always_inline))
 static inline float __get_nan_float() {
@@ -497,10 +506,10 @@ typedef struct __rcd_try_prop {
 
 /// rcd-macro: Runs a try block and catches the exceptions specified in
 /// the catch block after the try statement.
-#define try \
+#define try _try_labeled(GLUE(__rcd_try_exit_, __COUNTER__))
+#define _try_labeled(exit_label) \
     LET(__rcd_try_prop_t __rcd_try_prop = {.caught_exception = 0, .has_finally = false}) \
-    LET(rcd_exception_type_t __rcd_etype_catch = 0, __rcd_etype_final = 0) \
-    for (;; ({ GLUE(__exit_try__, __LINE__): break; })) \
+    for (rcd_exception_type_t __rcd_etype_catch = 0, __rcd_etype_final = 0;; ({exit_label: break;})) \
     /* enter the try addil (anti duff device infinite loop) */ \
     for (uint8_t __rcd_try_i = 0;; __rcd_try_i++) \
     if (__rcd_try_i == 2) { \
@@ -514,50 +523,53 @@ typedef struct __rcd_try_prop {
             /* leaving try block normally without exception */ \
             if (!__rcd_try_prop.has_finally) { \
                 /* no finally, exit the try/catch */ \
-                goto GLUE(__exit_try__, __LINE__); \
+                goto exit_label; \
             } else { \
                 /* continue to finally block */ \
                 break; \
             } \
         })) \
         for (__rcd_try_prop_t* __rcd_try_scope __attribute__((cleanup(__rcd_escape_try))) = &__rcd_try_prop;; ({__rcd_try_scope = 0; break;})) \
-        LET() /* catch break in try */
+        LET() /* handle break in try */
 
 /// rcd-macro: Specifies a finally block. Must follow a try or catch block.
-#define finally \
+#define finally _finally_labeled(GLUE(__rcd_finally_exit_, __COUNTER__))
+#define _finally_labeled(exit_label) \
     else if (__rcd_try_i == 0) { \
         __rcd_try_prop.has_finally = true; \
         __rcd_etype_final |= exception_any; \
-        goto GLUE(__finally_hop__, __LINE__); \
-        GLUE(__exit_finally__, __LINE__): break; \
-        GLUE(__finally_hop__, __LINE__):; \
+        continue; \
+        exit_label: \
+        break; \
     } else if (__rcd_try_i == 5) \
         for (;; ({ \
             if (__rcd_try_prop.caught_exception == 0) { \
                 /* no exception, exit the try/catch normally */ \
-                goto GLUE(__exit_finally__, __LINE__); \
+                /* semantically, this branch exists only if the one out of try does, so hide it to generate more sensible */ \
+                /* warnings (in particular, we may get warnings about missing return statements without this). */ \
+                _CLANG_HIDE_CONTROL_FLOW(goto exit_label;) \
+            } else if ((__rcd_try_prop.caught_exception->type & __rcd_etype_catch) == 0) { \
+                /* rethrow exceptions without matching catch block */ \
+                lwt_throw_exception(__rcd_try_prop.caught_exception); \
             } else { \
-                if ((__rcd_try_prop.caught_exception->type & __rcd_etype_catch) == 0) { \
-                    /* rethrow exceptions without matching catch block */ \
-                    lwt_throw_exception(__rcd_try_prop.caught_exception); \
-                } else { \
-                    /* let catch block take care of exception */ \
-                    break; \
-                } \
+                /* let catch block take care of exception */ \
+                break; \
             } \
         })) \
-        LET() /* catch break in finally */
+        LET() /* handle break in finally */
 
 /// rcd-macro: Specifies a catch block. Must follow a try or finally block.
 #define catch(catch_exception_mask, exception_name) \
+    _catch_labeled(catch_exception_mask, exception_name, GLUE(__rcd_catch_exit_, __COUNTER__))
+#define _catch_labeled(catch_exception_mask, exception_name, exit_label) \
     else if (__rcd_try_i == 1) { \
         __rcd_etype_final |= catch_exception_mask; \
         __rcd_etype_catch = catch_exception_mask; \
-        goto GLUE(__catch_hop__, __LINE__); \
-        GLUE(__exit_catch__, __LINE__): break; \
-        GLUE(__catch_hop__, __LINE__):; \
+        continue; \
+        exit_label: \
+        break; \
     } else if (__rcd_try_i == 6) \
-        for (;; ({goto GLUE(__exit_catch__, __LINE__);})) \
+        for (;; ({goto exit_label;})) \
         LET(rcd_exception_t* exception_name = __rcd_try_prop.caught_exception)
 
 /// rcd-macro: Specifies an uninterruptible block. In this block join races
@@ -707,7 +719,7 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
 #ifdef DEBUG
 #define assert(x) atest(x)
 #else
-#define	assert(x) ((void) 0)
+#define assert(x) ((void) 0)
 #endif
 
 #define BREAKPT { __asm__ __volatile__("int $3"::: "memory"); }
@@ -786,4 +798,4 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
 // lists for variadic macros.
 CASSERT(VA_NARGS() == 0);
 
-#endif	/* RCD_H */
+#endif  /* RCD_H */
