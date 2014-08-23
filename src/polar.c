@@ -110,7 +110,7 @@ join_locked(fstr_t) tls_read(fstr_t buffer, bool* more_hint_out, join_server_par
             // Write buffer became full while replying with alert.
             return fstr_slice(buffer, 0, 0);
         }
-        RCD_POLAR_ECE(ssl_read_ret, exception_io);
+        RCD_POLAR_E(ssl_read_ret, exception_io);
     } else {
         return fstr_slice(buffer, 0, ssl_read_ret);
     }
