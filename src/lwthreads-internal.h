@@ -46,7 +46,7 @@ typedef struct {
     uint64_t rip;
 } jmp_buf_pinj;
 
-void longjmp_pinj(jmp_buf_pinj* buf_pinj) __attribute__((__noreturn__));
+void longjmp_pinj(jmp_buf_pinj* buf_pinj) __attribute__((noreturn));
 
 void __morestack();
 void __releasestack_fx();

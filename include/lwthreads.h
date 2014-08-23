@@ -122,7 +122,7 @@ bool lwt_is_cancel_pending();
 void lwt_test_live_join_race();
 
 /// Immediately terminates the program with the specified status code.
-void lwt_exit(int status) __attribute__((__noreturn__));
+void lwt_exit(int status) __attribute__((noreturn));
 
 // These functions are used in RCD macros and should never be called directly.
 
@@ -158,12 +158,12 @@ rcd_exception_t* lwt_copy_exception(rcd_exception_t* exception);
 /// Creates a new exception and throws it. The ownership of the forwarded
 /// exception is transfered to the exception handler which passes it to the
 /// next exception handler that catches it.
-__attribute__((__noreturn__))
+__attribute__((noreturn))
 void lwt_throw_new_exception(fstr_t message, fstr_t file, uint64_t line, rcd_exception_type_t exception_type, rcd_exception_t* fwd_exception/*, rcd_fid_t server_fid*/);
 
 /// Throws an existing exception. Takes ownership over the exception passed to
 /// it and transfers the ownership to the exception handler that catches it.
-__attribute__((__noreturn__))
+__attribute__((noreturn))
 void lwt_throw_exception(rcd_exception_t* exception);
 
 /// Thread local heap allocation that can be returned from a sub heap context

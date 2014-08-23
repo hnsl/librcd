@@ -28,7 +28,7 @@ void polar_secure_drbg_fill(fstr_t buffer);
 
 /// Throws an exception with a descriptive error message of the specified type.
 /// Assumes r_code is a polarssl return value.
-__attribute__((__noreturn__))
+__attribute__((noreturn))
 void polar_error(int32_t r_code, fstr_t expr_str, rcd_exception_type_t etype);
 
 /// Same function as polar_tls_client_open() but allows specifying the tcp
