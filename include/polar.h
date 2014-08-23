@@ -26,8 +26,9 @@ int32_t polar_secure_drbg_random(void* __unused, unsigned char* output, size_t o
 /// Succeeds or throws a fatal exception.
 void polar_secure_drbg_fill(fstr_t buffer);
 
-/// Throws an exception with a descriptive error message of hte specified type
-/// if r_code != 0. Assumes r_code is a polarssl return value.
+/// Throws an exception with a descriptive error message of the specified type.
+/// Assumes r_code is a polarssl return value.
+__attribute__((__noreturn__))
 void polar_error(int32_t r_code, fstr_t expr_str, rcd_exception_type_t etype);
 
 /// Same function as polar_tls_client_open() but allows specifying the tcp

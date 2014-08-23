@@ -68,8 +68,6 @@ void polar_secure_drbg_fill(fstr_t buffer) {
 }
 
 void polar_error(int32_t r_code, fstr_t expr_str, rcd_exception_type_t etype) {
-    if (r_code == 0)
-        return;
     char error_str[0x80];
     error_strerror(r_code, error_str, sizeof(error_str) - 1);
     sub_heap_e(throw(concs("polarssl error @ [", expr_str, "]: got return code [", fss(fstr_from_int(r_code, 16)), "h]: [", fstr_fix_cstr(error_str), "]"), etype));
