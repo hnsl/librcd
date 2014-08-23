@@ -500,7 +500,9 @@ typedef struct __rcd_try_prop {
 #define try \
     LET(__rcd_try_prop_t __rcd_try_prop = {.caught_exception = 0, .has_finally = false}) \
     LET(rcd_exception_type_t __rcd_etype_catch = 0, __rcd_etype_final = 0) \
-    for (uint8_t __rcd_try_i = 0; __rcd_try_i <= 6; __rcd_try_i++) \
+    for (;; ({ GLUE(__exit_try__, __LINE__): break; })) \
+    /* enter the try addil (anti duff device infinite loop) */ \
+    for (uint8_t __rcd_try_i = 0;; __rcd_try_i++) \
     if (__rcd_try_i == 2) { \
         if (setjmp(__rcd_try_prop.try_jbuf) != 0) { \
             __rcd_try_i = 4; \
@@ -508,31 +510,55 @@ typedef struct __rcd_try_prop {
     } else if (__rcd_try_i == 3) { \
         __lwt_fiber_stack_push_try_catch(&__rcd_try_prop.try_jbuf, __rcd_etype_final, &__rcd_try_prop.caught_exception); \
     } else if (__rcd_try_i == 4) \
-        for (__rcd_try_prop_t* __rcd_try_scope __attribute__((cleanup(__rcd_escape_try))) = &__rcd_try_prop; ; ({__rcd_try_scope = 0; break;})) \
-            LET() /* allow break within try */
+        for (;; ({ \
+            /* leaving try block normally without exception */ \
+            if (!__rcd_try_prop.has_finally) { \
+                /* no finally, exit the try/catch */ \
+                goto GLUE(__exit_try__, __LINE__); \
+            } else { \
+                /* continue to finally block */ \
+                break; \
+            } \
+        })) \
+        for (__rcd_try_prop_t* __rcd_try_scope __attribute__((cleanup(__rcd_escape_try))) = &__rcd_try_prop;; ({__rcd_try_scope = 0; break;})) \
+        LET() /* catch break in try */
 
 /// rcd-macro: Specifies a finally block. Must follow a try or catch block.
 #define finally \
     else if (__rcd_try_i == 0) { \
         __rcd_try_prop.has_finally = true; \
         __rcd_etype_final |= exception_any; \
+        goto GLUE(__finally_hop__, __LINE__); \
+        GLUE(__exit_finally__, __LINE__): break; \
+        GLUE(__finally_hop__, __LINE__):; \
     } else if (__rcd_try_i == 5) \
         for (;; ({ \
-            /* rethrow exceptions without matching catch block */ \
-            if (__rcd_try_prop.caught_exception != 0 && (__rcd_try_prop.caught_exception->type & __rcd_etype_catch) == 0) { \
-                lwt_throw_exception(__rcd_try_prop.caught_exception); \
+            if (__rcd_try_prop.caught_exception == 0) { \
+                /* no exception, exit the try/catch normally */ \
+                goto GLUE(__exit_finally__, __LINE__); \
+            } else { \
+                if ((__rcd_try_prop.caught_exception->type & __rcd_etype_catch) == 0) { \
+                    /* rethrow exceptions without matching catch block */ \
+                    lwt_throw_exception(__rcd_try_prop.caught_exception); \
+                } else { \
+                    /* let catch block take care of exception */ \
+                    break; \
+                } \
             } \
-            break; \
         })) \
-            LET() /* allow break within finally */
+        LET() /* catch break in finally */
 
 /// rcd-macro: Specifies a catch block. Must follow a try or finally block.
 #define catch(catch_exception_mask, exception_name) \
     else if (__rcd_try_i == 1) { \
         __rcd_etype_final |= catch_exception_mask; \
         __rcd_etype_catch = catch_exception_mask; \
+        goto GLUE(__catch_hop__, __LINE__); \
+        GLUE(__exit_catch__, __LINE__): break; \
+        GLUE(__catch_hop__, __LINE__):; \
     } else if (__rcd_try_i == 6) \
-        for (rcd_exception_t* exception_name = __rcd_try_prop.caught_exception; exception_name != 0; ({break;}))
+        for (;; ({goto GLUE(__exit_catch__, __LINE__);})) \
+        LET(rcd_exception_t* exception_name = __rcd_try_prop.caught_exception)
 
 /// rcd-macro: Specifies an uninterruptible block. In this block join races
 /// and cancellations are suppressed and never thrown.
