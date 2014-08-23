@@ -425,12 +425,6 @@ extern int rcd_pp_marker__fiber_main;
 
 extern int rcd_pp_marker__fiber_main_declare;
 
-/// Disable return type diagnostic warning as it's otherwise not possible
-/// to return inside rcd blocks as the initial clang analyzer does not
-/// understand that there is no branch that can skip the first pass over
-/// those blocks (the optimizer however does).
-#pragma clang diagnostic ignored "-Wreturn-type"
-
 /// rcd-macro: Creates a sub heap and uses it in the following block.
 #define sub_heap \
     LET(uint8_t __rcd_sh_cl __attribute__((cleanup(__lwt_fiber_stack_pop_sub_heap))) = (__lwt_fiber_stack_push_sub_heap(), 0))
