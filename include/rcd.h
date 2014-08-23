@@ -14,7 +14,7 @@
 
 #define typeof(x) __typeof__(x)
 #define offsetof(t, d) __builtin_offsetof(t, d)
-#define unreachable() __builtin_unreachable()
+#define unreachable() assert(false), __builtin_unreachable()
 #define readcyclecounter() __builtin_readcyclecounter()
 #define sync_synchronize() __sync_synchronize()
 #define sync_bool_compare_and_swap(ptr, oldval, newval) __sync_bool_compare_and_swap(ptr, oldval, newval)
