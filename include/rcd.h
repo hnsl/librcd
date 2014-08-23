@@ -510,7 +510,8 @@ typedef struct __rcd_try_prop {
     } else if (__rcd_try_i == 3) { \
         __lwt_fiber_stack_push_try_catch(&__rcd_try_prop.try_jbuf, __rcd_etype_final, &__rcd_try_prop.caught_exception); \
     } else if (__rcd_try_i == 4) \
-        for (__rcd_try_prop_t* __rcd_try_scope __attribute__((cleanup(__rcd_escape_try))) = &__rcd_try_prop; ; ({__rcd_try_scope = 0; break;}))
+        for (__rcd_try_prop_t* __rcd_try_scope __attribute__((cleanup(__rcd_escape_try))) = &__rcd_try_prop; ; ({__rcd_try_scope = 0; break;})) \
+            LET() /* allow break within try */
 
 /// rcd-macro: Specifies a finally block. Must follow a try or catch block.
 #define finally \
