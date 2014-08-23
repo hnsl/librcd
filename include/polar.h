@@ -7,6 +7,17 @@
 #ifndef POLAR_H
 #define	POLAR_H
 
+#define RCD_POLAR_E(r_code_expr, exception_type) \
+    polar_error(r_code_expr, fstr(#r_code_expr), exception_type)
+
+#define RCD_POLAR_ECE(r_code_expr, exception_type) ({ \
+    int32_t __r_code = r_code_expr; \
+    if (__r_code != 0) \
+        polar_error(__r_code, fstr(#r_code_expr), exception_type); \
+})
+
+#define RCD_POLAR_EC(r_code_expr) RCD_POLAR_ECE(r_code_expr, exception_io)
+
 /// Like polar_secure_drbg_fill() but the polarssl prng callback compatible interface.
 int32_t polar_secure_drbg_random(void* __unused, unsigned char* output, size_t output_len);
 

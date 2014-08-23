@@ -699,14 +699,6 @@ extern int rcd_pp_marker__join_shared_declare;
 /// Main function for the program. Defined by the application.
 void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
 
-#define RCD_POLAR_ECE(r_code_expr, exception_type) ({ \
-    int32_t __r_code = r_code_expr; \
-    if (__r_code != 0) \
-        polar_error(__r_code, fstr(#r_code_expr), exception_type); \
-})
-
-#define RCD_POLAR_EC(r_code_expr) RCD_POLAR_ECE(r_code_expr, exception_io)
-
 // *** Debug related definitions. ***
 
 /// Asserted test which asserts that an explicit test is not false unlike
