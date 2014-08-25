@@ -20,17 +20,16 @@ void rcd_self_test_util_macros() {
     // Test FOR_EACH_ARG.
     {
         int counter = 0, a, b, c;
-#define INCREMENT(which) which = counter++
-        FOR_EACH_ARG(INCREMENT);
+#define INCREMENT(which) which = counter++;
+        FOR_EACH_ARG(INCREMENT)
         atest(counter == 0);
-        FOR_EACH_ARG(INCREMENT, a);
+        FOR_EACH_ARG(INCREMENT, a)
         atest(a == 0);
         atest(counter == 1);
-        FOR_EACH_ARG(INCREMENT, b, c);
+        FOR_EACH_ARG(INCREMENT, b, c)
         atest(b == 1);
         atest(c == 2);
         atest(counter == 3);
-        (FOR_EACH_ARG(INCREMENT, a, b, c));
     }
 
     // Test VA_NARGS.

@@ -54,8 +54,9 @@
 #define FSTR_CONCAT(...) \
     fstr_concat((fstr_t[]) {__VA_ARGS__}, VA_NARGS(__VA_ARGS__), ((fstr_t){0}))
 
+#define STR_COMMA(x) STR(x),
 #define FSTR_CONCAT_ANY(...) \
-    fstr_concat((fstr_t[]) { FOR_EACH_ARG(STR, __VA_ARGS__) }, VA_NARGS(__VA_ARGS__), ((fstr_t){0}))
+    fstr_concat((fstr_t[]) { FOR_EACH_ARG(STR_COMMA, __VA_ARGS__) }, VA_NARGS(__VA_ARGS__), ((fstr_t){0}))
 
 #define FSTR_BUILD(fstr_builder) \
     for (fixed_str_builder_t fstr_builder = {0}; fstr_builder.phase < 2; fstr_builder.phase++)
