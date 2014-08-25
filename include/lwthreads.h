@@ -157,9 +157,10 @@ rcd_exception_t* lwt_copy_exception(rcd_exception_t* exception);
 
 /// Creates a new exception and throws it. The ownership of the forwarded
 /// exception is transfered to the exception handler which passes it to the
-/// next exception handler that catches it.
+/// next exception handler that catches it. Semi-internal function; prefer to
+/// use the "throw" macros instead.
 __attribute__((noreturn))
-void lwt_throw_new_exception(fstr_t message, fstr_t file, uint64_t line, rcd_exception_type_t exception_type, rcd_exception_t* fwd_exception/*, rcd_fid_t server_fid*/);
+void lwt_throw_new_exception(fstr_t message, fstr_t file, uint64_t line, rcd_exception_type_t exception_type, void* eio_class, void* eio_data, lwt_heap_t* custom_heap, rcd_exception_t* fwd_exception);
 
 /// Throws an existing exception. Takes ownership over the exception passed to
 /// it and transfers the ownership to the exception handler that catches it.

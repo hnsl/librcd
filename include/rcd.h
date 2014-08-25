@@ -385,6 +385,8 @@ typedef struct rcd_exception {
     fstr_t message;
     fstr_t file;
     size_t line;
+    void* eio_class;
+    void* eio_data;
     list(void*)* backtrace_calls;
     struct rcd_exception* fwd_exception;
     struct lwt_heap* exception_heap;
@@ -551,16 +553,21 @@ typedef struct __rcd_try_prop {
         })) \
         LET() /* handle break in finally */
 
-/// rcd-macro: Specifies a catch block. Must follow a try or finally block.
+/// rcd-macro: Specifies a catch block. Must follow a try, catch or finally block.
 #define catch(catch_exception_mask, exception_name) \
-    _catch_labeled(catch_exception_mask, exception_name, GLUE(__rcd_catch_exit_, __COUNTER__))
-#define _catch_labeled(catch_exception_mask, exception_name, exit_label) \
+    _catch_labeled(catch_exception_mask, exception_name, GLUE(__rcd_catch_exit_, __COUNTER__), )
+#define _catch_labeled(catch_exception_mask, exception_name, exit_label, extra_cond) \
     else if (__rcd_try_i == 1 && (__rcd_etype_final |= (catch_exception_mask), __rcd_etype_catch |= (catch_exception_mask), false)) { \
         exit_label: \
         break; \
-    } else if (__rcd_try_i == 6 && (__rcd_try_prop.caught_exception->type & (catch_exception_mask)) != 0) \
+    } else if (__rcd_try_i == 6 && (__rcd_try_prop.caught_exception->type & (catch_exception_mask)) != 0 extra_cond) \
         for (;; ({goto exit_label;})) \
         LET(rcd_exception_t* exception_name = __rcd_try_prop.caught_exception)
+
+/// rcd-macro: Specifies a catch block for a specific eio class. Must follow a try, catch or finally block.
+#define catch_eio(class, exception_name, data) \
+    _catch_labeled(exception_io, exception_name, GLUE(__rcd_catch_exit_, __COUNTER__), && (__rcd_try_prop.caught_exception->eio_class == class##_eio)) \
+        LET(class##_eio_t data = *(class##_eio_t*)(exception_name)->eio_data)
 
 /// rcd-macro: Specifies an uninterruptible block. In this block join races
 /// and cancellations are suppressed and never thrown.
@@ -571,11 +578,70 @@ typedef struct __rcd_try_prop {
 
 /// rcd-macro: Throws a new exception.
 #define throw(message, exception_type) \
-    lwt_throw_new_exception(message, fstr(__FILE__), __LINE__, exception_type, 0)
+    lwt_throw_new_exception(message, fstr(__FILE__), __LINE__, exception_type, 0, 0, 0, 0)
 
 /// rcd-macro: Throws a new exception and forwards another existing exception.
 #define throw_fwd(message, exception_type, fwd_exception) \
-    lwt_throw_new_exception(message, fstr(__FILE__), __LINE__, exception_type, fwd_exception)
+    lwt_throw_new_exception(message, fstr(__FILE__), __LINE__, exception_type, 0, 0, 0, fwd_exception)
+
+/// rcd-macro: Throws an io exception of a custom class with no data fields.
+#define throw_eio(message, name) \
+    throw_eio_##name(message, fstr(__FILE__), __LINE__, 0)
+
+/// rcd-macro: Throws an io exception of a custom class with no data fields, and
+/// forwards another exception.
+#define throw_eio_fwd(message, name, fwd_exception) \
+    throw_eio_##name(message, fstr(__FILE__), __LINE__, fwd_exception)
+
+/// rcd-macro: Creates a custom (complex) io exception object and a new heap, and
+/// switches to it for the duration of the following block. The block must throw
+/// an exception (generally with throw_em or throw_em_fwd), or else will assert.
+#define emitosis(class, data) _emitosis_internal(data, class##_eio, class##_eio_t)
+#define _emitosis_internal(data, name, eio_t) \
+    for (void* __rcd_eio_type = name;; assert(false)) \
+    LET(lwt_heap_t* __rcd_eio = lwt_alloc_heap()) \
+    switch_heap(__rcd_eio) \
+    LET(eio_t data = {0})
+
+#define _clone_ptr(ptr) ({typeof(*ptr)* p = lwt_alloc_new(sizeof(*ptr)); *p = *ptr; p;})
+
+/// rcd-macro: Throws a new exception from a emitosis block.
+#define throw_em(message, data) \
+    lwt_throw_new_exception(message, fstr(__FILE__), __LINE__, exception_io, __rcd_eio_type, _clone_ptr(&data), __rcd_eio, 0)
+
+/// rcd-macro: Throws a new exception from a emitosis block and forwards another
+/// existing exception.
+#define throw_em_fwd(message, data, fwd_exception) \
+    lwt_throw_new_exception(message, fstr(__FILE__), __LINE__, exception_io, __rcd_eio_type, _clone_ptr(&data), __rcd_eio, fwd_exception)
+
+/// rcd-macro: Defines a complex io exception class "<name>_eio". Example usage:
+///
+/// typedef struct { size_t line, col; fstr_t token; } json_eio_t;
+/// define_eio_complex(json, line, col, token);
+#define define_eio_complex(name, ...) \
+    _define_eio_complex_internal(name##_eio, name##_eio_t, __VA_ARGS__)
+#define _eio_mem_describe(x) , fstr("; " #x "="), data->x
+#define _define_eio_complex_internal(name, eio_t, ...) \
+    __attribute__((weak)) fstr_mem_t* _describe_##name(void* e) { \
+        eio_t* data = e; \
+        return conc(fstr(#name) FOR_EACH_ARG(_eio_mem_describe, __VA_ARGS__)); \
+    } \
+    static void* const name = (void*)&_describe_##name
+
+/// rcd-macro: Defines a simple io exception class "<name>_eio". Example usage:
+///
+/// define_eio(json);
+#define define_eio(class) _define_eio_internal(class, class##_eio, class##_eio_t)
+#define _define_eio_internal(class, name, eio_t) \
+    __attribute__((weak)) fstr_mem_t* _describe_##name(void* e) { \
+        return fstr_cpy(fstr(#name)); \
+    } \
+    static void* const name = (void*)&_describe_##name; \
+    __attribute__((noreturn)) static inline void throw_eio_##class \
+            (fstr_t message, fstr_t file, uint64_t line, rcd_exception_t* fwd_exception) { \
+        lwt_throw_new_exception(message, file, line, exception_io, name, 0, 0, fwd_exception); \
+    } \
+    typedef struct {} eio_t
 
 /// rcd-macro: Starts a fiber mitosis, creating a new fiber in a block
 /// where it switch to its initial heap. The allocated fiber id can be accessed

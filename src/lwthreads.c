@@ -746,16 +746,16 @@ static __attribute__((noreturn)) void lwt_throw_cancel_exception(lwt_fiber_t* fi
         src_cancel_e->exception_heap = real_exception_heap;
         vm_heap_free(exception_vm_heap, dummy_exception_heap);
     }
-    lwt_throw_new_exception("fiber canceled", "", 0, exception_canceled, src_cancel_e);
+    lwt_throw_new_exception("fiber canceled", "", 0, exception_canceled, 0, 0, 0, src_cancel_e);
 }
 
 static __attribute__((noreturn)) void lwt_throw_join_race_exception(lwt_fiber_t* fiber) {
     fiber->ctrl.join_race = false;
-    lwt_throw_new_exception("fiber got join race exception", "", 0, exception_join_race, 0);
+    lwt_throw_new_exception("fiber got join race exception", "", 0, exception_join_race, 0, 0, 0, 0);
 }
 
 static __attribute__((noreturn)) void lwt_throw_no_such_fiber_exception() {
-    lwt_throw_new_exception("uninterruptible join failed: no such fiber", "", 0, exception_no_such_fiber, 0);
+    lwt_throw_new_exception("uninterruptible join failed: no such fiber", "", 0, exception_no_such_fiber, 0, 0, 0, 0);
 }
 
 static __inline void lwt_cancellation_point_raw(lwt_fiber_t* fiber) {
@@ -1749,7 +1749,7 @@ static void lwt_io_block(int fd, lwt_fd_event_t event, bool is_epoll) {
     lwt_blocking_fd_t* blocking_fd;
     bool event_already_ready = false;
     bool epoll_ctrl_add_needed = false;
-    fstr_t* err_msg = 0;
+    const fstr_t* err_msg = 0;
     LWT_SYS_SPINLOCK_WLOCK(&shared_bfd_mem.rwlock); {
         hmap_bfd_lookup_t blu = hmap_bfd_lookup(&shared_bfd_mem.blocking_fd_map, fd, true);
         if (!hmap_bfd_found(blu)) {
@@ -1769,7 +1769,7 @@ static void lwt_io_block(int fd, lwt_fd_event_t event, bool is_epoll) {
                     blocking_fd->read_ready = false;
                 } else {
                     if (blocking_fd->read_fiber != 0) {
-                        static fstr_t err_cannot_read_block = "cannot read block on file descriptor: already read blocked by another fiber";
+                        static const fstr_t err_cannot_read_block = "cannot read block on file descriptor: already read blocked by another fiber";
                         err_msg = &err_cannot_read_block;
                         break;
                     }
@@ -1781,7 +1781,7 @@ static void lwt_io_block(int fd, lwt_fd_event_t event, bool is_epoll) {
                     blocking_fd->write_ready = false;
                 } else {
                     if (blocking_fd->write_fiber != 0) {
-                        static fstr_t err_cannot_write_block = "cannot write block on file descriptor: already write blocked by another fiber";
+                        static const fstr_t err_cannot_write_block = "cannot write block on file descriptor: already write blocked by another fiber";
                         err_msg = &err_cannot_write_block;
                         break;
                     }
@@ -2753,6 +2753,8 @@ static rcd_exception_t* lwt_direct_copy_exception(rcd_exception_t* exception, lw
     switch_heap(exception_heap) {
         new_exception = new(rcd_exception_t);
         new_exception->type = exception->type;
+        new_exception->eio_class = 0;
+        new_exception->eio_data = 0;
         new_exception->message = fss(fstr_cpy(exception->message));
         new_exception->file = fss(fstr_cpy(exception->file));
         new_exception->line = exception->line;
@@ -2772,7 +2774,7 @@ rcd_exception_t* lwt_copy_exception(rcd_exception_t* exception) { sub_heap {
     return new_exception;
 }}
 
-void lwt_throw_new_exception(fstr_t message, fstr_t file, uint64_t line, rcd_exception_type_t exception_type, rcd_exception_t* fwd_exception/*, rcd_fid_t server_fid*/) {
+void lwt_throw_new_exception(fstr_t message, fstr_t file, uint64_t line, rcd_exception_type_t exception_type, void* eio_class, void* eio_data, lwt_heap_t* custom_heap, rcd_exception_t* fwd_exception) {
     LWT_GET_LOCAL_FIBER(fiber);
     {
         // Exceptions while system spinlocks are locked is automatically fatal.
@@ -2795,15 +2797,29 @@ void lwt_throw_new_exception(fstr_t message, fstr_t file, uint64_t line, rcd_exc
     // Create heap for exception. If forwarding another exception, use that heap instead of a new one.
     lwt_heap_t* exception_heap;
     rcd_exception_t* exception;
-    if (fwd_exception != 0) {
-        exception_heap = fwd_exception->exception_heap;
-        exception = vm_heap_alloc(exception_heap->vm_heap, sizeof(rcd_exception_t), 0);
+    if (custom_heap != 0) {
+        assert(eio_data != 0);
+        if (fwd_exception != 0) {
+            exception_heap = fwd_exception->exception_heap;
+            switch_heap(exception_heap)
+                lwt_alloc_import(custom_heap);
+        } else {
+            exception_heap = custom_heap;
+        }
     } else {
-        exception = lwt_alloc_heaped_object(sizeof(rcd_exception_t), &exception_heap);
+        assert(eio_data == 0);
+        if (fwd_exception != 0) {
+            exception_heap = fwd_exception->exception_heap;
+        } else {
+            exception_heap = lwt_alloc_heap();
+        }
     }
     // Copy over data to exception structure.
     switch_heap(exception_heap) {
+        exception = new(rcd_exception_t);
         exception->type = exception_type;
+        exception->eio_class = eio_class;
+        exception->eio_data = eio_data;
         exception->message = fss(fstr_cpy(message));
         exception->file = fss(fstr_cpy(file));
         exception->line = line;
@@ -3080,8 +3096,14 @@ static fstr_mem_t* lwt_get_exception_dump_inner(rcd_exception_t* exception, int3
     fstr_t indent_str = fss(fstr_alloc(indent));
     fstr_fill(indent_str, ' ');
     fstr_t at = (exception->file.len == 0 && exception->line == 0)? "[n/a]": concs("[", exception->file, ":", fss(fstr_from_int(exception->line, 10)), "]");
+    fstr_t type_str = "";
+    if (exception->type == exception_io && exception->eio_class != 0) {
+        fstr_mem_t* (*describe_fn)(void* e) = exception->eio_class;
+        type_str = concs(indent_str, "data: ", fss(describe_fn(exception->eio_data)), "\n");
+    }
     fstr_mem_t* dump = conc(
         indent_str, lwt_get_exception_type_str(exception->type), " type exception at ", at, "\n",
+        type_str,
         indent_str, "message: ", exception->message, "\n",
         indent_str, "backtrace: ", (list_count(exception->backtrace_calls, void*) > 0? "": "not available"), "\n"
     );
