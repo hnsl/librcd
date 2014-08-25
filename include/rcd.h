@@ -469,16 +469,16 @@ extern int rcd_pp_marker__fiber_main_declare;
 /// The alternative heap is only preserved if the sub heap
 /// is exited orderly. The alternative heap is merged with the current sub
 /// heap as it is thrown away.
-#define sub_heap_txn(__rcd_txn_aheap_name) \
+#define sub_heap_txn(heap_name) \
     sub_heap \
-    LET(lwt_heap_t* __rcd_txn_aheap_name __attribute__((cleanup(__rcd_escape_sh_txn))) = lwt_alloc_heap())
+    LET(lwt_heap_t* heap_name __attribute__((cleanup(__rcd_escape_sh_txn))) = lwt_alloc_heap())
 
 /// rcd-macro: Switches to an alternative heap and uses it in the following block.
-#define switch_heap(__rcd_aheap_name) \
-    LET(uint8_t _rcd_switch_heap_cl __attribute__((cleanup(__lwt_fiber_stack_pop_switch_heap))) = (__lwt_fiber_stack_push_switch_heap(__rcd_aheap_name), 0))
+#define switch_heap(heap_name) \
+    LET(uint8_t _rcd_switch_heap_cl __attribute__((cleanup(__lwt_fiber_stack_pop_switch_heap))) = (__lwt_fiber_stack_push_switch_heap(heap_name), 0))
 
-/// rcd-macro: Equiviallent to sub_heap_txn(heap_name) switch_heap(heap_name)
-#define switch_txn(__rcd_txn_aheap_name) sub_heap_txn(__rcd_txn_aheap_name) switch_heap(__rcd_txn_aheap_name)
+/// rcd-macro: Equivalent to sub_heap_txn(heap_name) switch_heap(heap_name)
+#define switch_txn(heap_name) sub_heap_txn(heap_name) switch_heap(heap_name)
 
 /// rcd-macro: Creates a new heap and switches to it.
 /// When the statement is exited orderly the heap is atomically appended to the
