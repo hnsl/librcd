@@ -501,4 +501,8 @@ fstr_t fstr_cfifo_write(fstr_cfifo_t* cfifo, fstr_t src, bool overwrite);
 /// The base name is also informally known as the file name.
 fstr_t fstr_path_base(fstr_t file_path);
 
+/// Allocates a new buffer that will contain valid UTF-8, invalid bytes will
+/// be replaced with unicode character 0xFFFD (\xEFBFBD).
+fstr_mem_t* fstr_clean_utf8(fstr_t str);
+
 #endif /* RCD_FSTRING_H */

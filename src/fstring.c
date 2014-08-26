@@ -10,6 +10,7 @@
 #include "polarssl/md5.h"
 #include "polarssl/sha1.h"
 #include "polarssl/sha2.h"
+#include "utf8proc.h"
 
 typedef enum {
     step_A, step_B, step_C
@@ -964,4 +965,31 @@ fstr_t fstr_path_base(fstr_t file_path) {
             break;
     }
     return fstr_slice(file_path, j, i);
+}
+
+fstr_mem_t* fstr_clean_utf8(fstr_t str) {
+    fstr_mem_t* dst_buf = fstr_alloc(str.len * 3);
+    fstr_t dst_tail = fss(dst_buf);
+    fstr_t src_tail = str;
+    while (src_tail.len > 0) {
+        // Iterate to next generic character.
+        int32_t uc_point;
+        ssize_t i_ret = utf8proc_iterate(src_tail.str, src_tail.len, &uc_point);
+        if (i_ret < 0) {
+            // Unrecognized character, use replacement character fffd.
+            replace_char:;
+            ssize_t e_ret = utf8proc_encode_char(0xfffd, dst_tail.str);
+            assert(e_ret == 3);
+            dst_tail = fstr_sslice(dst_tail, 3, -1);
+            src_tail = fstr_sslice(src_tail, 1, -1);
+        } else {
+            // Copy over the already encoded character.
+            assert(i_ret > 0 && i_ret <= 4);
+            fstr_t vc = fstr_slice(src_tail, 0, i_ret);
+            (void) fstr_cpy_over(dst_tail, vc, &dst_tail, 0);
+            src_tail = fstr_sslice(src_tail, i_ret, -1);
+        }
+    }
+    dst_buf->len -= dst_tail.len;
+    return dst_buf;
 }

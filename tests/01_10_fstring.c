@@ -1120,4 +1120,31 @@ void rcd_self_test_fstring() {
             atest(fstr_equal(base, "gg"));
         }
     }
+
+    //Test UTF-8 clean up.
+    // Escape character for invalid binary data.
+    #define esc "\xEF\xBF\xBD"
+    // Invalid UTF-8 after 1-4 bytes parsed.
+    #define inv1 "\x80"
+    #define inv2 "\xC2\xC0"
+    #define inv3 "\xE1\x80\xC0"
+    #define inv4 "\xF1\x80\x80\xC0"
+    // Modified UTF-8 null encoding, which is invalid.
+    #define inv_null "\xC0\x80"
+    atest(fstr_equal(esc "a", fss(fstr_clean_utf8(inv1"a"))));
+    atest(fstr_equal("a" esc "a", fss(fstr_clean_utf8("a" inv1 "a"))));
+    atest(fstr_equal(esc, fss(fstr_clean_utf8(inv1))));
+    atest(fstr_equal(esc esc, fss(fstr_clean_utf8(inv1 inv1))));
+    atest(fstr_equal(esc esc, fss(fstr_clean_utf8(inv2))));
+    atest(fstr_equal(esc esc "a" esc, fss(fstr_clean_utf8(inv2 "a" inv1))));
+    atest(fstr_equal(esc esc esc, fss(fstr_clean_utf8(inv3))));
+    atest(fstr_equal(esc esc esc esc, fss(fstr_clean_utf8(inv4))));
+    atest(fstr_equal(esc esc esc esc esc, fss(fstr_clean_utf8(inv1 inv4))));
+    atest(fstr_equal(esc esc, fss(fstr_clean_utf8(inv_null))));
+    #undef esc
+    #undef inv1
+    #undef inv2
+    #undef inv3
+    #undef inv4
+    #undef inv_null
 }
