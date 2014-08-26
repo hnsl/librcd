@@ -125,14 +125,14 @@ exit(call_user_func(function() {
                 $found_fstr_declarations = false;
                 // Translate fstr().
                 $fstr_replace_callback_fn = function($matches) use (&$found_fstr_declarations) {
-                    if (strpos($matches[2], "c_string") !== false)
+                    if (strpos($matches[1], "c_string") !== false)
                         return $matches[0];
                     $found_fstr_declarations = true;
-                    $str = str_replace('"', "\x01", $matches[2]);
-                    return $matches[1] . "((fstr_t) {.len = sizeof($str) - 1, .str = (uint8_t*) $str})";
+                    $str = str_replace('"', "\x01", $matches[1]);
+                    return "((fstr_t) {.len = sizeof($str) - 1, .str = (uint8_t*) $str})";
                 };
-                $line = preg_replace_callback('/([^a-z_0-9\^])fstr\s*\(("(([^"\\\\]*|\\\\.)+)"\s*)+\)/', $fstr_replace_callback_fn, $line);
-                $line = preg_replace_callback('/([^a-z_0-9\^])fstr\s*\(([^\)]+)\)/', $fstr_replace_callback_fn, $line);
+                $line = preg_replace_callback('/\bfstr\s*\((\s*("(([^"\\\\]*|\\\\.)+)"\s*)+)\)/', $fstr_replace_callback_fn, $line);
+                $line = preg_replace_callback('/\bfstr\s*\(([^\(\)]+)\)/', $fstr_replace_callback_fn, $line);
                 // Translate fstr_hash().
                 $fstr_hash_replace_callback_fn = function($matches) {
                     $str_data = "";
