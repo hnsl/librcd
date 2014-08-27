@@ -215,6 +215,7 @@ static inline float __get_nan_float() {
 
 // Some nice keywords for rapid c development.
 #define new(type) ({type* p = lwt_alloc_new(sizeof(type)); *p = (type){0}; p;})
+#define cln(ptr) ({typeof(*ptr)* p = lwt_alloc_new(sizeof(*ptr)); *p = *ptr; p;})
 #define conc(...) FSTR_CONCAT_ANY(__VA_ARGS__)
 #define concs(...) fss(conc(__VA_ARGS__))
 #define sconc(...) ({fstr_t s; sub_heap{s = fss(escape(conc(__VA_ARGS__)));}; s;})
