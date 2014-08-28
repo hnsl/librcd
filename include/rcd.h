@@ -513,6 +513,9 @@ typedef struct __rcd_try_prop {
         } \
     } else if (__rcd_try_i == 3) { \
         __lwt_fiber_stack_push_try_catch(&__rcd_try_prop.try_jbuf, __rcd_etype_final, &__rcd_try_prop.caught_exception); \
+    } else if (__rcd_try_i == 7) { \
+        /* rethrow exceptions without matching catch block */ \
+        lwt_throw_exception(__rcd_try_prop.caught_exception); \
     } else if (__rcd_try_i == 4) \
         for (;; ({ \
             /* leaving try block normally without exception */ \
@@ -543,13 +546,8 @@ typedef struct __rcd_try_prop {
                 /* semantically, this branch exists only if the one out of try does, so hide it to generate more sensible */ \
                 /* warnings (in particular, we may get warnings about missing return statements without this). */ \
                 _CLANG_HIDE_CONTROL_FLOW(goto exit_label;) \
-            } else if ((__rcd_try_prop.caught_exception->type & __rcd_etype_catch) == 0) { \
-                /* rethrow exceptions without matching catch block */ \
-                lwt_throw_exception(__rcd_try_prop.caught_exception); \
-            } else { \
-                /* let catch block take care of exception */ \
-                break; \
             } \
+            break; \
         })) \
         LET() /* handle break in finally */
 
