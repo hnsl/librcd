@@ -113,6 +113,20 @@ void rcd_self_test_exceptions() {
         }
         atest(i == 3);
     }
+    // Test that multiple catch blocks work.
+    {
+        bool reached = false;
+        try {
+            throw("test exception", exception_arg);
+        } catch(exception_io, e) {
+            atest(false);
+        } catch(exception_arg, e) {
+            reached = true;
+        } catch(exception_arg, e) {
+            atest(false);
+        }
+        atest(reached);
+    }
     // Test that finally block does not trigger catch block on wrong exception types.
     {
         volatile int32_t i = 0;

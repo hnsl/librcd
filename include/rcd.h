@@ -557,13 +557,10 @@ typedef struct __rcd_try_prop {
 #define catch(catch_exception_mask, exception_name) \
     _catch_labeled(catch_exception_mask, exception_name, GLUE(__rcd_catch_exit_, __COUNTER__))
 #define _catch_labeled(catch_exception_mask, exception_name, exit_label) \
-    else if (__rcd_try_i == 1) { \
-        __rcd_etype_final |= catch_exception_mask; \
-        __rcd_etype_catch = catch_exception_mask; \
-        continue; \
+    else if (__rcd_try_i == 1 && (__rcd_etype_final |= (catch_exception_mask), __rcd_etype_catch |= (catch_exception_mask), false)) { \
         exit_label: \
         break; \
-    } else if (__rcd_try_i == 6) \
+    } else if (__rcd_try_i == 6 && (__rcd_try_prop.caught_exception->type & (catch_exception_mask)) != 0) \
         for (;; ({goto exit_label;})) \
         LET(rcd_exception_t* exception_name = __rcd_try_prop.caught_exception)
 
