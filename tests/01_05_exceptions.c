@@ -9,6 +9,12 @@
 
 #pragma librcd
 
+typedef struct {
+    fstr_t hello;
+} test2_eio_t;
+define_eio_complex(test2, hello);
+define_eio(test1);
+
 void rcd_self_test_exceptions_test0(volatile int32_t* i) {
     try {
         atest(*i == 0);
@@ -18,6 +24,20 @@ void rcd_self_test_exceptions_test0(volatile int32_t* i) {
         atest(false);
     }
     atest(false);
+}
+
+static int test_no_warnings1() {
+    try {
+        for (;;);
+    } finally {}
+}
+
+static int test_no_warnings2() {
+    try {
+        return 1;
+    } catch(exception_io, e) {
+        return 2;
+    }
 }
 
 fiber_main test_exception_memory(fiber_main_attr) {
@@ -126,6 +146,89 @@ void rcd_self_test_exceptions() {
             atest(false);
         }
         atest(reached);
+    }
+    // Tests for exceptions with eio class.
+    {
+        bool reached = false;
+        try {
+            throw_eio("test exception", test1);
+        } catch_eio(test1, e, _) {
+            reached = true;
+        } catch(exception_io, e) {
+            atest(false);
+        }
+        atest(reached);
+    }{
+        bool reached = false;
+        try {
+            throw_eio("test exception", test1);
+        } catch(exception_io, e) {
+            reached = true;
+            atest(e->eio_class == test1_eio);
+            atest(e->eio_data == 0);
+        } catch_eio(test1, e, _) {
+            atest(false);
+        }
+        atest(reached);
+    }{
+        bool reached = false;
+        try {
+            throw("test exception", exception_io);
+        } catch_eio(test1, e, _) {
+            atest(false);
+        } catch(exception_io, e) {
+            reached = true;
+            atest(e->eio_class == 0);
+            atest(e->eio_data == 0);
+        }
+        atest(reached);
+    }{
+        bool reached = false;
+        try {
+            try {
+                throw_eio("test exception", test1);
+            } catch_eio(test2, e, _) {
+                atest(false);
+            }
+            atest(false);
+        } catch_eio(test1, e, _) {
+            reached = true;
+        }
+        atest(reached);
+    }{
+        volatile int32_t i = 0;
+        try {
+            try {
+                throw_eio("test exception", test1);
+            } finally {
+                atest(i == 0);
+                i = 1;
+            } catch_eio(test2, e, _) {
+                atest(false);
+            }
+            atest(false);
+        } finally {
+            atest(i == 1);
+            i = 2;
+        } catch_eio(test1, e, _) {
+            atest(i == 2);
+            i = 3;
+        }
+        atest(i == 3);
+    }{
+        try {
+            emitosis(test2, data) {
+                atest(data.hello.str == 0);
+                data.hello = fsc("hello");
+                throw_em("test exception", data);
+            }
+            atest(false);
+        } catch_eio(test2, e, data) {
+            atest(e->eio_class == test2_eio);
+            test2_eio_t* real_data = (test2_eio_t*)e->eio_data;
+            atest(real_data->hello.str == data.hello.str);
+            atest(fstr_equal(data.hello, "hello"));
+        }
     }
     // Test that finally block does not trigger catch block on wrong exception types.
     {
