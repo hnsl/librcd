@@ -27,9 +27,6 @@
 
 #undef _GNU_SOURCE
 
-#define RCD_SYSCALL_EXCEPTION(name, rcd_exception_type) \
-    sub_heap_e(throw(fss(conc(#name "() failed with errno ", fss(fstr_from_int(errno, 10)), " (", ({const char* errno_str = strerror(errno); errno_str != 0? fstr_fix_cstr(errno_str): "";}), ")")), rcd_exception_type))
-
 typedef int wchar_t;
 typedef int wint_t;
 typedef unsigned long wctype_t;

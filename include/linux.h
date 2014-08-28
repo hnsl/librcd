@@ -26,6 +26,15 @@
 
 #include "musl.h"
 
+/// Syscall eio class.
+typedef struct {
+    int errno_v;
+} syscall_eio_t;
+define_eio_complex(syscall, errno_v);
+
+/// Throws a syscall exception.
+#define RCD_SYSCALL_EXCEPTION(name, rcd_exception_type) _rcd_syscall_exception(#name "() failed with errno ", rcd_exception_type)
+
 #define USER_HZ (100)
 
 /*
@@ -2052,5 +2061,8 @@ int syncfs(int fd);
 /// Librcd wrapper for the mount syscall that uses fixed strings instead of
 /// c strings. Throws an io exception if the mount fails.
 void linux_mount(fstr_t source, fstr_t mnt_path, fstr_t fs_type, uint64_t mountflags, fstr_t data);
+
+// Internal helper for syscall exceptions.
+__attribute__((noreturn)) void _rcd_syscall_exception(fstr_t msg_start, rcd_exception_type_t type);
 
 #endif	/* LINUX_H */

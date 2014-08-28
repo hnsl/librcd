@@ -792,7 +792,6 @@ static void lwt_cancel_fiber_id_raw(rcd_fid_t fiber_id) {
             src_cancel_e->backtrace_calls = lwt_get_backtrace_for_frame_ptr(0, 2);
             src_cancel_e->fwd_exception = 0;
             src_cancel_e->exception_heap = dummy_exception_heap;
-            src_cancel_e->errno_snapshot = errno;
             remote_fiber->ctrl.canceled = src_cancel_e;
         }
     }
@@ -2762,7 +2761,6 @@ static rcd_exception_t* lwt_direct_copy_exception(rcd_exception_t* exception, lw
         list_foreach(exception->backtrace_calls, void*, backtrace_call)
             list_push_end(new_exception->backtrace_calls, void*, backtrace_call);
         new_exception->fwd_exception = exception->fwd_exception != 0? lwt_direct_copy_exception(exception->fwd_exception, exception_heap): 0;
-        new_exception->errno_snapshot = exception->errno_snapshot;
         new_exception->exception_heap = exception_heap;
     }
     return new_exception;
@@ -2826,7 +2824,6 @@ void lwt_throw_new_exception(fstr_t message, fstr_t file, uint64_t line, rcd_exc
         exception->backtrace_calls = lwt_get_backtrace_for_frame_ptr(0, 2);
         exception->fwd_exception = fwd_exception;
         exception->exception_heap = exception_heap;
-        exception->errno_snapshot = errno;
     }
     // Throw the new exception now.
     lwt_throw_exception(exception);

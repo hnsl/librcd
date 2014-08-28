@@ -452,8 +452,8 @@ void rcd_self_test_io() {
         try {
             int32_t exit_code = rio_proc_execute_and_wait(concs("/bin/", fss(fstr_hexrandom(12))), new_list(fstr_t), true);
             atest(false);
-        } catch (exception_io, e) {
-            atest(e->errno_snapshot == ENOENT);
+        } catch_eio(syscall, e, data) {
+            atest(data.errno_v == ENOENT);
         }
     }
     // Test rio_exec() wrapper function.

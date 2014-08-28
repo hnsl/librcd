@@ -7,6 +7,7 @@
 /* See the copyright notice above it for more information. */
 
 #include "rcd.h"
+#include "linux.h"
 #include "musl.h"
 
 /* musl <-> librcd compatibility layer */
@@ -86,8 +87,8 @@ join_locked(int32_t) stdio_file_fiber_fseek(int64_t offset, int32_t whence, join
                 r_value = -1;
                 break;
             }
-        } catch (exception_io, e) {
-            errno = e->errno_snapshot;
+        } catch_eio (syscall, e, data) {
+            errno = data.errno_v;
             r_value = -1;
         }
     }
@@ -99,8 +100,8 @@ join_locked(int64_t) stdio_file_fiber_ftell(join_server_params, stdio_file_state
     sub_heap {
         try {
             r_value = rio_get_file_offset(state->rio_h);
-        } catch (exception_io, e) {
-            errno = e->errno_snapshot;
+        } catch_eio (syscall, e, data) {
+            errno = data.errno_v;
             r_value = -1;
         }
     }
@@ -180,8 +181,8 @@ FILE* fopen(const char* path, const char* mode) {
                 rio_set_file_offset_end(rio_h, 0);
             }
             ret_fh = stdio_new_file_handle(rio_h);
-        } catch (exception_io, e) {
-            errno = e->errno_snapshot;
+        } catch_eio(syscall, e, data) {
+            errno = data.errno_v;
         }
     }
     return ret_fh;

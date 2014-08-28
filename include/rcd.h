@@ -390,8 +390,6 @@ typedef struct rcd_exception {
     list(void*)* backtrace_calls;
     struct rcd_exception* fwd_exception;
     struct lwt_heap* exception_heap;
-    /// The errno value when the exception was thrown.
-    int32_t errno_snapshot;
 } rcd_exception_t;
 
 typedef enum {

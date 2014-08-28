@@ -984,3 +984,17 @@ void linux_mount(fstr_t source, fstr_t mnt_path, fstr_t fs_type, uint64_t mountf
         throw_fwd(concs("mount failed: [", source, "] [", mnt_path, "] [", fs_type, "] [", ui2fs(mountflags), "] [", data, "]"), exception_io, e);
     }
 }}
+
+void _rcd_syscall_exception(fstr_t msg_start, rcd_exception_type_t type) { sub_heap {
+    const char* errno_cstr = strerror(errno);
+    fstr_t errno_str = errno_cstr != 0? fstr_fix_cstr(errno_cstr): fstr("");
+    fstr_t msg = concs(msg_start, errno, fstr(" ("), errno_str, fstr(")"));
+    if (type == exception_io) {
+        emitosis(syscall, data) {
+            data.errno_v = errno;
+            throw_em(msg, data);
+        }
+    } else {
+        throw(msg, type);
+    }
+}}
