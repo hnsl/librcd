@@ -4,6 +4,8 @@
 
 #pragma librcd
 
+#define INDENT_SIZE (2)
+
 typedef struct {
     fstr_t data;
     unsigned int pos;
@@ -277,7 +279,31 @@ json_tree_t* json_parse(fstr_t str) { sub_heap {
     }
 }}
 
-static void stringify_value(json_value_t value, list(fstr_t)* parts);
+static void add_indent(list(fstr_t)* parts, int indent) {
+    if (indent < 0)
+        return;
+    if (indent == 0) {
+        list_push_end(parts, fstr_t, "\n");
+        return;
+    }
+    int spaces = indent * INDENT_SIZE;
+    static const fstr_t indent_32 = "\n                                ";
+    for (int i = 0; i < spaces; i += 32) {
+        int to = MIN(i + 32, spaces);
+        fstr_t part = fstr_slice(indent_32, (i == 0? 0: 1), (to % 32) + 1);
+        list_push_end(parts, fstr_t, part);
+    }
+}
+
+static bool should_indent_array(list(json_value_t)* array) {
+    list_foreach(array, json_value_t, value) {
+        if (value.type == JSON_ARRAY || value.type == JSON_OBJECT)
+            return true;
+    }
+    return false;
+}
+
+static void stringify_value(json_value_t value, list(fstr_t)* parts, int indent);
 
 static void stringify_string(fstr_t value, list(fstr_t)* parts) {
     list_push_end(parts, fstr_t, "\"");
@@ -305,33 +331,41 @@ next:;
     list_push_end(parts, fstr_t, "\"");
 }
 
-static void stringify_array(list(json_value_t)* array, list(fstr_t)* parts) {
+static void stringify_array(list(json_value_t)* array, list(fstr_t)* parts, int indent) {
     list_push_end(parts, fstr_t, "[");
     bool first = true;
+    bool should_indent = (indent >= 0 && should_indent_array(array));
+    fstr_t comma = (indent >= 0 && !should_indent? ", ": ",");
     list_foreach(array, json_value_t, value) {
         if (!first)
-            list_push_end(parts, fstr_t, ",");
+            list_push_end(parts, fstr_t, comma);
         first = false;
-        stringify_value(value, parts);
+        if (should_indent)
+            add_indent(parts, indent + 1);
+        stringify_value(value, parts, indent + 1);
     }
+    if (should_indent)
+        add_indent(parts, indent);
     list_push_end(parts, fstr_t, "]");
 }
 
-static void stringify_object(dict(json_value_t)* object, list(fstr_t)* parts) {
+static void stringify_object(dict(json_value_t)* object, list(fstr_t)* parts, int indent) {
     list_push_end(parts, fstr_t, "{");
     bool first = true;
     dict_foreach(object, json_value_t, key, value) {
         if (!first)
             list_push_end(parts, fstr_t, ",");
         first = false;
+        add_indent(parts, indent + 1);
         stringify_string(key, parts);
-        list_push_end(parts, fstr_t, ":");
-        stringify_value(value, parts);
+        list_push_end(parts, fstr_t, indent >= 0? ": ": ":");
+        stringify_value(value, parts, indent + 1);
     }
+    add_indent(parts, indent);
     list_push_end(parts, fstr_t, "}");
 }
 
-static void stringify_value(json_value_t value, list(fstr_t)* parts) {
+static void stringify_value(json_value_t value, list(fstr_t)* parts, int indent) {
     switch (value.type) {
         case JSON_NULL:
             list_push_end(parts, fstr_t, "null");
@@ -349,17 +383,23 @@ static void stringify_value(json_value_t value, list(fstr_t)* parts) {
             stringify_string(value.string_value, parts);
             break;
         case JSON_ARRAY:
-            stringify_array(value.array_value, parts);
+            stringify_array(value.array_value, parts, indent);
             break;
         case JSON_OBJECT:
-            stringify_object(value.object_value, parts);
+            stringify_object(value.object_value, parts, indent);
             break;
     }
 }
 
 fstr_mem_t* json_stringify(json_value_t value) { sub_heap {
     list(fstr_t)* parts = new_list(fstr_t);
-    stringify_value(value, parts);
+    stringify_value(value, parts, INT_MIN);
+    return escape(fstr_implode(parts, ""));
+}}
+
+fstr_mem_t* json_stringify_pretty(json_value_t value) { sub_heap {
+    list(fstr_t)* parts = new_list(fstr_t);
+    stringify_value(value, parts, 0);
     return escape(fstr_implode(parts, ""));
 }}
 

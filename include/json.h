@@ -113,6 +113,9 @@ json_tree_t* json_parse(fstr_t str);
 /// Stringify a JSON tree structure.
 fstr_mem_t* json_stringify(json_value_t value);
 
+/// Stringify a JSON tree structure in a human-readable manner.
+fstr_mem_t* json_stringify_pretty(json_value_t value);
+
 void json_fail_missing_property(fstr_t prop_name);
 
 inline json_value_t json_new_object() {
