@@ -166,7 +166,7 @@ void rcd_self_test_exceptions() {
             reached = true;
             atest(e->eio_class == test1_eio);
             atest(e->eio_data == 0);
-        } catch_eio(test1, e, _) {
+        } catch_eio(test1, e) {
             atest(false);
         }
         atest(reached);
@@ -174,7 +174,7 @@ void rcd_self_test_exceptions() {
         bool reached = false;
         try {
             throw("test exception", exception_io);
-        } catch_eio(test1, e, _) {
+        } catch_eio(test1, e) {
             atest(false);
         } catch(exception_io, e) {
             reached = true;
@@ -187,11 +187,11 @@ void rcd_self_test_exceptions() {
         try {
             try {
                 throw_eio("test exception", test1);
-            } catch_eio(test2, e, _) {
+            } catch_eio(test2, e) {
                 atest(false);
             }
             atest(false);
-        } catch_eio(test1, e, _) {
+        } catch_eio(test1, e) {
             reached = true;
         }
         atest(reached);
@@ -203,14 +203,14 @@ void rcd_self_test_exceptions() {
             } finally {
                 atest(i == 0);
                 i = 1;
-            } catch_eio(test2, e, _) {
+            } catch_eio(test2, e) {
                 atest(false);
             }
             atest(false);
         } finally {
             atest(i == 1);
             i = 2;
-        } catch_eio(test1, e, _) {
+        } catch_eio(test1, e) {
             atest(i == 2);
             i = 3;
         }

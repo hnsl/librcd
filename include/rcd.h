@@ -183,6 +183,7 @@
 #define VA_NARGS_IMPL(_, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, N, ...) N
 #define VA_NARGS(...) VA_NARGS_IMPL(_, ##__VA_ARGS__, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 
+#define _SECOND_ARG(_, a, ...) a
 #define _ASSERT_EMPTY_IMPL(_)
 #define _ASSERT_EMPTY(...) _ASSERT_EMPTY_IMPL(_, ##__VA_ARGS__)
 #define GLUE_IMPL(a, b) a ## b
@@ -563,9 +564,9 @@ typedef struct __rcd_try_prop {
         LET(rcd_exception_t* exception_name = __rcd_try_prop.caught_exception)
 
 /// rcd-macro: Specifies a catch block for a specific eio class. Must follow a try, catch or finally block.
-#define catch_eio(class, exception_name, data) \
+#define catch_eio(class, exception_name, ... /* optional: data_name */) \
     _catch_labeled(exception_io, exception_name, GLUE(__rcd_catch_exit_, __COUNTER__), && (__rcd_try_prop.caught_exception->eio_class == class##_eio)) \
-        LET(class##_eio_t data = *(class##_eio_t*)(exception_name)->eio_data)
+        LET(class##_eio_t _SECOND_ARG(_, ##__VA_ARGS__, __rcd_eio) = *(class##_eio_t*)(exception_name)->eio_data)
 
 /// rcd-macro: Specifies an uninterruptible block. In this block join races
 /// and cancellations are suppressed and never thrown.
