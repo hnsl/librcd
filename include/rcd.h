@@ -597,20 +597,18 @@ typedef struct __rcd_try_prop {
 #define emitosis(class, data) _emitosis_internal(data, class##_eio, class##_eio_t)
 #define _emitosis_internal(data, name, eio_t) \
     for (void* __rcd_eio_type = name;; assert(false)) \
-    LET(lwt_heap_t* __rcd_eio = lwt_alloc_heap()) \
-    switch_heap(__rcd_eio) \
+    LET(lwt_heap_t* __rcd_eio_heap = lwt_alloc_heap()) \
+    switch_heap(__rcd_eio_heap) \
     LET(eio_t data = {0})
-
-#define _clone_ptr(ptr) ({typeof(*ptr)* p = lwt_alloc_new(sizeof(*ptr)); *p = *ptr; p;})
 
 /// rcd-macro: Throws a new exception from a emitosis block.
 #define throw_em(message, data) \
-    lwt_throw_new_exception(message, fstr(__FILE__), __LINE__, exception_io, __rcd_eio_type, _clone_ptr(&data), __rcd_eio, 0)
+    lwt_throw_new_exception(message, fstr(__FILE__), __LINE__, exception_io, __rcd_eio_type, cln(&data), __rcd_eio_heap, 0)
 
 /// rcd-macro: Throws a new exception from a emitosis block and forwards another
 /// existing exception.
 #define throw_em_fwd(message, data, fwd_exception) \
-    lwt_throw_new_exception(message, fstr(__FILE__), __LINE__, exception_io, __rcd_eio_type, _clone_ptr(&data), __rcd_eio, fwd_exception)
+    lwt_throw_new_exception(message, fstr(__FILE__), __LINE__, exception_io, __rcd_eio_type, cln(&data), __rcd_eio_heap, fwd_exception)
 
 /// rcd-macro: Defines a complex io exception class "<name>_eio". Example usage:
 ///
