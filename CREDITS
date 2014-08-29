@@ -14,7 +14,7 @@ D: rio & fstr contributions
 
 N: Simon Lindholm
 E: simon@jumpstarter.io
-D: generics, improved musl gen, various fixes
+D: eio, generics, improved musl gen, various fixes
 
 N: Daniel Lundqvist
 E: thorwald@jumpstarter.io
