@@ -2805,7 +2805,6 @@ void lwt_throw_new_exception(fstr_t message, fstr_t file, uint64_t line, rcd_exc
             exception_heap = custom_heap;
         }
     } else {
-        assert(eio_data == 0);
         if (fwd_exception != 0) {
             exception_heap = fwd_exception->exception_heap;
         } else {

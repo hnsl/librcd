@@ -583,6 +583,11 @@ typedef struct __rcd_try_prop {
 #define throw_fwd(message, exception_type, fwd_exception) \
     lwt_throw_new_exception(message, fstr(__FILE__), __LINE__, exception_type, 0, 0, 0, fwd_exception)
 
+#define throw_fwd_same(message, fwd_exception) ({ \
+    rcd_exception_t* _fwd_e = (fwd_exception); \
+    lwt_throw_new_exception(message, fstr(__FILE__), __LINE__, _fwd_e->type, _fwd_e->eio_class, _fwd_e->eio_data, 0, _fwd_e); \
+})
+
 /// rcd-macro: Throws an io exception of a custom class with no data fields.
 #define throw_eio(message, name) \
     throw_eio_##name(message, fstr(__FILE__), __LINE__, 0)
