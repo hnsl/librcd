@@ -3093,13 +3093,21 @@ static fstr_mem_t* lwt_get_exception_dump_inner(rcd_exception_t* exception, int3
     fstr_t indent_str = fss(fstr_alloc(indent));
     fstr_fill(indent_str, ' ');
     fstr_t at = (exception->file.len == 0 && exception->line == 0)? "[n/a]": concs("[", exception->file, ":", fss(fstr_from_int(exception->line, 10)), "]");
+    fstr_t extended_type_str = "";
     fstr_t type_str = "";
     if (exception->type == exception_io && exception->eio_class != 0) {
-        fstr_mem_t* (*describe_fn)(void* e) = exception->eio_class;
-        type_str = concs(indent_str, "data: ", fss(describe_fn(exception->eio_data)), "\n");
+        fstr_mem_t* (*describe_fn)(void*) = exception->eio_class;
+        fstr_t description = fss(describe_fn(exception->eio_data));
+        fstr_t extended_type;
+        if (fstr_divide(description, "; ", &extended_type, &description)) {
+            type_str = concs(indent_str, description, "\n");
+        } else {
+            extended_type = description;
+        }
+        extended_type_str = concs(" (", extended_type, ")");
     }
     fstr_mem_t* dump = conc(
-        indent_str, lwt_get_exception_type_str(exception->type), " type exception at ", at, "\n",
+        indent_str, lwt_get_exception_type_str(exception->type), extended_type_str, " type exception at ", at, "\n",
         type_str,
         indent_str, "message: ", exception->message, "\n",
         indent_str, "backtrace: ", (list_count(exception->backtrace_calls, void*) > 0? "": "not available"), "\n"
