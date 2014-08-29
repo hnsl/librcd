@@ -279,20 +279,10 @@ json_tree_t* json_parse(fstr_t str) { sub_heap {
     }
 }}
 
-static void add_indent(list(fstr_t)* parts, int indent) {
-    if (indent < 0)
-        return;
-    if (indent == 0) {
-        list_push_end(parts, fstr_t, "\n");
-        return;
-    }
-    int spaces = indent * INDENT_SIZE;
-    static const fstr_t indent_32 = "\n                                ";
-    for (int i = 0; i < spaces; i += 32) {
-        int to = MIN(i + 32, spaces);
-        fstr_t part = fstr_slice(indent_32, (i == 0? 0: 1), (to % 32) + 1);
-        list_push_end(parts, fstr_t, part);
-    }
+static inline void add_indent(list(fstr_t)* parts, int indent) {
+    // To avoid quadratic output size, cap indent to 20 spaces.
+    fstr_t ws = fstr_slice("\n                    ", 0, (indent * INDENT_SIZE) + 1);
+    list_push_end(parts, fstr_t, ws);
 }
 
 static bool should_indent_array(list(json_value_t)* array) {
@@ -352,16 +342,19 @@ static void stringify_array(list(json_value_t)* array, list(fstr_t)* parts, int 
 static void stringify_object(dict(json_value_t)* object, list(fstr_t)* parts, int indent) {
     list_push_end(parts, fstr_t, "{");
     bool first = true;
+    bool should_indent = (indent >= 0);
     dict_foreach(object, json_value_t, key, value) {
         if (!first)
             list_push_end(parts, fstr_t, ",");
         first = false;
-        add_indent(parts, indent + 1);
+        if (should_indent)
+            add_indent(parts, indent + 1);
         stringify_string(key, parts);
-        list_push_end(parts, fstr_t, indent >= 0? ": ": ":");
+        list_push_end(parts, fstr_t, should_indent? ": ": ":");
         stringify_value(value, parts, indent + 1);
     }
-    add_indent(parts, indent);
+    if (should_indent)
+        add_indent(parts, indent);
     list_push_end(parts, fstr_t, "}");
 }
 
