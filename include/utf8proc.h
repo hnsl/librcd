@@ -54,6 +54,42 @@
 #define SSIZE_MAX ((size_t)SIZE_MAX/2)
 #endif
 
+/// Flags being regarded by several functions in the library:
+/// NULLTERM:  The given UTF-8 input is NULL terminated.
+/// STABLE:    Unicode Versioning Stability has to be respected.
+/// COMPAT:    Compatiblity decomposition
+///            (i.e. formatting information is lost)
+/// COMPOSE:   Return a result with composed characters.
+/// DECOMPOSE: Return a result with decomposed characters.
+/// IGNORE:    Strip "default ignorable characters"
+/// REJECTNA:  Return an error, if the input contains unassigned
+///            code points.
+/// NLF2LS:    Indicating that NLF-sequences (LF, CRLF, CR, NEL) are
+///            representing a line break, and should be converted to the
+///            unicode character for line separation (LS).
+/// NLF2PS:    Indicating that NLF-sequences are representing a paragraph
+///            break, and should be converted to the unicode character for
+///            paragraph separation (PS).
+/// NLF2LF:    Indicating that the meaning of NLF-sequences is unknown.
+/// STRIPCC:   Strips and/or convers control characters.
+///            NLF-sequences are transformed into space, except if one of
+///            the NLF2LS/PS/LF options is given.
+///            HorizontalTab (HT) and FormFeed (FF) are treated as a
+///            NLF-sequence in this case.
+///            All other control characters are simply removed.
+/// CASEFOLD:  Performs unicode case folding, to be able to do a
+///            case-insensitive string comparison.
+/// CHARBOUND: Inserts 0xFF bytes at the beginning of each sequence which
+///            is representing a single grapheme cluster (see UAX#29).
+/// LUMP:      Lumps certain characters together
+///            (e.g. HYPHEN U+2010 and MINUS U+2212 to ASCII "-").
+///            (See lump.txt for details.)
+///            If NLF2LF is set, this includes a transformation of
+///            paragraph and line separators to ASCII line-feed (LF).
+/// STRIPMARK: Strips all character markings
+///            (non-spacing, spacing and enclosing) (i.e. accents)
+///            NOTE: this option works only with COMPOSE or DECOMPOSE
+#define UTF8PROC_STRIPMARK (1<<13)
 #define UTF8PROC_NULLTERM  (1<<0)
 #define UTF8PROC_STABLE    (1<<1)
 #define UTF8PROC_COMPAT    (1<<2)
@@ -68,59 +104,19 @@
 #define UTF8PROC_CASEFOLD  (1<<10)
 #define UTF8PROC_CHARBOUND (1<<11)
 #define UTF8PROC_LUMP      (1<<12)
-#define UTF8PROC_STRIPMARK (1<<13)
-/*
- *  Flags being regarded by several functions in the library:
- *  NULLTERM:  The given UTF-8 input is NULL terminated.
- *  STABLE:    Unicode Versioning Stability has to be respected.
- *  COMPAT:    Compatiblity decomposition
- *             (i.e. formatting information is lost)
- *  COMPOSE:   Return a result with composed characters.
- *  DECOMPOSE: Return a result with decomposed characters.
- *  IGNORE:    Strip "default ignorable characters"
- *  REJECTNA:  Return an error, if the input contains unassigned
- *             code points.
- *  NLF2LS:    Indicating that NLF-sequences (LF, CRLF, CR, NEL) are
- *             representing a line break, and should be converted to the
- *             unicode character for line separation (LS).
- *  NLF2PS:    Indicating that NLF-sequences are representing a paragraph
- *             break, and should be converted to the unicode character for
- *             paragraph separation (PS).
- *  NLF2LF:    Indicating that the meaning of NLF-sequences is unknown.
- *  STRIPCC:   Strips and/or convers control characters.
- *             NLF-sequences are transformed into space, except if one of
- *             the NLF2LS/PS/LF options is given.
- *             HorizontalTab (HT) and FormFeed (FF) are treated as a
- *             NLF-sequence in this case.
- *             All other control characters are simply removed.
- *  CASEFOLD:  Performs unicode case folding, to be able to do a
- *             case-insensitive string comparison.
- *  CHARBOUND: Inserts 0xFF bytes at the beginning of each sequence which
- *             is representing a single grapheme cluster (see UAX#29).
- *  LUMP:      Lumps certain characters together
- *             (e.g. HYPHEN U+2010 and MINUS U+2212 to ASCII "-").
- *             (See lump.txt for details.)
- *             If NLF2LF is set, this includes a transformation of
- *             paragraph and line separators to ASCII line-feed (LF).
- *  STRIPMARK: Strips all character markings
- *             (non-spacing, spacing and enclosing) (i.e. accents)
- *             NOTE: this option works only with COMPOSE or DECOMPOSE
- */
 
+/// Error codes being returned by almost all functions:
+/// ERROR_NOMEM:       Memory could not be allocated.
+/// ERROR_OVERFLOW:    The given string is too long to be processed.
+/// ERROR_INVALIDUTF8: The given string is not a legal UTF-8 string.
+/// ERROR_NOTASSIGNED: The REJECTNA flag was set,
+///                    and an unassigned code point was found.
+/// ERROR_INVALIDOPTS: Invalid options have been used.
+#define UTF8PROC_ERROR_INVALIDOPTS -5
 #define UTF8PROC_ERROR_NOMEM -1
 #define UTF8PROC_ERROR_OVERFLOW -2
 #define UTF8PROC_ERROR_INVALIDUTF8 -3
 #define UTF8PROC_ERROR_NOTASSIGNED -4
-#define UTF8PROC_ERROR_INVALIDOPTS -5
-/*
- *  Error codes being returned by almost all functions:
- *  ERROR_NOMEM:       Memory could not be allocated.
- *  ERROR_OVERFLOW:    The given string is too long to be processed.
- *  ERROR_INVALIDUTF8: The given string is not a legal UTF-8 string.
- *  ERROR_NOTASSIGNED: The REJECTNA flag was set,
- *                     and an unassigned code point was found.
- *  ERROR_INVALIDOPTS: Invalid options have been used.
- */
 
 typedef int16_t utf8proc_propval_t;
 typedef struct utf8proc_property_struct {
@@ -128,7 +124,7 @@ typedef struct utf8proc_property_struct {
   utf8proc_propval_t combining_class;
   utf8proc_propval_t bidi_class;
   utf8proc_propval_t decomp_type;
-  const int32_t *decomp_mapping;
+  const int32_t* decomp_mapping;
   unsigned bidi_mirrored:1;
   int32_t uppercase_mapping;
   int32_t lowercase_mapping;
@@ -139,7 +135,7 @@ typedef struct utf8proc_property_struct {
   unsigned ignorable:1;
   unsigned control_boundary:1;
   unsigned extend:1;
-  const int32_t *casefold_mapping;
+  const int32_t* casefold_mapping;
 } utf8proc_property_t;
 
 #define UTF8PROC_CATEGORY_LU  1
@@ -210,145 +206,117 @@ typedef struct utf8proc_property_struct {
 
 extern const int8_t utf8proc_utf8class[256];
 
-const char *utf8proc_version(void);
+const char* utf8proc_version(void);
 
-const char *utf8proc_errmsg(ssize_t errcode);
-/*
- *  Returns a static error string for the given error code.
- */
+/// Returns a static error string for the given error code.
+const char* utf8proc_errmsg(ssize_t errcode);
 
-ssize_t utf8proc_iterate(const uint8_t *str, ssize_t strlen, int32_t *dst);
-/*
- *  Reads a single char from the UTF-8 sequence being pointed to by 'str'.
- *  The maximum number of bytes read is 'strlen', unless 'strlen' is
- *  negative.
- *  If a valid unicode char could be read, it is stored in the variable
- *  being pointed to by 'dst', otherwise that variable will be set to -1.
- *  In case of success the number of bytes read is returned, otherwise a
- *  negative error code is returned.
- */
+/// Reads a single char from the UTF-8 sequence being pointed to by 'str'.
+/// The maximum number of bytes read is 'strlen', unless 'strlen' is
+/// negative.
+/// If a valid unicode char could be read, it is stored in the variable
+/// being pointed to by 'dst', otherwise that variable will be set to -1.
+/// In case of success the number of bytes read is returned, otherwise a
+/// negative error code is returned.
+ssize_t utf8proc_iterate(const uint8_t* str, ssize_t strlen, int32_t* dst);
 
+/// Returns 1, if the given unicode code-point is valid, otherwise 0.
 bool utf8proc_codepoint_valid(int32_t uc);
-/*
- *  Returns 1, if the given unicode code-point is valid, otherwise 0.
- */
 
-ssize_t utf8proc_encode_char(int32_t uc, uint8_t *dst);
-/*
- *  Encodes the unicode char with the code point 'uc' as an UTF-8 string in
- *  the byte array being pointed to by 'dst'. This array has to be at least
- *  4 bytes long.
- *  In case of success the number of bytes written is returned,
- *  otherwise 0.
- *  This function does not check if 'uc' is a valid unicode code point.
- */
+/// Encodes the unicode char with the code point 'uc' as an UTF-8 string in
+/// the byte array being pointed to by 'dst'. This array has to be at least
+/// 4 bytes long.
+/// In case of success the number of bytes written is returned,
+/// otherwise 0.
+/// This function does not check if 'uc' is a valid unicode code point.
+ssize_t utf8proc_encode_char(int32_t uc, uint8_t* dst);
 
-const utf8proc_property_t *utf8proc_get_property(int32_t uc);
-/*
- *  Returns a pointer to a (constant) struct containing information about
- *  the unicode char with the given code point 'uc'.
- *  If the character is not existent a pointer to a special struct is
- *  returned, where 'category' is a NULL pointer.
- *  WARNING: The parameter 'uc' has to be in the range of 0x0000 to
- *           0x10FFFF, otherwise the program might crash!
- */
+/// Returns a pointer to a (constant) struct containing information about
+/// the unicode char with the given code point 'uc'.
+/// If the character is not existent a pointer to a special struct is
+/// returned, where 'category' is a NULL pointer.
+/// WARNING: The parameter 'uc' has to be in the range of 0x0000 to
+///          0x10FFFF, otherwise the program might crash!
+const utf8proc_property_t* utf8proc_get_property(int32_t uc);
 
-ssize_t utf8proc_decompose_char(
-  int32_t uc, int32_t *dst, ssize_t bufsize,
-  int options, int *last_boundclass
-);
-/*
- *  Writes a decomposition of the unicode char 'uc' into the array being
- *  pointed to by 'dst'.
- *  Following flags in the 'options' field are regarded:
- *  REJECTNA:  an unassigned unicode code point leads to an error
- *  IGNORE:    "default ignorable" chars are stripped
- *  CASEFOLD:  unicode casefolding is applied
- *  COMPAT:    replace certain characters with their
- *             compatibility decomposition
- *  CHARBOUND: Inserts 0xFF bytes before each grapheme cluster
- *  LUMP:      lumps certain different characters together
- *  STRIPMARK: removes all character marks
- *  The pointer 'last_boundclass' has to point to an integer variable which
- *  is storing the last character boundary class, if the CHARBOUND option
- *  is used.
- *  In case of success the number of chars written is returned,
- *  in case of an error, a negative error code is returned.
- *  If the number of written chars would be bigger than 'bufsize',
- *  the buffer (up to 'bufsize') has inpredictable data, and the needed
- *  buffer size is returned.
- *  WARNING: The parameter 'uc' has to be in the range of 0x0000 to
- *           0x10FFFF, otherwise the program might crash!
- */
+/// Writes a decomposition of the unicode char 'uc' into the array being
+/// pointed to by 'dst'.
+/// Following flags in the 'options' field are regarded:
+/// REJECTNA:  an unassigned unicode code point leads to an error
+/// IGNORE:    "default ignorable" chars are stripped
+/// CASEFOLD:  unicode casefolding is applied
+/// COMPAT:    replace certain characters with their
+///            compatibility decomposition
+/// CHARBOUND: Inserts 0xFF bytes before each grapheme cluster
+/// LUMP:      lumps certain different characters together
+/// STRIPMARK: removes all character marks
+/// The pointer 'last_boundclass' has to point to an integer variable which
+/// is storing the last character boundary class, if the CHARBOUND option
+/// is used.
+/// In case of success the number of chars written is returned,
+/// in case of an error, a negative error code is returned.
+/// If the number of written chars would be bigger than 'bufsize',
+/// the buffer (up to 'bufsize') has inpredictable data, and the needed
+/// buffer size is returned.
+/// WARNING: The parameter 'uc' has to be in the range of 0x0000 to
+///          0x10FFFF, otherwise the program might crash!
+ssize_t utf8proc_decompose_char(int32_t uc, int32_t* dst, ssize_t bufsize, int options, int* last_boundclass);
 
-ssize_t utf8proc_decompose(
-  const uint8_t *str, ssize_t strlen,
-  int32_t *buffer, ssize_t bufsize, int options
-);
-/*
- *  Does the same as 'utf8proc_decompose_char', but acts on a whole UTF-8
- *  string, and orders the decomposed sequences correctly.
- *  If the NULLTERM flag in 'options' is set, processing will be stopped,
- *  when a NULL byte is encounted, otherwise 'strlen' bytes are processed.
- *  The result in form of unicode code points is written into the buffer
- *  being pointed to by 'buffer', having the length of 'bufsize' entries.
- *  In case of success the number of chars written is returned,
- *  in case of an error, a negative error code is returned.
- *  If the number of written chars would be bigger than 'bufsize',
- *  the buffer (up to 'bufsize') has inpredictable data, and the needed
- *  buffer size is returned.
- */
+/// Does the same as 'utf8proc_decompose_char', but acts on a whole UTF-8
+/// string, and orders the decomposed sequences correctly.
+/// If the NULLTERM flag in 'options' is set, processing will be stopped,
+/// when a NULL byte is encounted, otherwise 'strlen' bytes are processed.
+/// The result in form of unicode code points is written into the buffer
+/// being pointed to by 'buffer', having the length of 'bufsize' entries.
+/// In case of success the number of chars written is returned,
+/// in case of an error, a negative error code is returned.
+/// If the number of written chars would be bigger than 'bufsize',
+/// the buffer (up to 'bufsize') has inpredictable data, and the needed
+/// buffer size is returned.
+ssize_t utf8proc_decompose(const uint8_t* str, ssize_t strlen, int32_t* buffer, ssize_t bufsize, int options);
 
-ssize_t utf8proc_reencode(int32_t *buffer, ssize_t length, int options);
-/*
- *  Reencodes the sequence of unicode characters given by the pointer
- *  'buffer' and 'length' as UTF-8.
- *  The result is stored in the same memory area where the data is read.
- *  Following flags in the 'options' field are regarded:
- *  NLF2LS:  converts LF, CRLF, CR and NEL into LS
- *  NLF2PS:  converts LF, CRLF, CR and NEL into PS
- *  NLF2LF:  converts LF, CRLF, CR and NEL into LF
- *  STRIPCC: strips or converts all non-affected control characters
- *  COMPOSE: tries to combine decomposed characters into composite
- *           characters
- *  STABLE:  prohibits combining characters which would violate
- *           the unicode versioning stability
- *  In case of success the length of the resulting UTF-8 string is
- *  returned, otherwise a negative error code is returned.
- *  WARNING: The amount of free space being pointed to by 'buffer', has to
- *           exceed the amount of the input data by one byte, and the
- *           entries of the array pointed to by 'str' have to be in the
- *           range of 0x0000 to 0x10FFFF, otherwise the program might
- *           crash!
- */
+/// Reencodes the sequence of unicode characters given by the pointer
+/// 'buffer' and 'length' as UTF-8.
+/// The result is stored in the same memory area where the data is read.
+/// Following flags in the 'options' field are regarded:
+/// NLF2LS:  converts LF, CRLF, CR and NEL into LS
+/// NLF2PS:  converts LF, CRLF, CR and NEL into PS
+/// NLF2LF:  converts LF, CRLF, CR and NEL into LF
+/// STRIPCC: strips or converts all non-affected control characters
+/// COMPOSE: tries to combine decomposed characters into composite
+///          characters
+/// STABLE:  prohibits combining characters which would violate
+///          the unicode versioning stability
+/// In case of success the length of the resulting UTF-8 string is
+/// returned, otherwise a negative error code is returned.
+/// WARNING: The amount of free space being pointed to by 'buffer', has to
+///          exceed the amount of the input data by one byte, and the
+///          entries of the array pointed to by 'str' have to be in the
+///          range of 0x0000 to 0x10FFFF, otherwise the program might
+///          crash!
+ssize_t utf8proc_reencode(int32_t* buffer, ssize_t length, int options);
 
-ssize_t utf8proc_map(
-  const uint8_t *str, ssize_t strlen, uint8_t **dstptr, int options
-);
-/*
- *  Maps the given UTF-8 string being pointed to by 'str' to a new UTF-8
- *  string, which is allocated dynamically, and afterwards pointed to by
- *  the pointer being pointed to by 'dstptr'.
- *  If the NULLTERM flag in the 'options' field is set, the length is
- *  determined by a NULL terminator, otherwise the parameter 'strlen' is
- *  evaluated to determine the string length, but in any case the result
- *  will be NULL terminated (though it might contain NULL characters
- *  before). Other flags in the 'options' field are passed to the functions
- *  defined above, and regarded as described.
- *  In case of success the length of the new string is returned,
- *  otherwise a negative error code is returned.
- *  NOTICE: The memory of the new UTF-8 string will have been allocated with
- *          'malloc', and has theirfore to be freed with 'free'.
- */
+/// Maps the given UTF-8 string being pointed to by 'str' to a new UTF-8
+/// string, which is allocated dynamically, and afterwards pointed to by
+/// the pointer being pointed to by 'dstptr'.
+/// If the NULLTERM flag in the 'options' field is set, the length is
+/// determined by a NULL terminator, otherwise the parameter 'strlen' is
+/// evaluated to determine the string length, but in any case the result
+/// will be NULL terminated (though it might contain NULL characters
+/// before). Other flags in the 'options' field are passed to the functions
+/// defined above, and regarded as described.
+/// In case of success the length of the new string is returned,
+/// otherwise a negative error code is returned.
+/// NOTICE: The memory of the new UTF-8 string will have been allocated with
+///         'malloc', and has theirfore to be freed with 'free'.
+ssize_t utf8proc_map(const uint8_t* str, ssize_t strlen, uint8_t** dstptr, int options);
 
-uint8_t *utf8proc_NFD(const uint8_t *str);
-uint8_t *utf8proc_NFC(const uint8_t *str);
-uint8_t *utf8proc_NFKD(const uint8_t *str);
-uint8_t *utf8proc_NFKC(const uint8_t *str);
-/*
- *  Returns a pointer to newly allocated memory of a NFD, NFC, NFKD or NFKC
- *  normalized version of the null-terminated string 'str'.
- */
+/// Returns a pointer to newly allocated memory of a NFD, NFC, NFKD or NFKC
+/// normalized version of the null-terminated string 'str'.
+uint8_t* utf8proc_NFD(const uint8_t* str);
+uint8_t* utf8proc_NFC(const uint8_t* str);
+uint8_t* utf8proc_NFKD(const uint8_t* str);
+uint8_t* utf8proc_NFKC(const uint8_t* str);
 
 #endif
 
