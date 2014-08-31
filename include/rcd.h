@@ -797,17 +797,25 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
     rio_debug_chunks(err_tokens, LENGTHOF(err_tokens)); \
 })
 
+/// Prints a message involving numbers/pointers to stderr. Arguments are evaluated
+/// within a sub heap, and automatically converted to strings using 'STR'. Usage:
+///
+/// DPRINT("str ", num, ptr);
+#define DPRINT(...) ({ sub_heap { \
+    void* _dbg_str_mem_ptr = 0; \
+    rio_debug(concs(__VA_ARGS__, "\n")); \
+}})
+
+/// Prints a message involving numbers/pointers to stderr, without allocating
+/// heap memory during string conversions. Useful in low-level code. Usage:
+///
+/// DPRINT_RAW("str ", DBG_INT(num), " ", DBG_PTR(ptr));
 #define DPRINT_RAW(...) ({ \
     uint8_t _dbg_str_mem[PAGE_SIZE]; \
     uint8_t* _dbg_str_mem_ptr = _dbg_str_mem; \
     fstr_t _dbg_tokens[] = {__VA_ARGS__, "\n"}; \
     rio_debug_chunks(_dbg_tokens, LENGTHOF(_dbg_tokens)); \
 })
-
-#define DPRINT(...) ({ sub_heap { \
-    void* _dbg_str_mem_ptr = 0; \
-    rio_debug(fss(conc(__VA_ARGS__, "\n"))); \
-}})
 
 /// In debug mode, prints the given arguments to stderr using DPRINT. Otherwise,
 /// this expands to nothing; the given arguments are not evaluated.
@@ -822,6 +830,7 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
 /// Dumps message, data and stack trace of an exception using DBG.
 #define DBGE(e, ...) DBG(fss(lwt_get_exception_dump(e)), #__VA_ARGS__)
 
+/// Include a pointer as part of DPRINT_RAW output.
 #define DBG_PTR(ptr) ({ \
     fstr_t out; \
     if (_dbg_str_mem_ptr == 0) { \
@@ -834,6 +843,7 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
     out; \
 })
 
+/// Include an integer as part of DPRINT_RAW output.
 #define DBG_INT(integer) ({ \
     fstr_t out; \
     if (_dbg_str_mem_ptr == 0) { \
@@ -846,6 +856,7 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
     out; \
 })
 
+/// Include a boolean as part of DPRINT or DPRINT_RAW output,
 #define DBG_BOOL(val) (val? "true": "false")
 
 /// Like atest() but tests something that could happen but is improbable.
