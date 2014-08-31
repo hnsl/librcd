@@ -38,13 +38,6 @@
 #define true ((bool)1)
 #define false ((bool)0)
 
-#ifdef __cplusplus
-#define _Bool bool
-#undef bool
-#undef false
-#undef true
-#endif
-
 #define LENGTHOF(static_c_array) (sizeof(static_c_array) / sizeof(*static_c_array))
 #define MIN(x, y) ({typeof(x) _x = (x), _y = (y); _x < _y ? _x : _y;})
 #define MAX(x, y) ({typeof(x) _x = (x), _y = (y); _x > _y ? _x : _y;})

@@ -9,29 +9,6 @@
 
 #include "rcd.h"
 
-#define RIO_PACK(write_ptr, value) { \
-    *((typeof(value)*)(write_ptr)) = value; \
-    write_ptr += sizeof(value); \
-}
-
-#define RIO_PACK_MEMORY(write_ptr, fstr_expr) ({ \
-    fstr_t mem = fstr_expr; \
-    memcpy(write_ptr, mem.str, mem.len); \
-    write_ptr += mem.len; \
-})
-
-#define RIO_UNPACK(read_ptr, type) ({ \
-    type value = *((type*)(read_ptr)); \
-    read_ptr += sizeof(type); \
-    value; \
-})
-
-#define RIO_UNPACK_MEMORY(read_ptr, length) ({ \
-    void* ptr = read_ptr; \
-    read_ptr += length; \
-    ptr; \
-})
-
 #define RIO_O32_HOST_ORDER (o32_host_order.value)
 
 /// Swap a uint16_t value between native and network byte order.
@@ -921,7 +898,5 @@ list(fstr_t)* rio_ipc_main_injection_get_args(void (*main_fn_ptr)());
 /// Throws io exception for multiple reasons (unknown name, dig not installed
 /// on system, etc).
 list(uint32_t)* rio_resolve_host_ipv4_addr(fstr_t host_name);
-
-void rio_tcp_cork(rio_t*, bool) __attribute__((deprecated("this function has been superseded by rio_cork(), please refactor your code")));
 
 #endif	/* RIO_H */

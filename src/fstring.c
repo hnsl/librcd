@@ -62,8 +62,6 @@ const int CHARS_PER_LINE = 72;
 
 #pragma librcd
 
-// __thread void** __regex_dcl_rpattern;
-
 void _fstr_unpack_error() {
     throw("end of buffer reached when unpacking", exception_io);
 }

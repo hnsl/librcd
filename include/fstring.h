@@ -68,9 +68,6 @@
 #define FSTR_CONCAT_ANY(...) \
     fstr_concat((fstr_t[]) { FOR_EACH_ARG(_STR_COMMA, __VA_ARGS__) }, VA_NARGS(__VA_ARGS__), ((fstr_t){0}))
 
-#define FSTR_BUILD(fstr_builder) \
-    for (fixed_str_builder_t fstr_builder = {0}; fstr_builder.phase < 2; fstr_builder.phase++)
-
 /// Packs a variable of arbitrary type into an fstring by taking its address
 /// and size. Useful for serialization.
 #define FSTR_PACK(value) \
@@ -120,13 +117,6 @@ typedef struct fstr_cfifo_slicev {
     uint8_t len;
     fstr_t vec[2];
 } fstr_cfifo_slicev_t;
-
-typedef struct fixed_str_builder {
-    uint8_t phase;
-    size_t final_length;
-    uint8_t* write_ptr;
-    fstr_t* final_str;
-} fixed_str_builder_t;
 
 typedef struct fixed_str_buffer fsbuf_t;
 
