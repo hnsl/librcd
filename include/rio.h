@@ -34,15 +34,18 @@
 
 #define RIO_O32_HOST_ORDER (o32_host_order.value)
 
+/// Swap a uint16_t value between native and network byte order.
 #define RIO_NBO_SWAP16(a) ((uint16_t)(RIO_O32_HOST_ORDER != O32_LITTLE_ENDIAN? (uint16_t)(a): \
     (((uint16_t)(a) & 0x00FF) << 8) | (((uint16_t)(a) & 0xFF00) >> 8)))
 
+/// Swap a uint32_t value between native and network byte order.
 #define RIO_NBO_SWAP32(a) ((uint32_t)(RIO_O32_HOST_ORDER != O32_LITTLE_ENDIAN? (uint32_t)(a): \
 				    (((uint32_t)(a) & 0x000000FF) << 24) | \
 					(((uint32_t)(a) & 0x0000FF00) << 8) | \
 				    (((uint32_t)(a) & 0x00FF0000) >> 8) | \
 				    (((uint32_t)(a) & 0xFF000000) >> 24)))
 
+/// Swap a uint64_t value between native and network byte order.
 #define RIO_NBO_SWAP64(a) ((uint64_t)(RIO_O32_HOST_ORDER != O32_LITTLE_ENDIAN? (uint64_t)(a): \
     (((uint64_t)(a) & 0x00000000000000FFULL) << 56) | \
     (((uint64_t)(a) & 0x000000000000FF00ULL) << 40) | \
@@ -53,6 +56,7 @@
     (((uint64_t)(a) & 0x00FF000000000000ULL) >> 40) | \
     (((uint64_t)(a) & 0xFF00000000000000ULL) >> 56)))
 
+/// Swap a uint128_t value between native and network byte order.
 #define RIO_NBO_SWAP128(a) ((uint128_t)(RIO_O32_HOST_ORDER != O32_LITTLE_ENDIAN? (uint128_t)(a): \
     (uint128_t) RIO_NBO_SWAP64(a >> 64) | ((uint128_t) RIO_NBO_SWAP64(a & 0xFFFFFFFFFFFFFFFFULL) << 64)))
 
@@ -70,7 +74,7 @@
 /// One second in nanoseconds. (Nanosecond second)
 #define RIO_NS_SEC ((uint128_t)(1000ULL * 1000ULL * 1000ULL))
 
-/// One milisecond in nanoseconds. (Nanosecond milisecond)
+/// One millisecond in nanoseconds. (Nanosecond millisecond)
 #define RIO_NS_MS ((uint128_t)(1000ULL * 1000ULL))
 
 /// When calling rio_file_chtime, specify this to indicate time now.

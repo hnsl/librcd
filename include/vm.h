@@ -12,6 +12,10 @@
 #define VM_ALLOC_ALIGN_BITS (4)
 #define VM_ALLOC_ALIGN (1 << VM_ALLOC_ALIGN_BITS)
 
+/// Defines a custom free list-based allocation arena for values of a certain
+/// type. allocate_fn_name and free_fn_name will get declared as malloc and free
+/// functions; 'synchronized' should be set to true if the allocator needs to
+/// be thread safe.
 #define VM_DEFINE_FREE_LIST_ALLOCATOR_FN(type, allocate_fn_name, free_fn_name, synchronized) \
 static type* __##allocate_fn_name##_free_list(type* free_element) { \
     static void* free_list = 0; \

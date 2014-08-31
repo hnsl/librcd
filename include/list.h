@@ -103,7 +103,7 @@ void* memcpy(void *__restrict, const void *__restrict, size_t);
     } \
     existing_node == 0;
 
-/// TODO: dict pop start/end
+// TODO: dict pop start/end
 
 #define dict_push_start(set, type, fstr_key, e) ({ \
     __dict_xpend(set, type, fstr_key, e, DL_PREPEND(_abstract_dict->seq, __elem)) \

@@ -185,23 +185,29 @@
 #define _FOR_EACH_ARG_31(F, a, ...) F(a) _FOR_EACH_ARG_30(F, __VA_ARGS__)
 #define _FOR_EACH_ARG_32(F, a, ...) F(a) _FOR_EACH_ARG_31(F, __VA_ARGS__)
 
-/// Returns the number of arguments passed in.
-#define VA_NARGS_IMPL(_, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, N, ...) N
-#define VA_NARGS(...) VA_NARGS_IMPL(_, ##__VA_ARGS__, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
-
 #define _SECOND_ARG(_, a, ...) a
 #define _ASSERT_EMPTY_IMPL(_)
 #define _ASSERT_EMPTY(...) _ASSERT_EMPTY_IMPL(_, ##__VA_ARGS__)
 #define GLUE_IMPL(a, b) a ## b
+#define _VA_NARGS_IMPL(_, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, N, ...) N
+
+/// Returns the number of arguments passed in.
+#define VA_NARGS(...) _VA_NARGS_IMPL(_, ##__VA_ARGS__, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+
+/// Expands two preprocessor tokens and glues them together.
 #define GLUE(a, b) GLUE_IMPL(a, b)
 
 /// Repeats a macro once for each argument passed in.
 #define FOR_EACH_ARG(F, ...) GLUE(_FOR_EACH_ARG_, VA_NARGS(__VA_ARGS__))(F, __VA_ARGS__)
 
-/// Declare variable(s) within an inner scope. The empty condition proves to clang that the
-/// loop will be run at least once, avoiding warnings about missing returns after the block
-/// when there are unconditional returns within it.
-#define LET(...) for(__VA_ARGS__; ; ({break;}))
+/// Declare variable(s) within an inner scope.
+#define LET(...) \
+    /* (Implementation note: The empty condition + 'break' proves to clang that */ \
+    /* the loop will run exactly once, avoiding warnings about missing returns */ \
+    /* after the block when there are unconditional returns within it. The behavior */ \
+    /* of "break" within the for loop's update expression that we rely upon is */ \
+    /* clang-specific - gcc would rather try to break of an outer loop.) */ \
+    for(__VA_ARGS__; ; ({break;}))
 
 /// Hack for making clang not think a branch exists for the purpose of generating warnings.
 #define _CLANG_HIDE_CONTROL_FLOW(stmts) { \
@@ -269,6 +275,7 @@ void* alloca(size_t);
 /// Core stack helper adjusts the overflow_arg_area for split stacks support.
 void __morestack_adjust_overflow_arg_area(va_list va_list);
 
+/// Implementation of variadic function macros, with segm stack support.
 #define va_start(v,l) ({ \
     __builtin_va_start(v,l); \
     __morestack_adjust_overflow_arg_area(v); \
@@ -277,14 +284,15 @@ void __morestack_adjust_overflow_arg_area(va_list va_list);
 #define va_arg(v,l) __builtin_va_arg(v,l)
 #define va_copy(d,s) __builtin_va_copy(d,s)
 
-// Protection against null pointers at compile time.
+/// Protection against null pointers at compile time.
 #define NO_NULL_ARGS __attribute__((nonnull))
 #define NOT_NULL_ARGS(...) __attribute__((nonnull(__VA_ARGS__)))
 
-// Basic list/dict pseudo-type macros. Further defined in list.h.
+/// Basic list pseudo-type macro. Further defined in list.h.
 #define list(type) \
     struct __rcd_list__##type
 
+/// Basic dict pseudo-type macro. Further defined in list.h.
 #define dict(type) \
     struct __rcd_dict__##type
 
@@ -386,10 +394,7 @@ typedef struct rcd_sub_fiber rcd_sub_fiber_t;
 typedef int rcd_exception_type_t;
 
 typedef struct rcd_exception {
-    /// The type of exception thrown.
     rcd_exception_type_t type;
-    /*/// If type is a join race this is the fid of the server where join failed for or was canceled.
-    rcd_fid_t server_fid;*/
     fstr_t message;
     fstr_t file;
     size_t line;

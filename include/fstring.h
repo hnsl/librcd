@@ -9,15 +9,18 @@
 
 #include "rcd.h"
 
+/// A type representing a string of a fixed length.
 #define flstr(fixed_length) \
     struct __rcd_flstr__##fixed_length
 
+/// Converts a fixed-length string to an fstring.
 #define flstr_to_fstr(flstr_value, fixed_length) ({ \
     flstr(fixed_length)* typed_flstr = flstr_value; \
     size_t typed_fixed_length = fixed_length; \
     (fstr_t) {.len = typed_fixed_length, .str = (uint8_t*) typed_flstr}; \
 })
 
+/// Converts an fstring to a flstr. Throws a fatal exception if the length is wrong.
 #define flstr_from_fstr(fstr_value, fixed_length) ({ \
     fstr_t typed_fstr = fstr_value; \
     size_t typed_fixed_length = fixed_length; \
@@ -27,6 +30,7 @@
     typed_flstr; \
 })
 
+/// Allocates memory for a new flstr, without initializing it.
 #define new_flstr(size) ((flstr(size)*) lwt_alloc_new(size))
 
 /// Returns true if specified byte is an ASCII upper case character.
@@ -43,35 +47,43 @@
 /// ASCII upper case character, otherwise returns the same byte.
 #define fstr_ctolower(c) ({uint8_t _c = c; fstr_cisupper(_c)? (_c | 32): _c;})
 
-/// Defines a fstr that wraps a cstr in compile time.
+/// Defines a fstr that wraps a C string at compile time.
 #define FSTR_CSTR(str) fstr(str "\0")
 
+/// Allocates 'length' bytes of memory on the stack, and assigns it to an fstr.
+/// Using a non-constant length *is* possible, but pointless, because variable-
+/// length arrays in librcd are allocated on the heap.
 #define FSTR_STACK_DECL(name, length) \
     uint8_t _##name##_buf[length]; \
     name.len = length; \
     name.str = _##name##_buf
 
+/// Concatenates all arguments together into a single string.
 #define FSTR_CONCAT(...) \
     fstr_concat((fstr_t[]) {__VA_ARGS__}, VA_NARGS(__VA_ARGS__), ((fstr_t){0}))
 
 #define STR_COMMA(x) STR(x),
+
+/// Converts all arguments into strings with 'STR', and concatenates them.
 #define FSTR_CONCAT_ANY(...) \
     fstr_concat((fstr_t[]) { FOR_EACH_ARG(STR_COMMA, __VA_ARGS__) }, VA_NARGS(__VA_ARGS__), ((fstr_t){0}))
 
 #define FSTR_BUILD(fstr_builder) \
     for (fixed_str_builder_t fstr_builder = {0}; fstr_builder.phase < 2; fstr_builder.phase++)
 
+/// Packs a variable of arbitrary type into an fstring by taking its address
+/// and size. Useful for serialization.
 #define FSTR_PACK(value) \
     ((fstr_t) {sizeof(value), (void*) &value})
 
-#define FSTR_UNPACK(buffer, type) ({ \
-    fstr_t v_slice = fstr_slice(buffer, 0, sizeof(type)); \
-    buffer = fstr_sslice(buffer, v_slice.len, -1); \
-    if (v_slice.len < sizeof(type)) \
-        _fstr_unpack_error(); \
-    *((type*) v_slice.str); \
-})
+/// Unpacks and returns a variable of a given type from the front of a buffer,
+/// then advances the buffer's head by 'sizeof(type)'. Throws exception_io if
+/// not enough bytes are available.
+#define FSTR_UNPACK(buffer, type) (*(type*)FSTR_UNPACK_MEM(buffer, sizeof(type)))
 
+/// Returns 'memory_length' bytes from the front of a buffer, and advances the
+/// buffer's head by the same amount. Throws exception_io if not enough bytes
+/// are available.
 #define FSTR_UNPACK_MEM(buffer, memory_length) ({ \
     fstr_t v_slice = fstr_slice(buffer, 0, memory_length); \
     buffer = fstr_sslice(buffer, v_slice.len, -1); \
@@ -80,14 +92,17 @@
     v_slice; \
 })
 
+/// Same as FSTR_UNPACK_MEM, but returns an flstr.
 #define FSTR_UNPACK_FLSTR(buffer, constant_length) \
     flstr_from_fstr(FSTR_UNPACK_MEM(buffer, constant_length), constant_length)
 
+/// A structure representing allocated memory, to be used as a pointer type.
 typedef struct fstr_mem {
     size_t len;
     uint8_t str[];
 } fstr_mem_t;
 
+/// The fundamental string type, representing a slice of memory.
 typedef struct fstr {
     size_t len;
     uint8_t* str;
@@ -117,6 +132,7 @@ typedef struct fixed_str_buffer fsbuf_t;
 
 typedef int64_t (*fstr_cmp_fn_t)(const fstr_t, const fstr_t);
 
+// Predeclare list(fstr_t), see https://stackoverflow.com/q/16831605.
 list(fstr_t);
 
 void _fstr_unpack_error();
@@ -442,10 +458,11 @@ void fstr_reverse_buffer(fstr_t buffer);
 /// Returns a new string with the reversed content of the source string
 fstr_mem_t* fstr_reverse(const fstr_t source);
 
-/// Generic string conversion functions.
-/// __attribute__((overloadable)) is a clang extension, but is only used for
-/// convenience and reduced preprocessor output - in standard C11 _Generic
-/// could be used instead.
+/// Generic string conversion functions. Strings, integers, doubles and
+/// pointers are supported.
+/// (Note: for convenience, this uses __attribute__((overloadable)) which is a
+/// clang extension. In theory we could replace it by the standard C11 _Generic,
+/// but it would make preprocessor output quite bloated and hard to read.)
 static inline fstr_t __attribute__((overloadable)) STR(uint128_t x) { return fss(fstr_from_uint(x, 10)); }
 static inline fstr_t __attribute__((overloadable)) STR(uint64_t x) { return fss(fstr_from_uint(x, 10)); }
 static inline fstr_t __attribute__((overloadable)) STR(uint32_t x) { return fss(fstr_from_uint(x, 10)); }
@@ -469,6 +486,7 @@ static inline fstr_cfifo_t fstr_cfifo_init(fstr_t buffer) {
     };
 }
 
+/// Joins together an fstr_cfifo_slicev_t into a single string.
 static inline fstr_t fstr_cfifo_join(fstr_cfifo_slicev_t slices) {
     if (slices.len == 0)
         return fstr("");

@@ -22,10 +22,6 @@
 /// Created with RCD macros, do not use.
 typedef struct lwt_fiber_options {
     fstr_t name;
-    /* future extensions: */
-    /* size_t stack_size; */
-    /* size_t guard_size; */
-    /* bool disabled_stack_cleanup; */
 } lwt_fiber_options_t;
 
 typedef struct lwt_heap lwt_heap_t;
@@ -153,6 +149,8 @@ rcd_sub_fiber_t* lwt_wrap_sub_fiber(rcd_fid_t fiber_id);
 /// Creates a copy of the exception. Useful when passing an exception object
 /// (an exotic data structure) to lwt_throw_exception() or
 /// lwt_throw_new_exception() while still keeping a local reference to it.
+/// eio classes are not preserved, because it is not well defined how to
+/// copy their associated data.
 rcd_exception_t* lwt_copy_exception(rcd_exception_t* exception);
 
 /// Creates a new exception and throws it. The ownership of the forwarded

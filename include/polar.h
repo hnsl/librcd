@@ -7,9 +7,12 @@
 #ifndef POLAR_H
 #define	POLAR_H
 
+/// Like polar_error, but induces the exception string from the name of the
+/// error code variable.
 #define RCD_POLAR_E(r_code_expr, exception_type) \
     polar_error(r_code_expr, fstr(#r_code_expr), exception_type)
 
+/// Like RCD_POLAR_E, but only throws an exception if the code is non-zero.
 #define RCD_POLAR_ECE(r_code_expr, exception_type) ({ \
     int32_t __r_code = r_code_expr; \
     if (__r_code != 0) \
@@ -36,7 +39,7 @@ void polar_error(int32_t r_code, fstr_t expr_str, rcd_exception_type_t etype);
 /// If any value in tt is equal or less than 0 no timeout is configured.
 rcd_sub_fiber_t* polar_tls_client_open_ka(rio_in_addr4_t addr, fstr_t host_cname, rio_tcp_ka_t ka, rio_t** rio_h_out) NO_NULL_ARGS;
 
-/// Opens a tls client connection. You SHOULD supply the cannotical name of the
+/// Opens a tls client connection. You SHOULD supply the canonical name of the
 /// host you're connecting to (e.g. example.org) for certificate validation and
 /// host name extension. Leaving host_cname blank will disable active security.
 rcd_sub_fiber_t* polar_tls_client_open(rio_in_addr4_t addr, fstr_t host_cname, rio_t** rio_h_out) NO_NULL_ARGS;

@@ -73,13 +73,7 @@
     dict_replace(parent.object_value, json_value_t, prop, value); \
 })
 
-/// JSON type identifier. Basic types are:
-///  o Object
-///  o Array
-///  o String
-///  o Number
-///  o Boolean
-///  o Null
+/// JSON type identifier.
 typedef enum json_type {
     JSON_NULL = 0,
     JSON_BOOL = 1,
