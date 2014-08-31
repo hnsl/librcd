@@ -206,7 +206,10 @@ static void vm_panic() {
 }
 
 static void vm_mmap_failure(size_t len) {
-    DPRINT_ERRNO("librcd/vm: mmap(", DBG_INT(len), ") failed: ");
+    int32_t err = errno;
+    const char* errno_cstr = strerror(err);
+    fstr_t errno_str = (errno_cstr != 0? fstr_fix_cstr(errno_cstr): "");
+    DPRINT_RAW("librcd/vm: mmap(", DBG_INT(len), ") failed: [", DBG_INT(err), "] [", errno_str, "]");
     vm_panic();
 }
 

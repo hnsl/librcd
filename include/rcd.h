@@ -783,20 +783,6 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
 
 #define BREAKPT { __asm__ __volatile__("int $3"::: "memory"); }
 
-/// Light errno printer that avoids heap allocations and large stack
-/// allocations. Useful in low-end code.
-#define DPRINT_ERRNO(...) ({ \
-    uint8_t _dbg_str_mem[PAGE_SIZE]; \
-    uint8_t* _dbg_str_mem_ptr = _dbg_str_mem; \
-    int32_t err = errno; \
-    fstr_t err_num_buf; \
-    FSTR_STACK_DECL(err_num_buf, 10); \
-    fstr_t err_num = fstr_serial_uint(err_num_buf, err, 10); \
-    const char* errno_str = strerror(err); \
-    fstr_t err_tokens[] = {__VA_ARGS__, "[", err_num,"] [", (errno_str != 0? fstr_fix_cstr(errno_str): ""), "]\n"}; \
-    rio_debug_chunks(err_tokens, LENGTHOF(err_tokens)); \
-})
-
 /// Prints a message involving numbers/pointers to stderr. Arguments are evaluated
 /// within a sub heap, and automatically converted to strings using 'STR'. Usage:
 ///
