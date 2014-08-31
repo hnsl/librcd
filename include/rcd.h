@@ -772,10 +772,14 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
 #define atest(x) ((x) || (__assert_fail(fstr(#x), fstr(__FILE__), __LINE__, fstr(__func__)),0))
 
 #ifdef DEBUG
-#define assert(x) atest(x)
+#define _DEBUG_ONLY(x) x
 #else
-#define assert(x) ((void) 0)
+#define _DEBUG_ONLY(x) ((void)0)
 #endif
+
+/// In debug mode, aborts if the given expression evaluates to false. In release
+/// mode, this evaluates to nothing - the given expression is not evaluated.
+#define assert(x) _DEBUG_ONLY(atest(x))
 
 #define BREAKPT { __asm__ __volatile__("int $3"::: "memory"); }
 
@@ -805,16 +809,17 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
     rio_debug(fss(conc(__VA_ARGS__, "\n"))); \
 }})
 
-#ifdef DEBUG
-#define DBG_RAW(...) DPRINT_RAW(__VA_ARGS__)
-#define DBG(...) DPRINT(__VA_ARGS__)
-#define DBGFN(...) DPRINT("[", fstr(__func__), "] ", __VA_ARGS__)
-#else
-#define DBG_RAW(...)
-#define DBG(...)
-#define DBGFN(...)
-#endif
+/// In debug mode, prints the given arguments to stderr using DPRINT. Otherwise,
+/// this expands to nothing; the given arguments are not evaluated.
+#define DBG(...) _DEBUG_ONLY(DPRINT(__VA_ARGS__))
 
+/// Like DBG, but with DPRINT_RAW.
+#define DBG_RAW(...) _DEBUG_ONLY(DPRINT_RAW(__VA_ARGS__))
+
+/// Like DBG, but with the current function name prepended.
+#define DBGFN(...) DBG("[", fstr(__func__), "] ", #__VA_ARGS__)
+
+/// Dumps message, data and stack trace of an exception using DBG.
 #define DBGE(e, ...) DBG(fss(lwt_get_exception_dump(e)), #__VA_ARGS__)
 
 #define DBG_PTR(ptr) ({ \
