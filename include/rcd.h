@@ -308,6 +308,7 @@ static inline struct sf_t_name##__rcd_fid_t sf_t_name##_sf2id(sf(sf_t_name)* sf)
 #include "cassert.h"
 #include "utlist.h"
 #include "avl.h"
+#include "rb.h"
 #include "fstring.h"
 #include "list.h"
 #include "setjmp.h"
