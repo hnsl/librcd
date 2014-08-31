@@ -26,7 +26,9 @@ typedef struct lwt_fiber_options {
 
 typedef struct lwt_heap lwt_heap_t;
 
-typedef struct lwt_once { rcd_fid_t v; } lwt_once_t;
+typedef struct lwt_once {
+    rcd_fid_t v;
+} lwt_once_t;
 
 typedef enum lwt_fd_event {
     lwt_fd_event_read,
@@ -118,7 +120,8 @@ bool lwt_is_cancel_pending();
 void lwt_test_live_join_race();
 
 /// Immediately terminates the program with the specified status code.
-void lwt_exit(int status) __attribute__((noreturn));
+__attribute__((noreturn))
+void lwt_exit(int status);
 
 // These functions are used in RCD macros and should never be called directly.
 

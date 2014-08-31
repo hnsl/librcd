@@ -83,11 +83,11 @@
 /// When calling rio_file_chtime, specify this to omit change.
 #define RIO_FILE_CHTIME_OMIT ((uint128_t) -2)
 
-enum {
+typedef enum {
     O32_LITTLE_ENDIAN = 0x03020100ul,
     O32_BIG_ENDIAN = 0x00010203ul,
-    O32_PDP_ENDIAN = 0x01000302ul
-};
+    O32_PDP_ENDIAN = 0x01000302ul,
+} rio_o32_byte_order_t;
 
 static const union { unsigned char bytes[4]; uint32_t value; } o32_host_order = { { 0, 1, 2, 3 } };
 
@@ -125,7 +125,7 @@ typedef struct rio_proc rio_proc_t;
 typedef enum rio_epoll_event {
     rio_epoll_event_inlvl,
     rio_epoll_event_outlvl,
-    rio_epoll_event_hup
+    rio_epoll_event_hup,
 } rio_epoll_event_t;
 
 /// Abstract rio class interface.

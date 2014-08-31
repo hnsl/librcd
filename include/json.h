@@ -59,7 +59,7 @@
             dict_read(__value.object_value, json_value_t, __path[__i]): 0); \
         __value = (__next_value == 0? json_null_v: *__next_value); \
         if (json_is_null(__value)) \
-            json_fail_missing_property(__path[__i]); \
+            _json_fail_missing_property(__path[__i]); \
     } \
     __value; \
 })
@@ -129,60 +129,60 @@ fstr_mem_t* json_stringify_pretty(json_value_t value);
 /// Serializes a JSON type to a human readable string.
 fstr_t json_serial_type(json_type_t type);
 
-void json_fail_invalid_type(json_type_t expected_type, json_type_t got_type);
+void _json_fail_invalid_type(json_type_t expected_type, json_type_t got_type);
 
-void json_fail_missing_property(fstr_t prop_name);
+void _json_fail_missing_property(fstr_t prop_name);
 
 static inline fstr_t __attribute__((overloadable)) STR(json_value_t x) { return fss(json_stringify(x)); }
 static inline fstr_t __attribute__((overloadable)) STR(json_type_t x) { return json_serial_type(x); }
 
-inline json_value_t json_new_object() {
+static inline json_value_t json_new_object() {
     return json_object_v(new_dict(json_value_t));
 }
 
 /// Create a new object and assign it as a property of another object.
-inline json_value_t json_new_object_in(json_value_t parent, fstr_t key) {
+static inline json_value_t json_new_object_in(json_value_t parent, fstr_t key) {
     json_value_t obj = json_new_object();
     JSON_SET(parent, key, obj);
     return obj;
 }
 
-inline void json_type_expect(json_value_t value, json_type_t expected_type) {
+static inline void _json_type_expect(json_value_t value, json_type_t expected_type) {
     if (value.type != expected_type)
-        json_fail_invalid_type(expected_type, value.type);
+        _json_fail_invalid_type(expected_type, value.type);
 }
 
 /// Returns a number from a JSON value, throwing exception_io if the type is wrong.
-inline double json_get_number(json_value_t value) {
-    json_type_expect(value, JSON_NUMBER);
+static inline double json_get_number(json_value_t value) {
+    _json_type_expect(value, JSON_NUMBER);
     return value.number_value;
 }
 
 /// Returns a string from a JSON value, throwing exception_io if the type is wrong.
-inline fstr_t json_get_string(json_value_t value) {
-    json_type_expect(value, JSON_STRING);
+static inline fstr_t json_get_string(json_value_t value) {
+    _json_type_expect(value, JSON_STRING);
     return value.string_value;
 }
 
 /// Returns a boolean from a JSON value, throwing exception_io if the type is wrong.
-inline bool json_get_bool(json_value_t value) {
-    json_type_expect(value, JSON_BOOL);
+static inline bool json_get_bool(json_value_t value) {
+    _json_type_expect(value, JSON_BOOL);
     return value.bool_value;
 }
 
 /// Returns an list (array) from a JSON value, throwing exception_io if the type is wrong.
-inline list(json_value_t)* json_get_array(json_value_t value) {
-    json_type_expect(value, JSON_ARRAY);
+static inline list(json_value_t)* json_get_array(json_value_t value) {
+    _json_type_expect(value, JSON_ARRAY);
     return value.array_value;
 }
 
 /// Returns a dict (object) from a JSON value, throwing exception_io if the type is wrong.
-inline dict(json_value_t)* json_get_object(json_value_t value) {
-    json_type_expect(value, JSON_OBJECT);
+static inline dict(json_value_t)* json_get_object(json_value_t value) {
+    _json_type_expect(value, JSON_OBJECT);
     return value.object_value;
 }
 
-inline bool json_is_null(json_value_t value) {
+static inline bool json_is_null(json_value_t value) {
     return value.type == JSON_NULL;
 }
 

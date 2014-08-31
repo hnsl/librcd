@@ -413,7 +413,7 @@ fstr_t json_serial_type(json_type_t type) {
     }}
 }
 
-void json_fail_invalid_type(json_type_t expected_type, json_type_t got_type) {
+void _json_fail_invalid_type(json_type_t expected_type, json_type_t got_type) {
     emitosis(json_type, jd) {
         jd.expected = expected_type;
         jd.got = got_type;
@@ -421,7 +421,7 @@ void json_fail_invalid_type(json_type_t expected_type, json_type_t got_type) {
     }
 }
 
-void json_fail_missing_property(fstr_t prop_name) {
+void _json_fail_missing_property(fstr_t prop_name) {
     emitosis(json_lookup, jd) {
         jd.key = fsc(prop_name);
         throw_em(concs("missing json property: [", prop_name, "]"), jd);

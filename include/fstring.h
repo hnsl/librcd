@@ -62,11 +62,11 @@
 #define FSTR_CONCAT(...) \
     fstr_concat((fstr_t[]) {__VA_ARGS__}, VA_NARGS(__VA_ARGS__), ((fstr_t){0}))
 
-#define STR_COMMA(x) STR(x),
+#define _STR_COMMA(x) STR(x),
 
 /// Converts all arguments into strings with 'STR', and concatenates them.
 #define FSTR_CONCAT_ANY(...) \
-    fstr_concat((fstr_t[]) { FOR_EACH_ARG(STR_COMMA, __VA_ARGS__) }, VA_NARGS(__VA_ARGS__), ((fstr_t){0}))
+    fstr_concat((fstr_t[]) { FOR_EACH_ARG(_STR_COMMA, __VA_ARGS__) }, VA_NARGS(__VA_ARGS__), ((fstr_t){0}))
 
 #define FSTR_BUILD(fstr_builder) \
     for (fixed_str_builder_t fstr_builder = {0}; fstr_builder.phase < 2; fstr_builder.phase++)
@@ -152,7 +152,7 @@ fstr_t* fstr(char* c_string);
 uint128_t fstr_pphash(char* c_string);
 
 /// Returns the fixed string representation of the given memory.
-inline static fstr_t fstr_str(fstr_mem_t* fstr_mem) {
+static inline fstr_t fstr_str(fstr_mem_t* fstr_mem) {
     return (fstr_t) {.len = fstr_mem->len, .str = fstr_mem->str};
 }
 
@@ -463,19 +463,19 @@ fstr_mem_t* fstr_reverse(const fstr_t source);
 /// (Note: for convenience, this uses __attribute__((overloadable)) which is a
 /// clang extension. In theory we could replace it by the standard C11 _Generic,
 /// but it would make preprocessor output quite bloated and hard to read.)
-static inline fstr_t __attribute__((overloadable)) STR(uint128_t x) { return fss(fstr_from_uint(x, 10)); }
-static inline fstr_t __attribute__((overloadable)) STR(uint64_t x) { return fss(fstr_from_uint(x, 10)); }
-static inline fstr_t __attribute__((overloadable)) STR(uint32_t x) { return fss(fstr_from_uint(x, 10)); }
-static inline fstr_t __attribute__((overloadable)) STR(uint16_t x) { return fss(fstr_from_uint(x, 10)); }
-static inline fstr_t __attribute__((overloadable)) STR(uint8_t x) { return fss(fstr_from_uint(x, 10)); }
-static inline fstr_t __attribute__((overloadable)) STR(int128_t x) { return fss(fstr_from_int(x, 10)); }
-static inline fstr_t __attribute__((overloadable)) STR(int64_t x) { return fss(fstr_from_int(x, 10)); }
-static inline fstr_t __attribute__((overloadable)) STR(int32_t x) { return fss(fstr_from_int(x, 10)); }
-static inline fstr_t __attribute__((overloadable)) STR(int16_t x) { return fss(fstr_from_int(x, 10)); }
-static inline fstr_t __attribute__((overloadable)) STR(int8_t x) { return fss(fstr_from_int(x, 10)); }
-static inline fstr_t __attribute__((overloadable)) STR(double x) { return fss(fstr_from_double(x)); }
-static inline fstr_t __attribute__((overloadable)) STR(void* x) { return fss(fstr_hex_from_ptr(x)); }
-static inline fstr_t __attribute__((overloadable)) STR(fstr_t x) { return x; }
+__attribute__((overloadable)) static inline fstr_t STR(uint128_t x) { return fss(fstr_from_uint(x, 10)); }
+__attribute__((overloadable)) static inline fstr_t STR(uint64_t x) { return fss(fstr_from_uint(x, 10)); }
+__attribute__((overloadable)) static inline fstr_t STR(uint32_t x) { return fss(fstr_from_uint(x, 10)); }
+__attribute__((overloadable)) static inline fstr_t STR(uint16_t x) { return fss(fstr_from_uint(x, 10)); }
+__attribute__((overloadable)) static inline fstr_t STR(uint8_t x) { return fss(fstr_from_uint(x, 10)); }
+__attribute__((overloadable)) static inline fstr_t STR(int128_t x) { return fss(fstr_from_int(x, 10)); }
+__attribute__((overloadable)) static inline fstr_t STR(int64_t x) { return fss(fstr_from_int(x, 10)); }
+__attribute__((overloadable)) static inline fstr_t STR(int32_t x) { return fss(fstr_from_int(x, 10)); }
+__attribute__((overloadable)) static inline fstr_t STR(int16_t x) { return fss(fstr_from_int(x, 10)); }
+__attribute__((overloadable)) static inline fstr_t STR(int8_t x) { return fss(fstr_from_int(x, 10)); }
+__attribute__((overloadable)) static inline fstr_t STR(double x) { return fss(fstr_from_double(x)); }
+__attribute__((overloadable)) static inline fstr_t STR(void* x) { return fss(fstr_hex_from_ptr(x)); }
+__attribute__((overloadable)) static inline fstr_t STR(fstr_t x) { return x; }
 
 /// Creates a new fixed string circular fifo buffer.
 static inline fstr_cfifo_t fstr_cfifo_init(fstr_t buffer) {

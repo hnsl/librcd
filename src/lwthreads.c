@@ -734,7 +734,8 @@ static void lwt_scheduler_fiber_wake_join_race_raw(lwt_fiber_t* fiber) {
     }
 }
 
-static __attribute__((noreturn)) void lwt_throw_cancel_exception(lwt_fiber_t* fiber) {
+__attribute__((noreturn))
+static void lwt_throw_cancel_exception(lwt_fiber_t* fiber) {
     rcd_exception_t* src_cancel_e = fiber->ctrl.canceled;
     fiber->ctrl.canceled = 0;
     if (src_cancel_e != 0) {
@@ -749,12 +750,14 @@ static __attribute__((noreturn)) void lwt_throw_cancel_exception(lwt_fiber_t* fi
     lwt_throw_new_exception("fiber canceled", "", 0, exception_canceled, 0, 0, 0, src_cancel_e);
 }
 
-static __attribute__((noreturn)) void lwt_throw_join_race_exception(lwt_fiber_t* fiber) {
+__attribute__((noreturn))
+static void lwt_throw_join_race_exception(lwt_fiber_t* fiber) {
     fiber->ctrl.join_race = false;
     lwt_throw_new_exception("fiber got join race exception", "", 0, exception_join_race, 0, 0, 0, 0);
 }
 
-static __attribute__((noreturn)) void lwt_throw_no_such_fiber_exception() {
+__attribute__((noreturn))
+static void lwt_throw_no_such_fiber_exception() {
     lwt_throw_new_exception("uninterruptible join failed: no such fiber", "", 0, exception_no_such_fiber, 0, 0, 0, 0);
 }
 

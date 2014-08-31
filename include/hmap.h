@@ -291,7 +291,7 @@ static inline void hmap_write_kv(const hmap_cfg_t cfg, hmap_slot_t* dst_slot, vo
 /// Returns the slot where the key should be inserted if the key is not found.
 /// If may_exist is false the function will assume that the key is not already
 /// added to the list and be optimized to only find the right empty slot.
-static inline hmap_lookup_t inline hmap_lookup(hmap_t* hm, const hmap_cfg_t cfg, void* key, bool may_exist) {
+static inline hmap_lookup_t hmap_lookup(hmap_t* hm, const hmap_cfg_t cfg, void* key, bool may_exist) {
     // Calculate the hash.
     uint64_t hash = (cfg.key_hash_fn == 0? hmap_murmurhash_64a(key, cfg.key_len, hm->salt): cfg.key_hash_fn(key, hm->salt));
     // Transform vector from hash-space into pointer-space.

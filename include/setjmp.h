@@ -12,9 +12,10 @@ typedef struct {
     uint64_t _[0x8];
 } jmp_buf[1];
 
-/// Declaring setjmp/longjmp.
 int setjmp(jmp_buf buf);
-void longjmp(jmp_buf buf, int setjmp_r) __attribute__((noreturn));
+
+__attribute__((noreturn))
+void longjmp(jmp_buf buf, int setjmp_r);
 
 /// Librcd does not support a signal storing jmp buffer concept.
 typedef jmp_buf sigjmp_buf;

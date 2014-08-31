@@ -89,38 +89,33 @@ void vm_static_free(void** free_list_top, int8_t* sync_lock, void* element);
 /// undefined behavior will occur and probably trigger a fatal exception.
 typedef void (*vm_destructor_t)(void*);
 
-__inline static bool vm_is_page_aligned(uintptr_t ptr) __attribute__((const, always_inline));
-
-__inline static bool vm_is_page_aligned(uintptr_t ptr) {
+__attribute__((const, always_inline))
+static inline bool vm_is_page_aligned(uintptr_t ptr) {
     return (ptr % PAGE_SIZE) == 0;
 }
 
-__inline static uint64_t vm_align_floor(uint64_t value, uint64_t align) __attribute__((const, always_inline));
-
-__inline static uint64_t vm_align_floor(uint64_t value, uint64_t align) {
+__attribute__((const, always_inline))
+static inline uint64_t vm_align_floor(uint64_t value, uint64_t align) {
     return value - (value % align);
 }
 
-__inline static uint64_t vm_align_ceil(uint64_t value, uint64_t align) __attribute__((const, always_inline));
-
-__inline static uint64_t vm_align_ceil(uint64_t value, uint64_t align) {
+__attribute__((const, always_inline))
+static inline uint64_t vm_align_ceil(uint64_t value, uint64_t align) {
     return vm_align_floor(value + align - 1, align);
-} __attribute__((const))
+}
 
-__inline static size_t vm_page_align_floor(size_t value) __attribute__((const, always_inline));
-
-__inline static size_t vm_page_align_floor(size_t value) {
+__attribute__((const, always_inline))
+static inline size_t vm_page_align_floor(size_t value) {
     return vm_align_floor(value, PAGE_SIZE);
 }
-__inline static size_t vm_page_align_ceil(size_t value) __attribute__((const, always_inline));
 
-__inline static size_t vm_page_align_ceil(size_t value) {
+__attribute__((const, always_inline))
+static inline size_t vm_page_align_ceil(size_t value) {
     return vm_align_ceil(value, PAGE_SIZE);
 }
 
-__inline static bool vm_mem_intersects(void* range1_start_ptr, size_t range1_len, void* range2_start_ptr, size_t range2_len) __attribute__((const, always_inline));
-
-__inline static bool vm_mem_intersects(void* range1_start_ptr, size_t range1_len, void* range2_start_ptr, size_t range2_len) {
+__attribute__((const, always_inline))
+static inline bool vm_mem_intersects(void* range1_start_ptr, size_t range1_len, void* range2_start_ptr, size_t range2_len) {
     uintptr_t range1_start = (uintptr_t) range1_start_ptr, range2_start = (uintptr_t) range2_start_ptr;
     return (range1_start <= range2_start && (range1_start + range1_len - 1) >= range2_start)
     || ((range2_start <= range1_start) && (range2_start + range2_len - 1) >= range1_start);
