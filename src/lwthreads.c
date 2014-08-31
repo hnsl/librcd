@@ -1081,21 +1081,23 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
                 // This is not the first dynamic stack allocation in the frame.
                 assert(fiber->stack_alloc_stack != 0);
                 total_length = lwt_stack_alloc_t_size + alloc_size;
-                stack_alloc = vm_mmap_reserve(total_length, 0);
+                void* stack_alloc_ptr = vm_mmap_reserve(total_length, 0);
+                stack_alloc = stack_alloc_ptr;
                 stack_alloc->redirected_frame_ptr = 0;
-                phys_thread->stack_pinj_jmp_buf.rax = (uint64_t) &stack_alloc->mem[0];
+                phys_thread->stack_pinj_jmp_buf.rax = (uint64_t) (stack_alloc_ptr + lwt_stack_alloc_t_size);
             } else {
                 // This is the first dynamic stack allocation in the frame.
                 // Allocate 2 extra qwords for a virtual frame and redirect return pointer to __releasestack_free_stack_space.
                 // Redirect frame pointer to the virtual frame on the first stack allocation.
                 total_length = lwt_stack_alloc_t_size + 0x10 + alloc_size;
-                stack_alloc = vm_mmap_reserve(total_length, 0);
+                void* stack_alloc_ptr = vm_mmap_reserve(total_length, 0);
+                stack_alloc = stack_alloc_ptr;
                 stack_alloc->redirected_frame_ptr = rbp_1;
                 stack_alloc->mem[0] = rbp_1[0];
                 stack_alloc->mem[1] = rbp_1[1];
                 rbp_1[0] = (uint64_t) &stack_alloc->mem[0];
                 rbp_1[1] = (uint64_t) __releasestack_free_stack_space;
-                phys_thread->stack_pinj_jmp_buf.rax = (uint64_t) &stack_alloc->mem[2];
+                phys_thread->stack_pinj_jmp_buf.rax = (uint64_t) (stack_alloc_ptr + lwt_stack_alloc_t_size + 0x10);
             }
             // Initialize the stack allocation and add it to the stack alloc stack.
             stack_alloc->len = total_length;
