@@ -15,5 +15,6 @@ nbproject
 .dep.inc
 build
 dist
+docs/*.h.html
 Make*
 .last_build

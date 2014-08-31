@@ -1,0 +1,32 @@
+body {
+    font: 13px/1.4 sans-serif;
+}
+
+a.source {
+    float: right;
+    font-size: 85%;
+    border-left: 1px solid #888;
+    padding-left: 2px;
+    color: #888;
+}
+
+.def {
+    border-top: 1px solid #ccc;
+    background: none repeat scroll 0 0 #f0f0f0;
+    padding: 0.2em 0.5em;
+    font-family: monospace;
+    white-space: pre-wrap;
+}
+
+.block {
+    margin: 1em;
+}
+
+.doc {
+    margin: 0.5em 2em 0.5em 1em;
+}
+
+pre {
+    padding-left: 1em;
+    background-color: #e5edf4;
+}
