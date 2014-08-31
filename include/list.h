@@ -34,8 +34,6 @@ typedef struct rcd_abstract_dict {
     size_t length;
 } rcd_abstract_dict_t;
 
-void* memcpy(void *__restrict, const void *__restrict, size_t);
-
 #define list_count(set, type) ({ \
     list(type)* __typed_set = set; \
     ((rcd_abstract_list_t*) __typed_set)->length; \

@@ -265,6 +265,8 @@ typedef unsigned long uintmax_t;
 void* alloca(size_t);
 #define alloca __builtin_alloca
 
+void* memcpy(void *__restrict, const void *__restrict, size_t);
+
 /// Core stack helper adjusts the overflow_arg_area for split stacks support.
 void __morestack_adjust_overflow_arg_area(va_list va_list);
 
