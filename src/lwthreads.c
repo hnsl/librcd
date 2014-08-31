@@ -241,7 +241,7 @@ typedef struct lwt_ifc_fn_queue {
         struct lwt_ifc_client* last;
     } waiting_clients;
     /// Indexed in server_fiber->ifc_fn_queues if server_fiber is still alive.
-    avltree_node_t avl_node;
+    rbtree_node_t rb_node;
 } lwt_ifc_fn_queue_t;
 
 typedef struct lwt_start_args {
@@ -314,7 +314,7 @@ typedef struct lwt_fiber {
     /// Static memory used for enqueuing the fiber as execution blocked.
     exec_blocked_fiber_t exec_blocked;
     /// ifc fn queues for this server.
-    avltree_t ifc_fn_queues;
+    rbtree_t ifc_fn_queues;
     /// If the fiber is deferred accepting, this is its ifc server.
     lwt_ifc_server_t* defer_ifc_server;
     /// If the fiber is deferred and defer_ifc_server is 0, this is the specific fiber it is waiting for or 0.
@@ -517,10 +517,10 @@ static int32_t lwt_sigtkill_thread(int32_t tid, int32_t signal, union sigval val
     return rt_tgsigqueueinfo(pid, tid, signal, &uinfo);
 }
 
-static int lwt_cmp_ifc_fn_queues(const avltree_node_t* node1, const avltree_node_t* node2) {
-    lwt_ifc_fn_queue_t* ifc_fn_queue1 = AVLTREE_NODE2ELEM(lwt_ifc_fn_queue_t, avl_node, node1);
-    lwt_ifc_fn_queue_t* ifc_fn_queue2 = AVLTREE_NODE2ELEM(lwt_ifc_fn_queue_t, avl_node, node2);
-    return AVLTREE_CMP_V(ifc_fn_queue1->fn_ptr, ifc_fn_queue2->fn_ptr, 0);
+static int lwt_cmp_ifc_fn_queues(const rbtree_node_t* node1, const rbtree_node_t* node2) {
+    lwt_ifc_fn_queue_t* ifc_fn_queue1 = RBTREE_NODE2ELEM(lwt_ifc_fn_queue_t, rb_node, node1);
+    lwt_ifc_fn_queue_t* ifc_fn_queue2 = RBTREE_NODE2ELEM(lwt_ifc_fn_queue_t, rb_node, node2);
+    return RBTREE_CMP_V(ifc_fn_queue1->fn_ptr, ifc_fn_queue2->fn_ptr, 0);
 }
 
 static void lwt_fiber_heap_destructor(void* arg_ptr) {
@@ -1343,8 +1343,8 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
             } LWT_SYS_SPINLOCK_UNLOCK(&shared_fiber_mem.rwlock);
             // The fiber is no longer reachable by any calls as it doesn't exist in the global index.
             LWT_SYS_SPINLOCK_WLOCK(&shared_fiber_mem.rwlock); {
-                for (lwt_ifc_fn_queue_t* ifc_fn_queue = AVLTREE_NODE2ELEM(lwt_ifc_fn_queue_t, avl_node, avltree_first(&fiber->ifc_fn_queues))
-                ; ifc_fn_queue != 0; ifc_fn_queue = AVLTREE_NODE2ELEM(lwt_ifc_fn_queue_t, avl_node, avltree_next(&ifc_fn_queue->avl_node))) {
+                for (lwt_ifc_fn_queue_t* ifc_fn_queue = RBTREE_NODE2ELEM(lwt_ifc_fn_queue_t, rb_node, rbtree_first(&fiber->ifc_fn_queues))
+                ; ifc_fn_queue != 0; ifc_fn_queue = RBTREE_NODE2ELEM(lwt_ifc_fn_queue_t, rb_node, rbtree_next(&ifc_fn_queue->rb_node))) {
                     // There can be no ifc server as the accept loop should have free'd it, however there may still be waiting clients. Trigger join race in all of them.
                     assert(ifc_fn_queue->ifc_server_ref_count == 0);
                     for (lwt_ifc_client_t* client = ifc_fn_queue->waiting_clients.first; client != 0; client = client->next) {
@@ -2043,7 +2043,7 @@ rcd_fid_t __lwt_fiber_stack_push_mitosis() {
     new_fiber->stack_alloc_stack = 0;
     new_fiber->current_stacklet = 0;
     new_fiber->current_heap = new_heap;
-    avltree_init(&new_fiber->ifc_fn_queues, lwt_cmp_ifc_fn_queues, true);
+    rbtree_init(&new_fiber->ifc_fn_queues, lwt_cmp_ifc_fn_queues);
     new_fiber->defer_wait_fid = 0;
     new_fiber->defer_wait_fd = -1;
     LWT_SYS_SPINLOCK_WLOCK(&shared_fiber_mem.rwlock); {
@@ -2097,7 +2097,7 @@ void __lwt_fiber_stack_pop_mitosis_and_abort(uint8_t* _rcd_mitosis_used) {
 
 static lwt_ifc_fn_queue_t* ref_ifc_fn_queue(lwt_fiber_t* server_fiber, void* ifc_fn_ptr) {
     assert(ATOMIC_RWLOCK_IS_WLOCKED(shared_fiber_mem.rwlock));
-    lwt_ifc_fn_queue_t* ifc_fn_queue = AVLTREE_LOOKUP_KEY(lwt_ifc_fn_queue_t, avl_node, &server_fiber->ifc_fn_queues, .fn_ptr = ifc_fn_ptr);
+    lwt_ifc_fn_queue_t* ifc_fn_queue = RBTREE_LOOKUP_KEY(lwt_ifc_fn_queue_t, rb_node, &server_fiber->ifc_fn_queues, .fn_ptr = ifc_fn_ptr);
     if (ifc_fn_queue == 0) {
         ifc_fn_queue = lwt_ifc_fn_queue_allocate();
         ifc_fn_queue->fn_ptr = ifc_fn_ptr;
@@ -2107,7 +2107,7 @@ static lwt_ifc_fn_queue_t* ref_ifc_fn_queue(lwt_fiber_t* server_fiber, void* ifc
         ifc_fn_queue->server_fiber = server_fiber;
         ifc_fn_queue->waiting_clients.first = 0;
         ifc_fn_queue->waiting_clients.last = 0;
-        avltree_insert(&ifc_fn_queue->avl_node, &server_fiber->ifc_fn_queues);
+        rbtree_insert(&ifc_fn_queue->rb_node, &server_fiber->ifc_fn_queues);
     }
     return ifc_fn_queue;
 }
@@ -2116,7 +2116,7 @@ static void deref_ifc_fn_queue(lwt_ifc_fn_queue_t* ifc_fn_queue) {
     assert(ATOMIC_RWLOCK_IS_WLOCKED(shared_fiber_mem.rwlock));
     if (ifc_fn_queue->ifc_server_ref_count == 0 && ifc_fn_queue->waiting_clients.first == 0) {
         if (ifc_fn_queue->server_fiber != 0)
-            avltree_remove(&ifc_fn_queue->avl_node, &ifc_fn_queue->server_fiber->ifc_fn_queues);
+            rbtree_remove(&ifc_fn_queue->rb_node, &ifc_fn_queue->server_fiber->ifc_fn_queues);
         lwt_ifc_fn_queue_free(ifc_fn_queue);
     }
 }
