@@ -22,15 +22,16 @@ typedef struct rcd_abstract_list {
 
 typedef struct rcd_abstract_dict_element {
     // type_data[] is in immediate prefix - this allows the suffix data to be key and a compare function that is unaware of the type data size
-    avltree_node_t node;
+    rbtree_node_t node;
     struct rcd_abstract_dict_element* prev;
     struct rcd_abstract_dict_element* next;
     fstr_mem_t key;
 } rcd_abstract_dict_element_t;
 
 typedef struct rcd_abstract_dict {
-    avltree_t tree;
+    rbtree_t tree;
     rcd_abstract_dict_element_t* seq;
+    size_t length;
 } rcd_abstract_dict_t;
 
 void* memcpy(void *__restrict, const void *__restrict, size_t);
@@ -42,7 +43,7 @@ void* memcpy(void *__restrict, const void *__restrict, size_t);
 
 #define dict_count(set, type) ({ \
     dict(type)* __typed_set = set; \
-    avltree_count(&((rcd_abstract_dict_t*) __typed_set)->tree); \
+    ((rcd_abstract_dict_t*) __typed_set)->length; \
 })
 
 #define list_push_end(set, type, e) ({ \
@@ -93,8 +94,9 @@ void* memcpy(void *__restrict, const void *__restrict, size_t);
 
 #define __dict_xpend(set, type, fstr_key, e, xpend_code) \
     __dict_put(set, type, fstr_key, e); \
-    avltree_node_t* existing_node = avltree_insert(&__elem->node, &_abstract_dict->tree); \
+    rbtree_node_t* existing_node = rbtree_insert(&__elem->node, &_abstract_dict->tree); \
     if (existing_node == 0) { \
+        _abstract_dict->length++; \
         xpend_code; \
     } else { \
         lwt_alloc_free(__mem_ptr); \
@@ -115,12 +117,13 @@ void* memcpy(void *__restrict, const void *__restrict, size_t);
 
 #define dict_replace(set, type, fstr_key, e) ({ \
     __dict_put(set, type, fstr_key, e); \
-    avltree_node_t* __existing_elem_node = avltree_insert(&__elem->node, &_abstract_dict->tree); \
+    rbtree_node_t* __existing_elem_node = rbtree_insert(&__elem->node, &_abstract_dict->tree); \
     if (__existing_elem_node == 0) { \
+        _abstract_dict->length++; \
         DL_APPEND(_abstract_dict->seq, __elem); \
     } else { \
         rcd_abstract_dict_element_t* __existing_elem = (void*) (__existing_elem_node) - offsetof(rcd_abstract_dict_element_t, node); \
-        avltree_replace(__existing_elem_node, &__elem->node, &_abstract_dict->tree); \
+        rbtree_replace(__existing_elem_node, &__elem->node, &_abstract_dict->tree); \
         /* preserve the element at the same position in the sequence */ \
         __elem->prev = __existing_elem->prev; \
         if (__existing_elem->prev != 0 && __existing_elem->prev->next != 0) \
@@ -146,8 +149,8 @@ void* memcpy(void *__restrict, const void *__restrict, size_t);
     rcd_abstract_dict_element_t* __cmp_elem = (void*) __cmp_mem; \
     __cmp_elem->key.len = __cmp_key.len; \
     memcpy(__cmp_elem->key.str, __cmp_key.str, __cmp_key.len); \
-    avltree_node_t* __node_ptr = avltree_lookup(&__cmp_elem->node, &_abstract_dict->tree); \
-    AVLTREE_NODE2ELEM(rcd_abstract_dict_element_t, node, __node_ptr); \
+    rbtree_node_t* __node_ptr = rbtree_lookup(&__cmp_elem->node, &_abstract_dict->tree); \
+    RBTREE_NODE2ELEM(rcd_abstract_dict_element_t, node, __node_ptr); \
 })
 
 #define dict_read(set, type, fstr_key) ({ \
@@ -162,10 +165,11 @@ void* memcpy(void *__restrict, const void *__restrict, size_t);
     rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
     rcd_abstract_dict_element_t* __elem = __dict_get(set, type, fstr_key); \
     if (__elem != 0) { \
-        avltree_remove(&__elem->node, &_abstract_dict->tree); \
+        rbtree_remove(&__elem->node, &_abstract_dict->tree); \
         DL_DELETE(_abstract_dict->seq, __elem); \
         void* __mem_ptr = __dict_elem_to_mem_ptr(__elem, type); \
         lwt_alloc_free(__mem_ptr); \
+        _abstract_dict->length--; \
     } \
     (__elem != 0); \
 })
@@ -246,10 +250,11 @@ void* memcpy(void *__restrict, const void *__restrict, size_t);
 #define dict_foreach_delete_current(set, type) ({ \
     dict(type)* __typed_set = set; \
     rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
-    avltree_remove(&_cur->node, &_abstract_dict->tree); \
+    rbtree_remove(&_cur->node, &_abstract_dict->tree); \
     DL_DELETE(_abstract_dict->seq, _cur); \
     void* __mem_ptr = __dict_elem_to_mem_ptr(_cur, type); \
     lwt_alloc_free(__mem_ptr); \
+    _abstract_dict->length--; \
     _cur = 0; \
 })
 
@@ -291,21 +296,18 @@ void* memcpy(void *__restrict, const void *__restrict, size_t);
 })
 
 #define new_list(type, ...) ({ \
-    list(type)* _new_abstract_list = ({ \
-        rcd_abstract_list_t* __abstract_list = new(rcd_abstract_list_t); \
-        *__abstract_list = (rcd_abstract_list_t) {0}; \
-        (list(type)*) __abstract_list; \
-    }); \
+    list(type)* _new_abstract_list = (list(type)*) new(rcd_abstract_list_t); \
     list_push_end_n(_new_abstract_list, type, __VA_ARGS__); \
     _new_abstract_list; \
 })
 
-int rcd_dict_cmp(const avltree_node_t* node1, const avltree_node_t* node2);
+int rcd_dict_cmp(const rbtree_node_t* node1, const rbtree_node_t* node2);
 
 #define new_dict(type) ({ \
     rcd_abstract_dict_t* _abstract_dict = new(rcd_abstract_dict_t); \
-    avltree_init(&_abstract_dict->tree, rcd_dict_cmp, true); \
     _abstract_dict->seq = 0; \
+    _abstract_dict->length = 0; \
+    rbtree_init(&_abstract_dict->tree, rcd_dict_cmp); \
     (dict(type)*) _abstract_dict; \
 })
 
