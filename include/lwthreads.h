@@ -253,4 +253,7 @@ void lwt_write_fiber_dump_fd(int32_t write_fd);
 /// Calls lwt_write_fiber_dump_fd() on STDERR.
 void lwt_write_fiber_dump_debug();
 
+/// Overloaded exception string conversion for convenience.
+static inline fstr_t __attribute__((overloadable)) STR(rcd_exception_t* x) { return fss(lwt_get_exception_dump(x)); }
+
 #endif	/* LWTHREADS_H */
