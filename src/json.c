@@ -12,7 +12,7 @@ typedef struct {
 } parser_t;
 
 static inline void fail() {
-    throw("invalid json", exception_io);
+    throw_eio("invalid json", json_parse);
 }
 
 static inline void assume(bool b) {
@@ -396,6 +396,34 @@ fstr_mem_t* json_stringify_pretty(json_value_t value) { sub_heap {
     return escape(fstr_implode(parts, ""));
 }}
 
+fstr_t json_serial_type(json_type_t type) {
+    switch (type) {{
+    } case JSON_NULL: {
+        return "null";
+    } case JSON_BOOL: {
+        return "bool";
+    } case JSON_NUMBER: {
+        return "number";
+    } case JSON_STRING: {
+        return "string";
+    } case JSON_ARRAY: {
+        return "array";
+    } case JSON_OBJECT: {
+        return "object";
+    }}
+}
+
+void json_fail_invalid_type(json_type_t expected_type, json_type_t got_type) {
+    emitosis(json_type, jd) {
+        jd.expected = expected_type;
+        jd.got = got_type;
+        throw_em(concs("invalid json type, expected: ", expected_type, ", got: ", got_type), jd);
+    }
+}
+
 void json_fail_missing_property(fstr_t prop_name) {
-    sub_heap_e(throw(concs("missing JSON property: ", prop_name), exception_io));
+    emitosis(json_lookup, jd) {
+        jd.key = fsc(prop_name);
+        throw_em(concs("missing json property: [", prop_name, "]"), jd);
+    }
 }
