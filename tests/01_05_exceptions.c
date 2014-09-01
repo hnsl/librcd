@@ -48,7 +48,7 @@ fiber_main test_exception_memory(fiber_main_attr) {
                 ifc_park();
                 atest(false);
             } catch (exception_canceled, e) {
-                rio_debug(fss(lwt_get_exception_dump(e)));
+                rio_debug(STR(e));
             }
         }
     }
@@ -59,8 +59,7 @@ void rcd_self_test_exceptions() {
     try {
         throw("test exception", exception_arg);
     } catch (exception_arg, e) {
-        fstr_mem_t* dump = lwt_get_exception_dump(e);
-        rio_debug(fss(dump));
+        rio_debug(STR(e));
     }
     // Test that break works as intended in try/catch statements.
     {
