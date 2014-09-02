@@ -28,6 +28,12 @@
 #define __inline inline
 #define __inline__ inline
 
+/// We reserve "noret" as a short readable syntax for the noreturn attribute.
+/// Having noreturn declared functions can be important in application code as
+/// well to suppress return type errors. Having a shorthand for this therefore
+/// improves readability where readability is important.
+#define noret __attribute__((noreturn))
+
 #define bool _Bool
 #define true ((bool)1)
 #define false ((bool)0)
