@@ -734,8 +734,7 @@ static void lwt_scheduler_fiber_wake_join_race_raw(lwt_fiber_t* fiber) {
     }
 }
 
-__attribute__((noreturn))
-static void lwt_throw_cancel_exception(lwt_fiber_t* fiber) {
+noret static void lwt_throw_cancel_exception(lwt_fiber_t* fiber) {
     rcd_exception_t* src_cancel_e = fiber->ctrl.canceled;
     fiber->ctrl.canceled = 0;
     if (src_cancel_e != 0) {
@@ -750,14 +749,12 @@ static void lwt_throw_cancel_exception(lwt_fiber_t* fiber) {
     lwt_throw_new_exception("fiber canceled", "", 0, exception_canceled, 0, 0, 0, src_cancel_e);
 }
 
-__attribute__((noreturn))
-static void lwt_throw_join_race_exception(lwt_fiber_t* fiber) {
+noret static void lwt_throw_join_race_exception(lwt_fiber_t* fiber) {
     fiber->ctrl.join_race = false;
     lwt_throw_new_exception("fiber got join race exception", "", 0, exception_join_race, 0, 0, 0, 0);
 }
 
-__attribute__((noreturn))
-static void lwt_throw_no_such_fiber_exception() {
+noret static void lwt_throw_no_such_fiber_exception() {
     lwt_throw_new_exception("uninterruptible join failed: no such fiber", "", 0, exception_no_such_fiber, 0, 0, 0, 0);
 }
 
@@ -866,8 +863,7 @@ void* lwt_get_thread_static_ptr(const void* ptr) {
 
 /// Fiber finalization that is run by fiber when it shuts down.
 /// To avoid a permanent return pointer in all root stacklets the control flow of the fiber is manipulated directly to run it.
-__attribute__((noreturn))
-static void lwt_fiber_finalize() {
+noret static void lwt_fiber_finalize() {
     // We must release the root heap here rather than doing it in the physical executor context as releasing a heap invokes destructors which may invoke userspace code
     // and running user space code in the physical executor thread context is a bad, bad idea.
     // (For example it could block and recursively longjump back to the executor context which would be undefined behavior.)

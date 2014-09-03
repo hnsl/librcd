@@ -129,9 +129,9 @@ fstr_mem_t* json_stringify_pretty(json_value_t value);
 /// Serializes a JSON type to a human readable string.
 fstr_t json_serial_type(json_type_t type);
 
-void _json_fail_invalid_type(json_type_t expected_type, json_type_t got_type);
+noret void _json_fail_invalid_type(json_type_t expected_type, json_type_t got_type);
 
-void _json_fail_missing_property(fstr_t prop_name);
+noret void _json_fail_missing_property(fstr_t prop_name);
 
 static inline fstr_t __attribute__((overloadable)) STR(json_value_t x) { return fss(json_stringify(x)); }
 static inline fstr_t __attribute__((overloadable)) STR(json_type_t x) { return json_serial_type(x); }

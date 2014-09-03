@@ -120,8 +120,7 @@ bool lwt_is_cancel_pending();
 void lwt_test_live_join_race();
 
 /// Immediately terminates the program with the specified status code.
-__attribute__((noreturn))
-void lwt_exit(int status);
+noret void lwt_exit(int status);
 
 // These functions are used in RCD macros and should never be called directly.
 
@@ -160,13 +159,11 @@ rcd_exception_t* lwt_copy_exception(rcd_exception_t* exception);
 /// exception is transfered to the exception handler which passes it to the
 /// next exception handler that catches it. Semi-internal function; prefer to
 /// use the "throw" macros instead.
-__attribute__((noreturn))
-void lwt_throw_new_exception(fstr_t message, fstr_t file, uint64_t line, rcd_exception_type_t exception_type, void* eio_class, void* eio_data, lwt_heap_t* custom_heap, rcd_exception_t* fwd_exception);
+noret void lwt_throw_new_exception(fstr_t message, fstr_t file, uint64_t line, rcd_exception_type_t exception_type, void* eio_class, void* eio_data, lwt_heap_t* custom_heap, rcd_exception_t* fwd_exception);
 
 /// Throws an existing exception. Takes ownership over the exception passed to
 /// it and transfers the ownership to the exception handler that catches it.
-__attribute__((noreturn))
-void lwt_throw_exception(rcd_exception_t* exception);
+noret void lwt_throw_exception(rcd_exception_t* exception);
 
 /// Thread local heap allocation that can be returned from a sub heap context
 /// and is free'd automatically when exiting sub heap.

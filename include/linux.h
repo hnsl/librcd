@@ -2063,7 +2063,6 @@ int syncfs(int fd);
 void linux_mount(fstr_t source, fstr_t mnt_path, fstr_t fs_type, uint64_t mountflags, fstr_t data);
 
 // Internal helper for syscall exceptions.
-__attribute__((noreturn))
-void _rcd_syscall_exception(fstr_t msg_start, rcd_exception_type_t type);
+noret void _rcd_syscall_exception(fstr_t msg_start, rcd_exception_type_t type);
 
 #endif	/* LINUX_H */

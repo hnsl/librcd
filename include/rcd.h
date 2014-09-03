@@ -646,7 +646,7 @@ typedef struct __rcd_try_prop {
         return fstr_cpy(fstr(#name)); \
     } \
     static void* const name = (void*)&_describe_##name; \
-    __attribute__((noreturn)) static inline void throw_eio_##class \
+    noret static inline void throw_eio_##class \
             (fstr_t message, fstr_t file, uint64_t line, rcd_exception_t* fwd_exception) { \
         lwt_throw_new_exception(message, file, line, exception_io, name, 0, 0, fwd_exception); \
     } \
