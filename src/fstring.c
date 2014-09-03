@@ -852,6 +852,74 @@ fstr_mem_t* fstr_base64_decode(fstr_t base64_text) {
     }
 }
 
+fstr_mem_t* fstr_base32_encode(fstr_t s) { sub_heap {
+    if (s.len == 0 || s.len > (1 << 28))
+        return escape(fstr_alloc(0));
+    fstr_t base32_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    fstr_mem_t* output = fstr_alloc(s.len * 2); // TODO: check this
+    fstr_t output_tail = fss(output);
+    uint32_t count = 0;
+    uint32_t buffer = s.str[0];
+    uint32_t next = 1;
+    uint32_t bits_left = 8;
+    while (count < output->len && (bits_left > 0 || next < s.len)) {
+        if (bits_left < 5) {
+            if (next < s.len) {
+                buffer <<= 8;
+                buffer |= s.str[next++] & 0xFF;
+                bits_left += 8;
+            } else {
+                uint8_t pad = 5 - bits_left;
+                buffer <<= pad;
+                bits_left += pad;
+            }
+        }
+        count++;
+        fstr_putc(&output_tail, base32_chars.str[(0x1F & (buffer >> (bits_left - 5)))]);
+        bits_left -= 5;
+    }
+    uint32_t last_useful = ((s.len % 5) * 8 / 5) + 1;
+    last_useful = (last_useful == 0)? 8: last_useful;
+    for (size_t i = 0; i < (8 - last_useful); i++)
+        fstr_putc(&output_tail, '=');
+    output->len -= output_tail.len;
+    return escape(output);
+}}
+
+fstr_mem_t* fstr_base32_decode(fstr_t s) { sub_heap {
+    uint32_t buffer = 0, bits_left = 0;
+    fstr_mem_t* output = fstr_alloc(s.len * 2);
+    fstr_t output_tail = fss(output);
+    for (size_t i = 0; i < s.len; i++) {
+        uint8_t ch = s.str[i];
+        if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' || ch == '-')
+            continue;
+        buffer <<= 5;
+        if (ch == '0') {
+            ch = 'O';
+        } else if (ch == '1') {
+            ch = 'L';
+        } else if (ch == '8') {
+            ch = 'B';
+        }
+        if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
+            ch = (ch & 0x1F) - 1;
+        } else if (ch >= '2' && ch <= '7') {
+            ch -= '2' - 26;
+        } else {
+            break;
+        }
+        buffer |= ch;
+        bits_left += 5;
+        if (bits_left >= 8) {
+            fstr_putc(&output_tail, buffer >> (bits_left - 8));
+            bits_left -= 8;
+        }
+    }
+    output->len -= output_tail.len;
+    return escape(output);
+}}
+
 flstr(16)* fstr_md5(fstr_t data) {
     md5_context ctx;
     md5_starts(&ctx);

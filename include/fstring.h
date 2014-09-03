@@ -421,6 +421,12 @@ fstr_mem_t* fstr_base64_encode(fstr_t binary_data);
 /// Padding '=' characters is not required and will be silently discarded.
 fstr_mem_t* fstr_base64_decode(fstr_t base64_text);
 
+/// Encodes binary data in base32.
+fstr_mem_t* fstr_base32_encode(fstr_t s);
+
+/// Decodes base32 to binary data.
+fstr_mem_t* fstr_base32_decode(fstr_t s);
+
 /// Computes md5 hash of the specified data.
 flstr(16)* fstr_md5(fstr_t data);
 
