@@ -138,7 +138,7 @@ bool fstr_unserial_uint(fstr_t fstr, uint8_t base, uint128_t* out_uint128) {
 
 bool fstr_unserial_int(fstr_t fstr, uint8_t base, int128_t* out_int128) {
     bool negative = fstr_equal(fstr_slice(fstr, 0, 1), "-");
-    fstr_t numeric_serial = negative? fstr_sslice(fstr, 1, -1): fstr;
+    fstr_t numeric_serial = negative? fstr_slice(fstr, 1, -1): fstr;
     uint128_t number;
     if (!fstr_unserial_uint(numeric_serial, base, &number))
         return false;
@@ -301,9 +301,9 @@ fstr_t fstr_cpy_over(fstr_t dst, fstr_t src, fstr_t* out_dst_tail, fstr_t* out_s
     if (len > 0)
         memcpy(dst.str, src.str, len);
     if (out_dst_tail != 0)
-        *out_dst_tail = fstr_sslice(dst, len, -1);
+        *out_dst_tail = fstr_slice(dst, len, -1);
     if (out_src_tail != 0)
-        *out_src_tail = fstr_sslice(src, len, -1);
+        *out_src_tail = fstr_slice(src, len, -1);
     return fstr_slice(dst, 0, len);
 }
 
@@ -427,11 +427,11 @@ bool fstr_prefixes_case(fstr_t str, fstr_t prefix) {
 }
 
 bool fstr_suffixes(fstr_t str, fstr_t suffix) {
-    return fstr_equal(fstr_sslice(str, -suffix.len - 1, -1), suffix);
+    return fstr_equal(fstr_slice(str, -suffix.len - 1, -1), suffix);
 }
 
 bool fstr_suffixes_case(fstr_t str, fstr_t suffix) {
-    return fstr_equal_case(fstr_sslice(str, -suffix.len - 1, -1), suffix);
+    return fstr_equal_case(fstr_slice(str, -suffix.len - 1, -1), suffix);
 }
 
 int64_t fstr_cmp(const fstr_t str1, const fstr_t str2) {
@@ -534,28 +534,6 @@ fstr_mem_t* fstr_upper(fstr_t src) {
     for (size_t i = 0; i < src.len; i++)
         dst->str[i] = fstr_ctoupper(src.str[i]);
     return dst;
-}
-
-fstr_t fstr_slice(fstr_t str, uint64_t offs0, uint64_t offs1) {
-    offs0 = MIN(offs0, str.len);
-    offs1 = MIN(offs1, str.len);
-    fstr_t new_str;
-    if (offs0 > offs1) {
-        new_str.str = str.str;
-        new_str.len = 0;
-    } else {
-        new_str.str = str.str + offs0;
-        new_str.len = offs1 - offs0;
-    }
-    return new_str;
-}
-
-fstr_t fstr_sslice(fstr_t str, int64_t offs0, int64_t offs1) {
-    if (offs0 < 0LL)
-        offs0 = MAX(0LL, str.len + 1 + offs0);
-    if (offs1 < 0LL)
-        offs1 = MAX(0LL, str.len + 1 + offs1);
-    return fstr_slice(str, (uint64_t) offs0, (uint64_t) offs1);
 }
 
 int64_t fstr_scan(fstr_t str, fstr_t sub_str) {
@@ -680,7 +658,7 @@ static inline bool fstr_divide_dir(fstr_t src, fstr_t separator, fstr_t* out_bef
     if (out_before != 0)
         *out_before = fstr_slice(src, 0, s_offs);
     if (out_after != 0)
-        *out_after = fstr_sslice(src, s_offs + separator.len, -1);
+        *out_after = fstr_slice(src, s_offs + separator.len, -1);
     return true;
 }
 
@@ -746,13 +724,13 @@ fstr_t fstr_trim(fstr_t fstr) {
         if (i == fstr.len)
             return fstr_slice(fstr, 0, 0);
         if (fstr.str[i] > 0x20) {
-            fstr = fstr_sslice(fstr, i, -1);
+            fstr = fstr_slice(fstr, i, -1);
             break;
         }
     }
     for (ssize_t i = fstr.len - 1;; i--) {
         if (fstr.str[i] > 0x20)
-            return fstr_sslice(fstr, 0, i + 1);
+            return fstr_slice(fstr, 0, i + 1);
     }
 }
 
@@ -991,7 +969,7 @@ fstr_t fstr_cfifo_read(fstr_cfifo_t* cfifo, fstr_t dst, bool peek) {
 fstr_t fstr_cfifo_write(fstr_cfifo_t* cfifo, fstr_t src, bool overwrite) {
     // If we're overwriting we are taking the tail of the source buffer that should fit in the buffer so we always return an empty string.
     // This emulates overwriting the incoming buffer itself without spending the time to do it.
-    fstr_t src_tail = overwrite? fstr_sslice(src, -cfifo->buffer.len - 1, -1): src;
+    fstr_t src_tail = overwrite? fstr_slice(src, -cfifo->buffer.len - 1, -1): src;
     for (uint8_t mode = 0; mode < (overwrite? 2: 1) && src_tail.len > 0; mode++) {
         bool is_replacing = (mode == 1);
         fstr_cfifo_slicev_t slices = fstr_cfifo_slice(cfifo, !is_replacing);
@@ -1011,7 +989,7 @@ fstr_t fstr_path_base(fstr_t file_path) {
     size_t i = file_path.len;
     for (;; i--) {
         if (i == 0)
-            return fstr_sslice(file_path, -1, -1);
+            return fstr_slice(file_path, -1, -1);
         if (file_path.str[i - 1] != '/')
             break;
     }
@@ -1036,14 +1014,14 @@ fstr_mem_t* fstr_clean_utf8(fstr_t str) {
             replace_char:;
             ssize_t e_ret = utf8proc_encode_char(0xfffd, dst_tail.str);
             assert(e_ret == 3);
-            dst_tail = fstr_sslice(dst_tail, 3, -1);
-            src_tail = fstr_sslice(src_tail, 1, -1);
+            dst_tail = fstr_slice(dst_tail, 3, -1);
+            src_tail = fstr_slice(src_tail, 1, -1);
         } else {
             // Copy over the already encoded character.
             assert(i_ret > 0 && i_ret <= 4);
             fstr_t vc = fstr_slice(src_tail, 0, i_ret);
             (void) fstr_cpy_over(dst_tail, vc, &dst_tail, 0);
-            src_tail = fstr_sslice(src_tail, i_ret, -1);
+            src_tail = fstr_slice(src_tail, i_ret, -1);
         }
     }
     dst_buf->len -= dst_tail.len;

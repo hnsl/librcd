@@ -347,15 +347,38 @@ static inline void fstr_toupper(fstr_t str) {
 /// Creates a reference to the slice of memory that str contains. Offs0 is the
 /// offset where the slice starts and offs1 is the offset where the next slice
 /// starts that will be cut off from the region returned.
-/// If offs0 == offs1 the returned .len will be zero but the .str is undefined.
-///  function is in-place and does NULL return a null
-/// terminated c string.
-fstr_t fstr_slice(fstr_t str, uint64_t offs0, uint64_t offs1);
+/// If offs0 > offs1 the returned .len will be zero but the .str is undefined.
+/// The offset coordinate system allows negative offsets. Negative offsets are
+/// interpreted as "distance from two characters after the last character".
+/// This means -1 refers to the character after the last character in the
+/// string, -2 refers to the last character and so on.
+/// Examples for "abcdefg":
+///     (0, 0) -> "", (0, 1) -> "a", (0, 2) -> "ab", (1, 3) -> "bc"
+///     (0, -1) -> "abcdefg", (0, -2) -> "abcdef", (2, -3) -> "cde"
+///     (-2, -1) -> "g", (-3, -1) -> "fg", (-5, -2) -> "def",
+static inline fstr_t fstr_slice(fstr_t str, int64_t offs0, int64_t offs1) {
+    // Negative adjust + cutoff.
+    if (offs0 < 0LL)
+        offs0 = MAX(0LL, str.len + 1 + offs0);
+    if (offs1 < 0LL)
+        offs1 = MAX(0LL, str.len + 1 + offs1);
+    // Positive cutoff.
+    offs0 = MIN(offs0, str.len);
+    offs1 = MIN(offs1, str.len);
+    // Slice.
+    fstr_t new_str;
+    if (offs0 > offs1) {
+        new_str.str = str.str;
+        new_str.len = 0;
+    } else {
+        new_str.str = str.str + offs0;
+        new_str.len = offs1 - offs0;
+    }
+    return new_str;
+}
 
-/// Exactly like slice but takes two signed offsets where -1 is the offset
-/// after the last character in the string, -2 is the offset of the last
-/// character in the string and so on.
-fstr_t fstr_sslice(fstr_t str, int64_t offs0, int64_t offs1);
+/// Deprecated alias for fstr_slice().
+#define fstr_sslice fstr_slice
 
 /// Scans the string from left to right after a sub string and returns the
 /// offset where it is first found. If no such substring is found the function
