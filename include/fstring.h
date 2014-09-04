@@ -332,11 +332,17 @@ fstr_mem_t* fstr_upper(fstr_t src);
 
 /// Converts the given string to lower case (ASCII Latin).
 /// This function modifies memory in-place.
-void fstr_tolower(fstr_t str);
+static inline void fstr_tolower(fstr_t str) {
+    for (size_t i = 0; i < str.len; i++)
+        str.str[i] = fstr_ctolower(str.str[i]);
+}
 
 /// Converts the given string to upper case (ASCII Latin).
 /// This function modifies memory in-place.
-void fstr_toupper(fstr_t str);
+static inline void fstr_toupper(fstr_t str) {
+    for (size_t i = 0; i < str.len; i++)
+        str.str[i] = fstr_ctoupper(str.str[i]);
+}
 
 /// Creates a reference to the slice of memory that str contains. Offs0 is the
 /// offset where the slice starts and offs1 is the offset where the next slice

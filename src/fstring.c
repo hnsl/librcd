@@ -536,16 +536,6 @@ fstr_mem_t* fstr_upper(fstr_t src) {
     return dst;
 }
 
-void fstr_tolower(fstr_t str) {
-    for (size_t i = 0; i < str.len; i++)
-        str.str[i] = fstr_ctolower(str.str[i]);
-}
-
-void fstr_toupper(fstr_t str) {
-    for (size_t i = 0; i < str.len; i++)
-        str.str[i] = fstr_ctoupper(str.str[i]);
-}
-
 fstr_t fstr_slice(fstr_t str, uint64_t offs0, uint64_t offs1) {
     offs0 = MIN(offs0, str.len);
     offs1 = MIN(offs1, str.len);
