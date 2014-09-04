@@ -8,15 +8,28 @@
 
 typedef struct {
     fstr_t data;
-    unsigned int pos;
+    size_t pos;
 } parser_t;
 
-static inline void fail() {
-    throw_eio("invalid json", json_parse);
-}
-
-static inline void assume(bool b) {
-    if (!b) fail();
+noret static void fail(parser_t* parser, fstr_t message) {
+    size_t line = 1, col = 1;
+    assert(parser->pos > 0);
+    fstr_t data = fstr_slice(parser->data, 0, parser->pos - 1);
+    for (size_t i = 0; i < data.len; i++) {
+        if (data.str[i] == '\n') {
+            line++;
+            col = 1;
+        } else {
+            col++;
+        }
+    }
+    emitosis(json_parse, data) {
+        fstr_t emsg = concs("invalid json: ", message, " at line ", line, " column ", col);
+        data.message = message;
+        data.line = line;
+        data.column = col;
+        throw_em(emsg, data);
+    }
 }
 
 static inline bool remaining(parser_t* parser) {
@@ -24,7 +37,10 @@ static inline bool remaining(parser_t* parser) {
 }
 
 static inline uint8_t peek(parser_t* parser) {
-    assume(remaining(parser));
+    if (!remaining(parser)) {
+        parser->pos++;
+        fail(parser, "unexpected end of data");
+    }
     return parser->data.str[parser->pos];
 }
 
@@ -32,6 +48,11 @@ static inline uint8_t consume(parser_t* parser) {
     uint8_t ch = peek(parser);
     parser->pos++;
     return ch;
+}
+
+static inline void expect(parser_t* parser, uint8_t c, fstr_t message) {
+    if (consume(parser) != c)
+        fail(parser, message);
 }
 
 static inline bool is_ws(uint8_t ch) {
@@ -43,16 +64,17 @@ static inline void skip_ws(parser_t* parser) {
         consume(parser);
 }
 
-static void validate_number(fstr_t str) {
+static bool validate_number(fstr_t str) {
 #pragma re2c(str): ^ -? (0|[1-9][0-9]*) (\.[0-9]+)? ([eE][-\+]?[0-9]+)? $ {@match}
-    fail();
-match:;
+    return false;
+match:
+    return true;
 }
 
 static inline bool is_primitive_char(uint8_t c) {
     switch (c) {
-        case '\t': case '\r': case '\n': case ' ':
-        case ',': case ']': case '}':
+        case '\t': case '\r': case '\n': case ' ': case '"':
+        case ',': case '[': case '{': case ']': case '}':
             return false;
         default:
             return true;
@@ -64,11 +86,13 @@ static json_value_t parse_primitive(parser_t* parser) {
     while (remaining(parser) && is_primitive_char(peek(parser)))
         consume(parser);
     fstr_t str = fstr_slice(parser->data, start, parser->pos);
-    assume(str.len > 0);
-    uint8_t c = str.str[0];
+    uint8_t c = (str.len == 0? '\0': str.str[0]);
     json_value_t ret;
     if (c == '-' || ('0' <= c && c <= '9')) {
-        validate_number(str);
+        if (!validate_number(str)) {
+            parser->pos = start + 1;
+            fail(parser, "invalid number literal");
+        }
         ret.type = JSON_NUMBER;
         ret.number_value = fstr_to_double(str);
     } else if (fstr_equal(str, "true")) {
@@ -80,7 +104,9 @@ static json_value_t parse_primitive(parser_t* parser) {
     } else if (fstr_equal(str, "null")) {
         ret.type = JSON_NULL;
     } else {
-        fail();
+        parser->pos = start;
+        consume(parser);
+        fail(parser, "unexpected character");
     }
     return ret;
 }
@@ -155,59 +181,59 @@ static json_value_t parse_value(parser_t* parser);
 
 static json_value_t parse_string(parser_t *parser) {
     size_t start = parser->pos;
-    assume(consume(parser) == '"');
-
+    consume(parser);
     bool uses_escapes = false;
     for (;;) {
         uint8_t c = consume(parser);
-
-        // Quote: end of string
-        if (c == '\"') {
-            json_value_t ret;
-            ret.type = JSON_STRING;
-            fstr_t str = fstr_slice(parser->data, start + 1, parser->pos - 1);
-            ret.string_value = fss(uses_escapes? decode(str): fstr_cpy(str));
-            return ret;
-        }
-
-        // Backslash: Quoted symbol expected
+        if (c == '\"')
+            break;
         if (c == '\\') {
+            uses_escapes = true;
             switch (consume(parser)) {
                 // Named escape symbols
                 case '\"': case '/': case 'b': case 'f':
                 case '\\': case 'r': case 'n': case 't':
-                    uses_escapes = true;
                     break;
                 // Escape symbols on the form \uXXXX
                 case 'u':
                     for (int i = 0; i < 4; i++) {
-                        assume(is_hex(consume(parser)));
+                        if (!is_hex(consume(parser)))
+                            fail(parser, "invalid Unicode escape");
                     }
-                    uses_escapes = true;
                     break;
                 // Unexpected symbol
                 default:
-                    fail();
+                    fail(parser, "invalid escape character");
             }
         }
-
         // Control characters are disallowed within strings
         if (c < 0x20)
-            fail();
+            fail(parser, "unexpected control character");
     }
+    json_value_t ret;
+    ret.type = JSON_STRING;
+    fstr_t str = fstr_slice(parser->data, start + 1, parser->pos - 1);
+    ret.string_value = fss(uses_escapes? decode(str): fstr_cpy(str));
+    return ret;
 }
 
 static json_value_t parse_array(parser_t* parser) {
     list(json_value_t)* list = new_list(json_value_t);
     size_t start = parser->pos;
-    assume(consume(parser) == '[');
+    consume(parser);
     bool expect_comma = false;
     for (;;) {
         skip_ws(parser);
         if (peek(parser) == ']')
             break;
         if (expect_comma) {
-            assume(consume(parser) == ',');
+            expect(parser, ',', "expected ',' or ']' after array element");
+            size_t comma_pos = parser->pos;
+            skip_ws(parser);
+            if (peek(parser) == ']') {
+                parser->pos = comma_pos;
+                fail(parser, "unexpected trailing comma");
+            }
         }
         expect_comma = true;
         json_value_t val = parse_value(parser);
@@ -223,21 +249,28 @@ static json_value_t parse_array(parser_t* parser) {
 static json_value_t parse_object(parser_t* parser) {
     dict(json_value_t)* dict = new_dict(json_value_t);
     size_t start = parser->pos;
-    assume(consume(parser) == '{');
+    consume(parser);
     bool expect_comma = false;
     for (;;) {
         skip_ws(parser);
         if (peek(parser) == '}')
             break;
         if (expect_comma) {
-            assume(consume(parser) == ',');
+            expect(parser, ',', "expected ',' or '}' after property value");
+            size_t comma_pos = parser->pos;
             skip_ws(parser);
+            if (peek(parser) == '}') {
+                parser->pos = comma_pos;
+                fail(parser, "unexpected trailing comma");
+            }
         }
         expect_comma = true;
+        if (peek(parser) != '"')
+            fail(parser, "expected double-quoted property name");
         json_value_t key_value = parse_string(parser);
         fstr_t key = key_value.string_value;
         skip_ws(parser);
-        assume(consume(parser) == ':');
+        expect(parser, ':', "expected ':' after property name");
         json_value_t val = parse_value(parser);
         dict_replace(dict, json_value_t, key, val);
     }
@@ -273,7 +306,8 @@ json_tree_t* json_parse(fstr_t str) { sub_heap {
         };
         tree->value = parse_value(&parser);
         skip_ws(&parser);
-        assume(!remaining(&parser));
+        if (remaining(&parser))
+            fail(&parser, "unexpected character after JSON data");
         escape_list(heap);
         return tree;
     }

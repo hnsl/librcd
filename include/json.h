@@ -83,6 +83,7 @@ typedef enum json_type {
     JSON_OBJECT = 5,
 } json_type_t;
 
+/// A JSON value.
 typedef struct json_value {
     json_type_t type;
     union {
@@ -101,7 +102,15 @@ typedef struct json_tree {
     lwt_heap_t* heap;
 } json_tree_t;
 
-define_eio(json_parse);
+typedef struct {
+    /// A message describing the failure, e.g. "unexpected trailing comma".
+    fstr_t message;
+    /// The (1-indexed) line the parse error occurred on.
+    size_t line;
+    /// The (1-indexed) column the parse error occurred on.
+    size_t column;
+} json_parse_eio_t;
+define_eio_complex(json_parse, message, line, column);
 
 typedef struct {
     /// The property name that was missing.
