@@ -191,8 +191,8 @@ static json_value_t parse_string(parser_t *parser) {
             }
         }
 
-        // White-space is disallowed within strings
-        if (c == '\t' || c == '\n' || c == '\r')
+        // Control characters are disallowed within strings
+        if (c < 0x20)
             fail();
     }
 }
