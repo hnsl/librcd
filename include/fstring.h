@@ -76,7 +76,8 @@
 /// Unpacks and returns a variable of a given type from the front of a buffer,
 /// then advances the buffer's head by 'sizeof(type)'. Throws exception_io if
 /// not enough bytes are available.
-#define FSTR_UNPACK(buffer, type) (*(type*)FSTR_UNPACK_MEM(buffer, sizeof(type)))
+#define FSTR_UNPACK(buffer, type) \
+    (*(type*)(FSTR_UNPACK_MEM(buffer, sizeof(type)).str))
 
 /// Returns 'memory_length' bytes from the front of a buffer, and advances the
 /// buffer's head by the same amount. Throws exception_io if not enough bytes
