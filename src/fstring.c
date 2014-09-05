@@ -1001,6 +1001,19 @@ fstr_t fstr_path_base(fstr_t file_path) {
     return fstr_slice(file_path, j, i);
 }
 
+bool fstr_validate_utf8(fstr_t str) {
+    fstr_t src_tail = str;
+    while (src_tail.len > 0) {
+        int32_t uc_point;
+        ssize_t i_ret = utf8proc_iterate(src_tail.str, src_tail.len, &uc_point);
+        if (i_ret < 0)
+            return false;
+        assert(i_ret > 0 && i_ret <= 4 && i_ret <= src_tail.len);
+        src_tail = fstr_slice(src_tail, i_ret, -1);
+    }
+    return true;
+}
+
 fstr_mem_t* fstr_clean_utf8(fstr_t str) {
     fstr_mem_t* dst_buf = fstr_alloc(str.len * 3);
     fstr_t dst_tail = fss(dst_buf);
