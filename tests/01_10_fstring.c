@@ -975,31 +975,6 @@ void rcd_self_test_fstring() {
         atest(fstr_equal(fss(fstr_base64_decode("YWJjZA")), "abcd"));
         atest(fstr_equal(fss(fstr_base64_decode("    cXd\r\nlcnR5dWlvcGFzZGZ   naGprbHp4 Y 3 Z ibm0AA\r\n    \r\n   \nA")), "qwertyuiopasdfghjklzxcvbnm\x00\x00"));
     }
-    // Test base32.
-    sub_heap {
-        fstr_t a = "test";
-        fstr_t a_enc = fss(fstr_base32_encode(a));
-        fstr_t a_enc_exp = "ORSXG5A=";
-        atest(fstr_equal(a_enc, a_enc_exp));
-        fstr_t a_dec = fss(fstr_base32_decode(a_enc));
-        atest(fstr_equal(a, a_dec));
-    }
-    sub_heap {
-        fstr_t b = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris placerat est quis magna vulputate, nec pharetra odio ullamcorper.";
-        fstr_t b_enc = fss(fstr_base32_encode(b));
-        fstr_t b_enc_exp = "JRXXEZLNEBUXA43VNUQGI33MN5ZCA43JOQQGC3LFOQWCAY3PNZZWKY3UMV2HK4RAMFSGS4DJONRWS3THEBSWY2LUFYQE2YLVOJUXGIDQNRQWGZLSMF2CAZLTOQQHC5LJOMQG2YLHNZQSA5TVNRYHK5DBORSSYIDOMVRSA4DIMFZGK5DSMEQG6ZDJN4QHK3DMMFWWG33SOBSXELQ=";
-        atest(fstr_equal(b_enc, b_enc_exp));
-        fstr_t b_dec = fss(fstr_base32_decode(b_enc));
-        atest(fstr_equal(b, b_dec));
-    }
-    sub_heap {
-        fstr_t c = "The Base 32 encoding is designed to represent arbitrary sequences of octets in a form that needs to be case insensitive but that need not be human readable. A 33-character subset of US-ASCII is used, enabling 5 bits to be represented per printable character. (The extra 33rd character, \"=\", is used to signify a special processing function.)";
-        fstr_t c_enc = fss(fstr_base32_encode(c));
-        fstr_t c_enc_exp = "KRUGKICCMFZWKIBTGIQGK3TDN5SGS3THEBUXGIDEMVZWSZ3OMVSCA5DPEBZGK4DSMVZWK3TUEBQXEYTJORZGC4TZEBZWK4LVMVXGGZLTEBXWMIDPMN2GK5DTEBUW4IDBEBTG64TNEB2GQYLUEBXGKZLEOMQHI3ZAMJSSAY3BONSSA2LOONSW443JORUXMZJAMJ2XIIDUNBQXIIDOMVSWIIDON52CAYTFEBUHK3LBNYQHEZLBMRQWE3DFFYQECIBTGMWWG2DBOJQWG5DFOIQHG5LCONSXIIDPMYQFKUZNIFJUGSKJEBUXGIDVONSWILBAMVXGCYTMNFXGOIBVEBRGS5DTEB2G6IDCMUQHEZLQOJSXGZLOORSWIIDQMVZCA4DSNFXHIYLCNRSSAY3IMFZGCY3UMVZC4IBIKRUGKIDFPB2HEYJAGMZXEZBAMNUGC4TBMN2GK4RMEARD2IRMEBUXGIDVONSWIIDUN4QHG2LHNZUWM6JAMEQHG4DFMNUWC3BAOBZG6Y3FONZWS3THEBTHK3TDORUW63ROFE======";
-        atest(fstr_equal(c_enc, c_enc_exp));
-        fstr_t c_dec = fss(fstr_base32_decode(c_enc));
-        atest(fstr_equal(c, c_dec));
-    }
     sub_heap {
         fstr_t buf = fss(fstr_alloc(0x100));
         fstr_t buf_tail;
@@ -1029,6 +1004,28 @@ void rcd_self_test_fstring() {
                 atest(out.str[i] == i);
         }
     }
+    // Test base32.
+#define TEST_BASE32(from, to) \
+    sub_heap { \
+        fstr_t enc = fss(fstr_base32_encode(from)); \
+        atest(fstr_equal(enc, to)); \
+        fstr_t dec = fss(fstr_base32_decode(to)); \
+        atest(fstr_equal(dec, from)); \
+    }
+    TEST_BASE32("", "");
+    TEST_BASE32("a", "ME======");
+    TEST_BASE32("ab", "MFRA====");
+    TEST_BASE32("abc", "MFRGG===");
+    TEST_BASE32("abcd", "MFRGGZA=");
+    TEST_BASE32("abcde", "MFRGGZDF");
+    TEST_BASE32("abcdef", "MFRGGZDFMY======");
+    TEST_BASE32("test", "ORSXG5A=");
+    TEST_BASE32("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris placerat est quis magna vulputate, nec pharetra odio ullamcorper.",
+        "JRXXEZLNEBUXA43VNUQGI33MN5ZCA43JOQQGC3LFOQWCAY3PNZZWKY3UMV2HK4RAMFSGS4DJONRWS3THEBSWY2LUFYQE2YLVOJUXGIDQNRQWGZLSMF2CAZLTOQQHC5LJOMQG2YLHNZQSA5TVNRYHK5DBORSSYIDOMVRSA4DIMFZGK5DSMEQG6ZDJN4QHK3DMMFWWG33SOBSXELQ=");
+    TEST_BASE32(
+        "The Base 32 encoding is designed to represent arbitrary sequences of octets in a form that needs to be case insensitive but that need not be human readable. A 33-character subset of US-ASCII is used, enabling 5 bits to be represented per printable character. (The extra 33rd character, \"=\", is used to signify a special processing function.)",
+        "KRUGKICCMFZWKIBTGIQGK3TDN5SGS3THEBUXGIDEMVZWSZ3OMVSCA5DPEBZGK4DSMVZWK3TUEBQXEYTJORZGC4TZEBZWK4LVMVXGGZLTEBXWMIDPMN2GK5DTEBUW4IDBEBTG64TNEB2GQYLUEBXGKZLEOMQHI3ZAMJSSAY3BONSSA2LOONSW443JORUXMZJAMJ2XIIDUNBQXIIDOMVSWIIDON52CAYTFEBUHK3LBNYQHEZLBMRQWE3DFFYQECIBTGMWWG2DBOJQWG5DFOIQHG5LCONSXIIDPMYQFKUZNIFJUGSKJEBUXGIDVONSWILBAMVXGCYTMNFXGOIBVEBRGS5DTEB2G6IDCMUQHEZLQOJSXGZLOORSWIIDQMVZCA4DSNFXHIYLCNRSSAY3IMFZGCY3UMVZC4IBIKRUGKIDFPB2HEYJAGMZXEZBAMNUGC4TBMN2GK4RMEARD2IRMEBUXGIDVONSWIIDUN4QHG2LHNZUWM6JAMEQHG4DFMNUWC3BAOBZG6Y3FONZWS3THEBTHK3TDORUW63ROFE======");
+#undef TEST_BASE32
     // Test circular fifo.
     sub_heap {
         fstr_cfifo_t cfifo = fstr_cfifo_init(fss(fstr_alloc(1)));
