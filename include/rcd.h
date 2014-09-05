@@ -813,10 +813,10 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
 #define DBG_RAW(...) _DEBUG_ONLY(DPRINT_RAW(__VA_ARGS__))
 
 /// Like DBG, but with the current function name prepended.
-#define DBGFN(...) DBG("[", fstr(__func__), "] ", #__VA_ARGS__)
+#define DBGFN(...) DBG("[", fstr(__func__), "] ", ##__VA_ARGS__)
 
 /// Dumps message, data and stack trace of an exception using DBG.
-#define DBGE(e, ...) DBG(fss(lwt_get_exception_dump(e)), #__VA_ARGS__)
+#define DBGE(e, ...) DBG(fss(lwt_get_exception_dump(e)), ##__VA_ARGS__)
 
 /// Include a pointer as part of DPRINT_RAW output.
 #define DBG_PTR(ptr) ({ \
