@@ -822,13 +822,12 @@ fstr_mem_t* fstr_base32_encode(fstr_t s) { sub_heap {
     if (s.len == 0 || s.len > (1 << 28))
         return escape(fstr_alloc(0));
     fstr_t base32_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-    fstr_mem_t* output = fstr_alloc(s.len * 2); // TODO: check this
+    fstr_mem_t* output = fstr_alloc((s.len + 4) / 5 * 8);
     fstr_t output_tail = fss(output);
-    uint32_t count = 0;
     uint32_t buffer = s.str[0];
     uint32_t next = 1;
     uint32_t bits_left = 8;
-    while (count < output->len && (bits_left > 0 || next < s.len)) {
+    while (output_tail.len > 0 && (bits_left > 0 || next < s.len)) {
         if (bits_left < 5) {
             if (next < s.len) {
                 buffer <<= 8;
@@ -840,21 +839,17 @@ fstr_mem_t* fstr_base32_encode(fstr_t s) { sub_heap {
                 bits_left += pad;
             }
         }
-        count++;
         fstr_putc(&output_tail, base32_chars.str[(0x1F & (buffer >> (bits_left - 5)))]);
         bits_left -= 5;
     }
-    uint32_t last_useful = ((s.len % 5) * 8 / 5) + 1;
-    last_useful = (last_useful == 0)? 8: last_useful;
-    for (size_t i = 0; i < (8 - last_useful); i++)
+    while (output_tail.len > 0)
         fstr_putc(&output_tail, '=');
-    output->len -= output_tail.len;
     return escape(output);
 }}
 
 fstr_mem_t* fstr_base32_decode(fstr_t s) { sub_heap {
     uint32_t buffer = 0, bits_left = 0;
-    fstr_mem_t* output = fstr_alloc(s.len * 2);
+    fstr_mem_t* output = fstr_alloc(s.len);
     fstr_t output_tail = fss(output);
     for (size_t i = 0; i < s.len; i++) {
         uint8_t ch = s.str[i];
