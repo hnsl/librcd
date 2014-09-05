@@ -1024,7 +1024,6 @@ fstr_mem_t* fstr_clean_utf8(fstr_t str) {
         ssize_t i_ret = utf8proc_iterate(src_tail.str, src_tail.len, &uc_point);
         if (i_ret < 0) {
             // Unrecognized character, use replacement character fffd.
-            replace_char:;
             ssize_t e_ret = utf8proc_encode_char(0xfffd, dst_tail.str);
             assert(e_ret == 3);
             dst_tail = fstr_slice(dst_tail, 3, -1);
