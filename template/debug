@@ -1,0 +1,56 @@
+file ./build/debug
+echo Welcome to librcd debugging mode!\n
+
+# Enables GDB to detect threads as they are started.
+break lwt_physical_executor_thread if 0
+
+# We use SIGUSR1 to detect new threads.
+handle SIGUSR1 nostop print pass
+
+# Realtime signal 33 is used for canceling threads - don't catch it.
+handle SIG33 nostop noprint pass
+
+# Stop if the application throws SIGABRT (e.g. in abort())
+handle SIGABRT stop print nopass
+
+# Following the __releasestack logic when stepping out of a function is rarely interesting. This quickly skips over that part.
+define bs
+    tbreak setjmp.s:113
+    commands
+    silent
+        step
+    end
+    cont
+end
+
+# Replacement for printing backtraces in segmented stack contexts as gdb does not understand those at all.
+define bt
+    echo
+    set $_backtrace_rbp = $rbp
+    call lwt_debug_dump_backtrace($_backtrace_rbp, $rip)
+end
+
+# Shorter command for dumping all fibers.
+define bf
+    echo
+    call lwt_debug_dump_all_fibers()
+end
+
+# Break on assert failure.
+break __assert_fail
+
+# For disabling parallelism:
+## break __lwthreads_main
+## commands
+## silent
+## call lwt_debug_choke_fibers(1)
+## printf "NOTICE: Choking all but a single thread to not confuse gdb. To enable multi threaded execution, enter: call lwt_debug_choke_fibers(0)\n"
+## cont
+## end
+
+###### ADDITIONAL DEBUG COMMANDS START ######
+
+
+
+###### ADDITIONAL DEBUG COMMANDS STOP ######
+

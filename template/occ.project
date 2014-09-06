@@ -1,0 +1,27 @@
+{
+    "preprocessor": "rcd-pp",
+    "compiler": "rcd-i2o",
+    "project-linker": "rcd-pl",
+    "dependencies": [
+        "librcd"
+    ],
+    "general-flags": [
+        "-g",
+        "-Werror"
+    ],
+    "build-masks": {
+        "debug": {
+            "output": "debug",
+            "pp-flags": [
+                "-DDEBUG"
+            ]
+        },
+        "release": {
+            "output": "release",
+            "o-flags": ["-O1"],
+            "o-env": {
+                "LLC_ARGS": "-O1"
+            }
+        }
+    }
+}
