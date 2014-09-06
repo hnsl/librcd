@@ -29,64 +29,10 @@ exit(call_user_func(function() {
     $librcd_enabled = false;
     $in_meta = 0;
     $meta_triggers = array("asm(", "__asm__(", "__attribute__(", "__volatile__(", "volatile(");
-    /*if (file_exists("/tmp/rcd-pp-cache")) {
-        if (filemtime(__FILE__) > filemtime("/tmp/rcd-pp-cache")) {
-            unlink("/tmp/rcd-pp-cache");
-            touch("/tmp/rcd-pp-cache");
-        }
-    } else {
-        touch("/tmp/rcd-pp-cache");
-    }
-    $occ_cache_h = fopen("/tmp/rcd-pp-cache", "r+b");
-    if (!flock($occ_cache_h, LOCK_SH))
-        throw new Exception("librcd pp error: read locking cache failed");
-    $t0 = microtime(TRUE);
-    $occ_cache = array();
-    fseek($occ_cache_h, 0, SEEK_SET);
-    $occ_cache_tag = fread($occ_cache_h, 16);
-    $t1 = microtime(TRUE);
-    if (strlen($occ_cache_tag) == 16) {
-        $occ_cache_raw = stream_get_contents($occ_cache_h);
-        $t2 = microtime(TRUE);
-        if (!flock($occ_cache_h, LOCK_UN))
-            throw new Exception("librcd pp error: unlocking cache failed");
-        $occ_cache = eval($occ_cache_raw);
-        $t3 = microtime(TRUE);
-        if (!is_array($occ_cache))
-            throw new Exception("librcd pp error: cache corrupt - delete /tmp/rcd-pp-cache");
-        // throw new Exception("$t0\n$t1\n$t2\n$t3");
-    }
-    $occ_cache_updated = false;
-    if (!is_dir("/tmp/rcd-pp-cache"))
-        mkdir("/tmp/rcd-pp-cache");*/
     for (;;) {
         $line = "";
         for (;;) {
             if (feof(STDIN)) {
-                /*
-                if ($occ_cache_updated) {
-                    if (!flock($occ_cache_h, LOCK_EX))
-                        throw new Exception("librcd pp error: write locking cache failed");
-                    fseek($occ_cache_h, 0, SEEK_SET);
-                    $now_occ_cache_tag = fread($occ_cache_h, 16);
-                    if (strlen($now_occ_cache_tag) == 16 && $now_occ_cache_tag != $occ_cache_tag) {
-                        $occ_cache_raw = stream_get_contents($occ_cache_h);
-                        $updated_occ_cache = eval($occ_cache_raw);
-                        if (is_array($updated_occ_cache)) {
-                            $occ_cache = array_merge($updated_occ_cache, $occ_cache);
-                        }
-                    }
-                    for ($new_occ_cache_tag = ""; strlen($new_occ_cache_tag) < 16;)
-                        $new_occ_cache_tag .= uniqid("", true);
-                    $new_occ_cache_tag = substr($new_occ_cache_tag, 0, 16);
-                    ftruncate($occ_cache_h, 0);
-                    fseek($occ_cache_h, 0, SEEK_SET);
-                    fwrite($occ_cache_h, $new_occ_cache_tag);
-                    fwrite($occ_cache_h, "return ");
-                    fwrite($occ_cache_h, var_export($occ_cache, true));
-                    fwrite($occ_cache_h, ";\n");
-                }
-                fclose($occ_cache_h);*/
                 return 0;
             }
             $line .= fgets(STDIN, 80000);
@@ -96,311 +42,291 @@ exit(call_user_func(function() {
             $line = substr($line, 0, -2) . "\n";
         }
         $line_in = $line;
-        /*$cached_line_out = ; apc_fetch(($librcd_enabled? "1": "0") . $line_in);*/
-        /*if (isset($occ_cache[$librcd_enabled][$line_in])) {
-            $line = $occ_cache[$librcd_enabled][$line_in];*/
-        /*if ($cached_line_out !== false) {*/
-        /*$line_in_key_path = "/tmp/rcd-pp-cache/" . dechex(crc32(($librcd_enabled? "1": "0") . $line_in)) . "-" . dechex(crc32($line_in));
-        if (file_exists($line_in_key_path)) {
-            $line = file_get_contents($line_in_key_path);
-            if ($line === "\x00")
-                $line = $line_in;
-        } else {*/
-            $post_librcd_enabled = $librcd_enabled;
-            $is_meta_begin = $in_meta;
-            if (strlen($line) > 0 && $line[0] === "#") {
-                if (!$librcd_enabled && preg_match('/^#pragma\s+librcd\s*/', $line) == 1)
-                    $librcd_enabled = true;
-                if (preg_match('/^#pragma\s+(oc)?re2c\s*\(([^),]+)(,([^),]+))?(,([^),]+))?\):(.*)/ms', $line, $matches)) {
-                    $config = new Re2cConfig();
-                    $config->regex = $matches[7];
-                    $config->scan_buffer_name = $matches[2];
-                    $no_refill = ($matches[4] == "");
-                    $config->refill_label_name = $no_refill? null: $matches[4];
-                    $config->refill_return_state_varname = $no_refill? null: $matches[6];
-                    $lines = re2c($config);
-                    $line = str_replace("\n", " ", implode("", $lines)) . str_repeat("\n", substr_count($line, "\n"));
-                }
-            } else {
-                $found_fstr_declarations = false;
-                // Translate fstr().
-                $fstr_replace_callback_fn = function($matches) use (&$found_fstr_declarations) {
-                    if (strpos($matches[1], "c_string") !== false)
-                        return $matches[0];
-                    $found_fstr_declarations = true;
-                    $str = str_replace('"', "\x01", $matches[1]);
-                    return "((fstr_t) {.len = sizeof($str) - 1, .str = (uint8_t*) $str})";
+        $post_librcd_enabled = $librcd_enabled;
+        $is_meta_begin = $in_meta;
+        if (strlen($line) > 0 && $line[0] === "#") {
+            if (!$librcd_enabled && preg_match('/^#pragma\s+librcd\s*/', $line) == 1)
+                $librcd_enabled = true;
+            if (preg_match('/^#pragma\s+(oc)?re2c\s*\(([^),]+)(,([^),]+))?(,([^),]+))?\):(.*)/ms', $line, $matches)) {
+                $config = new Re2cConfig();
+                $config->regex = $matches[7];
+                $config->scan_buffer_name = $matches[2];
+                $no_refill = ($matches[4] == "");
+                $config->refill_label_name = $no_refill? null: $matches[4];
+                $config->refill_return_state_varname = $no_refill? null: $matches[6];
+                $lines = re2c($config);
+                $line = str_replace("\n", " ", implode("", $lines)) . str_repeat("\n", substr_count($line, "\n"));
+            }
+        } else {
+            $found_fstr_declarations = false;
+            // Translate fstr().
+            $fstr_replace_callback_fn = function($matches) use (&$found_fstr_declarations) {
+                if (strpos($matches[1], "c_string") !== false)
+                    return $matches[0];
+                $found_fstr_declarations = true;
+                $str = str_replace('"', "\x01", $matches[1]);
+                return "((fstr_t) {.len = sizeof($str) - 1, .str = (uint8_t*) $str})";
+            };
+            $line = preg_replace_callback('/\bfstr\s*\((\s*("(([^"\\\\]*|\\\\.)+)"\s*)+)\)/', $fstr_replace_callback_fn, $line);
+            $line = preg_replace_callback('/\bfstr\s*\(([^\(\)]+)\)/', $fstr_replace_callback_fn, $line);
+            // Translate fstr_hash().
+            $fstr_hash_replace_callback_fn = function($matches) {
+                $str_data = "";
+                $str_data_replace_callback_fn = function($matches) use (&$str_data) {
+                    $str_data .= stripcslashes($matches[1]);
+                    return null;
                 };
-                $line = preg_replace_callback('/\bfstr\s*\((\s*("(([^"\\\\]*|\\\\.)+)"\s*)+)\)/', $fstr_replace_callback_fn, $line);
-                $line = preg_replace_callback('/\bfstr\s*\(([^\(\)]+)\)/', $fstr_replace_callback_fn, $line);
-                // Translate fstr_hash().
-                $fstr_hash_replace_callback_fn = function($matches) {
-                    $str_data = "";
-                    $str_data_replace_callback_fn = function($matches) use (&$str_data) {
-                        $str_data .= stripcslashes($matches[1]);
-                        return null;
-                    };
-                    preg_replace_callback('/"(([^"\\\\]*|\\\\.)+)"\s*/', $str_data_replace_callback_fn, $matches[2]);
-                    $hash_v = substr(sha1($str_data, true), 0, 16);
-                    $hash_hex_v = bin2hex($hash_v);
-                    $hash_padded_hex_v = str_repeat("0", 32 - strlen($hash_hex_v)) . $hash_hex_v;
-                    return $matches[1] . "((uint128_t) 0x$hash_padded_hex_v)";
-                };
-                $line = preg_replace_callback('/([^a-z_0-9\^])fstr_pphash\s*\((("(([^"\\\\]*|\\\\.)+)"\s*)+)\)/', $fstr_hash_replace_callback_fn, $line);
-                if ($librcd_enabled) {
-                    // Expand rcd_ syntatic sugar for fiber creation and communication.
-                    if (strpos($line, "rcd_pp_marker__") !== false) {
-                        // rcd_join_locked(fstr_t) pipe_fiber_read(fstr_t message_dst, rcd_server_params, ifc_pipe_ctrl_t* pipe)
-                        if (preg_match('/^\s*(rcd_pp_marker__join_locked|rcd_pp_marker__join_shared|rcd_pp_marker__join_locked_declare|rcd_pp_marker__join_shared_declare);\s*((struct\s+)?[^\s\*]+[\s*\*]*)([^\*\(\s]+)\s*\(([^\)]+)\)(.*)/', $line, $matches) == 1) {
-                            $pp_marker = $matches[1];
-                            $ret_type = trim($matches[2]);
-                            $fn_name = $matches[4];
-                            $arg_list = $matches[5];
-                            $line_tail = $matches[6];
-                            $arg_list_args = explode(",", $arg_list);
-                            $arg_list_client_side = array();
-                            $arg_list_server_state = array();
-                            $record_server_state = false;
-                            foreach ($arg_list_args as $arg) {
-                                $trimmed_arg = trim($arg);
-                                if (preg_match('/[a-zA-Z_][a-zA-Z_0-9]*$/', $trimmed_arg, $matches) == 0)
-                                    throw new Exception("librcd pp error: failed to match name of argument in argument list ($line)");
-                                $name = $matches[0];
+                preg_replace_callback('/"(([^"\\\\]*|\\\\.)+)"\s*/', $str_data_replace_callback_fn, $matches[2]);
+                $hash_v = substr(sha1($str_data, true), 0, 16);
+                $hash_hex_v = bin2hex($hash_v);
+                $hash_padded_hex_v = str_repeat("0", 32 - strlen($hash_hex_v)) . $hash_hex_v;
+                return $matches[1] . "((uint128_t) 0x$hash_padded_hex_v)";
+            };
+            $line = preg_replace_callback('/([^a-z_0-9\^])fstr_pphash\s*\((("(([^"\\\\]*|\\\\.)+)"\s*)+)\)/', $fstr_hash_replace_callback_fn, $line);
+            if ($librcd_enabled) {
+                // Expand rcd_ syntatic sugar for fiber creation and communication.
+                if (strpos($line, "rcd_pp_marker__") !== false) {
+                    // rcd_join_locked(fstr_t) pipe_fiber_read(fstr_t message_dst, rcd_server_params, ifc_pipe_ctrl_t* pipe)
+                    if (preg_match('/^\s*(rcd_pp_marker__join_locked|rcd_pp_marker__join_shared|rcd_pp_marker__join_locked_declare|rcd_pp_marker__join_shared_declare);\s*((struct\s+)?[^\s\*]+[\s*\*]*)([^\*\(\s]+)\s*\(([^\)]+)\)(.*)/', $line, $matches) == 1) {
+                        $pp_marker = $matches[1];
+                        $ret_type = trim($matches[2]);
+                        $fn_name = $matches[4];
+                        $arg_list = $matches[5];
+                        $line_tail = $matches[6];
+                        $arg_list_args = explode(",", $arg_list);
+                        $arg_list_client_side = array();
+                        $arg_list_server_state = array();
+                        $record_server_state = false;
+                        foreach ($arg_list_args as $arg) {
+                            $trimmed_arg = trim($arg);
+                            if (preg_match('/[a-zA-Z_][a-zA-Z_0-9]*$/', $trimmed_arg, $matches) == 0)
+                                throw new Exception("librcd pp error: failed to match name of argument in argument list ($line)");
+                            $name = $matches[0];
+                            if ($record_server_state)
+                                $arg_list_server_state[$name] = $trimmed_arg;
+                            else
+                                $arg_list_client_side[$name] = $trimmed_arg;
+                            if ($trimmed_arg == "rcd_fid_t server_fiber_id") {
                                 if ($record_server_state)
-                                    $arg_list_server_state[$name] = $trimmed_arg;
-                                else
-                                    $arg_list_client_side[$name] = $trimmed_arg;
-                                if ($trimmed_arg == "rcd_fid_t server_fiber_id") {
-                                    if ($record_server_state)
+                                    throw new Exception("librcd pp error: server side of argument list already started ($line)");
+                                $record_server_state = true;
+                            }
+                        }
+                        if (!$record_server_state)
+                            throw new Exception("librcd pp error: server side of argument list never started ($line)");
+                        $arg_list_client_side_joined = implode(", ", $arg_list_client_side);
+                        $forward_list_arguments = array_keys($arg_list_client_side);
+                        $forward_list_parameters = $arg_list_client_side;
+                        $type_assert_pillars = array();
+                        $i = 0;
+                        $declare_only = (strpos($pp_marker, "_declare") !== false);
+                        $type_assert_pillars[] = ($declare_only? "extern ": "") . "int __librcd_ifc_server_arg__{$fn_name}__total_arg_count_is_" . count($arg_list_server_state) . ";";
+                        foreach ($arg_list_server_state as $key => $declaration) {
+                            $forward_list_arguments[] = "server_state->$key";
+                            $forward_list_parameters[] = $declaration;
+                            if (preg_match('/(.*[^a-zA-Z_0-9])[a-zA-Z_0-9]*$/', $declaration, $matches) == 0)
+                                throw new Exception("librcd pp error: failed to match arg declaration '$arg_declaration' ($line)");
+                            $raw_type = $matches[1];
+                            $type_assert_pillars[] = ($declare_only? "extern ": "") . "$raw_type** __librcd_ifc_server_arg__{$fn_name}__{$i};";
+                            $i++;
+                        }
+                        $line = implode("", $type_assert_pillars);
+                        if ($declare_only) {
+                            $line .= "$ret_type $fn_name($arg_list_client_side_joined);";
+                        } else {
+                            $call_type = ($pp_marker == "rcd_pp_marker__join_locked")? "RCD_IFC_CALL_LOCK_SERVER": "RCD_IFC_CALL_SHARED";
+                            $line .= "static __inline $ret_type __librcd_ifc_join__$fn_name(" . implode(", ", $forward_list_parameters) . ");";
+                            $line .= "$ret_type $fn_name($arg_list_client_side_joined) {";
+                            $line .= "struct {" . implode(";", $arg_list_server_state) . ";}* server_state = __lwt_fiber_stack_push_ifc_call_join($fn_name, server_fiber_id, $call_type);";
+                            $r_value_assign = ($ret_type != "void"? "$ret_type r_value =": "");
+                            $line .= "$r_value_assign __librcd_ifc_join__$fn_name(" . implode(", ", $forward_list_arguments) . ");";
+                            $line .= "__lwt_fiber_stack_pop_ifc_call_join();";
+                            if ($ret_type != "void")
+                                $line .= "return r_value;";
+                            $line .= "}";
+                            $line .= "static __inline $ret_type __librcd_ifc_join__$fn_name(" . implode(", ", $forward_list_parameters) . ")";
+                        }
+                        $line .= "$line_tail\n";
+                    } else if (preg_match('/^\s*(rcd_pp_marker__accept|rcd_pp_marker__auto_accept|rcd_pp_marker__server_accept|rcd_pp_marker__server_auto_accept)\s*\((.*)\),rcd_pp_marker__accept_end;(.*)/', $line, $matches) == 1) {
+                        $pp_marker = $matches[1];
+                        $arg_list = $matches[2];
+                        $line_tail = $matches[3];
+                        $functions_to_accept = array();
+                        $arg_list_server_state = array();
+                        $record_server_state = false;
+                        $arg_memory = "";
+                        $paranthesis_level = 0;
+                        foreach (explode(",", $arg_list) as $raw_arg) {
+                            $arg_memory .= $raw_arg;
+                            $paranthesis_level += substr_count($raw_arg, "(");
+                            $paranthesis_level -= substr_count($raw_arg, ")");
+                            if ($paranthesis_level == 0) {
+                                $arg = trim($arg_memory);
+                                $arg_memory = "";
+                                if ($record_server_state) {
+                                    if ($arg === "") {
+                                        continue;
+                                    } else if ($arg == "rcd_fid_t server_fiber_id") {
                                         throw new Exception("librcd pp error: server side of argument list already started ($line)");
-                                    $record_server_state = true;
-                                }
-                            }
-                            if (!$record_server_state)
-                                throw new Exception("librcd pp error: server side of argument list never started ($line)");
-                            $arg_list_client_side_joined = implode(", ", $arg_list_client_side);
-                            $forward_list_arguments = array_keys($arg_list_client_side);
-                            $forward_list_parameters = $arg_list_client_side;
-                            $type_assert_pillars = array();
-                            $i = 0;
-                            $declare_only = (strpos($pp_marker, "_declare") !== false);
-                            $type_assert_pillars[] = ($declare_only? "extern ": "") . "int __librcd_ifc_server_arg__{$fn_name}__total_arg_count_is_" . count($arg_list_server_state) . ";";
-                            foreach ($arg_list_server_state as $key => $declaration) {
-                                $forward_list_arguments[] = "server_state->$key";
-                                $forward_list_parameters[] = $declaration;
-                                if (preg_match('/(.*[^a-zA-Z_0-9])[a-zA-Z_0-9]*$/', $declaration, $matches) == 0)
-                                    throw new Exception("librcd pp error: failed to match arg declaration '$arg_declaration' ($line)");
-                                $raw_type = $matches[1];
-                                $type_assert_pillars[] = ($declare_only? "extern ": "") . "$raw_type** __librcd_ifc_server_arg__{$fn_name}__{$i};";
-                                $i++;
-                            }
-                            $line = implode("", $type_assert_pillars);
-                            if ($declare_only) {
-                                $line .= "$ret_type $fn_name($arg_list_client_side_joined);";
-                            } else {
-                                $call_type = ($pp_marker == "rcd_pp_marker__join_locked")? "RCD_IFC_CALL_LOCK_SERVER": "RCD_IFC_CALL_SHARED";
-                                $line .= "static __inline $ret_type __librcd_ifc_join__$fn_name(" . implode(", ", $forward_list_parameters) . ");";
-                                $line .= "$ret_type $fn_name($arg_list_client_side_joined) {";
-                                $line .= "struct {" . implode(";", $arg_list_server_state) . ";}* server_state = __lwt_fiber_stack_push_ifc_call_join($fn_name, server_fiber_id, $call_type);";
-                                $r_value_assign = ($ret_type != "void"? "$ret_type r_value =": "");
-                                $line .= "$r_value_assign __librcd_ifc_join__$fn_name(" . implode(", ", $forward_list_arguments) . ");";
-                                $line .= "__lwt_fiber_stack_pop_ifc_call_join();";
-                                if ($ret_type != "void")
-                                    $line .= "return r_value;";
-                                $line .= "}";
-                                $line .= "static __inline $ret_type __librcd_ifc_join__$fn_name(" . implode(", ", $forward_list_parameters) . ")";
-                            }
-                            $line .= "$line_tail\n";
-                        } else if (preg_match('/^\s*(rcd_pp_marker__accept|rcd_pp_marker__auto_accept|rcd_pp_marker__server_accept|rcd_pp_marker__server_auto_accept)\s*\((.*)\),rcd_pp_marker__accept_end;(.*)/', $line, $matches) == 1) {
-                            $pp_marker = $matches[1];
-                            $arg_list = $matches[2];
-                            $line_tail = $matches[3];
-                            $functions_to_accept = array();
-                            $arg_list_server_state = array();
-                            $record_server_state = false;
-                            $arg_memory = "";
-                            $paranthesis_level = 0;
-                            foreach (explode(",", $arg_list) as $raw_arg) {
-                                $arg_memory .= $raw_arg;
-                                $paranthesis_level += substr_count($raw_arg, "(");
-                                $paranthesis_level -= substr_count($raw_arg, ")");
-                                if ($paranthesis_level == 0) {
-                                    $arg = trim($arg_memory);
-                                    $arg_memory = "";
-                                    if ($record_server_state) {
-                                        if ($arg === "") {
-                                            continue;
-                                        } else if ($arg == "rcd_fid_t server_fiber_id") {
-                                            throw new Exception("librcd pp error: server side of argument list already started ($line)");
-                                        }
-                                        $arg_list_server_state[] = $arg;
-                                    } else {
-                                        if ($arg == "rcd_fid_t server_fiber_id") {
-                                            if (count($functions_to_accept) == 0)
-                                                throw new Exception("librcd pp error: accept() specifies no functions to accept on ($line)");
-                                            $record_server_state = true;
-                                        } else if (preg_match('/^[a-zA-Z0-9_]+$/', $arg)) {
-                                            $functions_to_accept[$arg] = null;
-                                        } else if (preg_match('/^([a-zA-Z0-9_]+)\s+if\s+(.+)$/', $arg, $matches)) {
-                                            $functions_to_accept[$matches[1]] = $matches[2];
-                                        } else {
-                                            throw new Exception("librcd pp error: syntax error for function to accept on in accept list ($arg)");
-                                        }
                                     }
+                                    $arg_list_server_state[] = $arg;
                                 } else {
-                                    $arg_memory .= ",";
+                                    if ($arg == "rcd_fid_t server_fiber_id") {
+                                        if (count($functions_to_accept) == 0)
+                                            throw new Exception("librcd pp error: accept() specifies no functions to accept on ($line)");
+                                        $record_server_state = true;
+                                    } else if (preg_match('/^[a-zA-Z0-9_]+$/', $arg)) {
+                                        $functions_to_accept[$arg] = null;
+                                    } else if (preg_match('/^([a-zA-Z0-9_]+)\s+if\s+(.+)$/', $arg, $matches)) {
+                                        $functions_to_accept[$matches[1]] = $matches[2];
+                                    } else {
+                                        throw new Exception("librcd pp error: syntax error for function to accept on in accept list ($arg)");
+                                    }
                                 }
+                            } else {
+                                $arg_memory .= ",";
                             }
-                            if (!$record_server_state)
-                                throw new Exception("librcd pp error: server side of argument list never started ($line)");
-                            $line = "{";
-                            $line .= "while (0) {";
-                            $i = 0;
+                        }
+                        if (!$record_server_state)
+                            throw new Exception("librcd pp error: server side of argument list never started ($line)");
+                        $line = "{";
+                        $line .= "while (0) {";
+                        $i = 0;
+                        foreach ($functions_to_accept as $fn_name => $cond)
+                            $line .= "__librcd_ifc_server_arg__{$fn_name}__total_arg_count_is_" . count($arg_list_server_state) . " = 0;";
+                        foreach ($arg_list_server_state as $server_state_arg) {
+                            $line .= "{";
+                            $line .= "__typeof($server_state_arg)** server_state_arg_$i;";
+                            $line .= "server_state_arg_$i";
                             foreach ($functions_to_accept as $fn_name => $cond)
-                                $line .= "__librcd_ifc_server_arg__{$fn_name}__total_arg_count_is_" . count($arg_list_server_state) . " = 0;";
-                            foreach ($arg_list_server_state as $server_state_arg) {
-                                $line .= "{";
-                                $line .= "__typeof($server_state_arg)** server_state_arg_$i;";
-                                $line .= "server_state_arg_$i";
-                                foreach ($functions_to_accept as $fn_name => $cond)
-                                    $line .= " = __librcd_ifc_server_arg__{$fn_name}__$i";
-                                $line .= ";}";
-                                $i++;
-                            }
-                            $line .= "}";
-                            $line .= "void* fn_list[] = {";
-                            foreach ($functions_to_accept as $fn_name => $cond) {
-                                $line .= ($cond === null? $fn_name: "(($cond)? $fn_name: 0)") . ", ";
-                            }
-                            $line .=  "};";
-                            $line .= "struct {";
-                            foreach ($arg_list_server_state as $i => $server_state_arg)
-                                $line .= "__typeof($server_state_arg) x$i;";
-                            $line .= "} ifc_server_state = {";
-                            foreach ($arg_list_server_state as $server_state_arg)
-                                $line .= "$server_state_arg,";
+                                $line .= " = __librcd_ifc_server_arg__{$fn_name}__$i";
+                            $line .= ";}";
+                            $i++;
+                        }
+                        $line .= "}";
+                        $line .= "void* fn_list[] = {";
+                        foreach ($functions_to_accept as $fn_name => $cond) {
+                            $line .= ($cond === null? $fn_name: "(($cond)? $fn_name: 0)") . ", ";
+                        }
+                        $line .=  "};";
+                        $line .= "struct {";
+                        foreach ($arg_list_server_state as $i => $server_state_arg)
+                            $line .= "__typeof($server_state_arg) x$i;";
+                        $line .= "} ifc_server_state = {";
+                        foreach ($arg_list_server_state as $server_state_arg)
+                            $line .= "$server_state_arg,";
+                        $line .= "};";
+                        $auto_reaccept = (strpos($pp_marker, "_auto_") !== false)? "1": "0";
+                        $server_side_accept = (strpos($pp_marker, "_server_") !== false)? "1": "0";
+                        $line .= "__lwt_ifc_accept(fn_list, sizeof(fn_list) / sizeof(*fn_list), &ifc_server_state, $auto_reaccept, $server_side_accept);";
+                        $line .= "}";
+                        $line .= $line_tail;
+                        str_replace("\n", "", $line);
+                        $line .= "\n";
+                    } else if (preg_match('/^\s*(rcd_pp_marker__fiber_main|rcd_pp_marker__fiber_main_declare)\s*([^;]*); rcd_fid_t\s+([^\(\s]+)\s*\(([^\)]+)\)\s*{(.*)/', $line, $matches) == 1) {
+                        $pp_marker = $matches[1];
+                        $sf_t_name = $matches[2];
+                        $fn_name = $matches[3];
+                        $arg_list = $matches[4];
+                        $line_tail = $matches[5];
+                        $arg_list_args = explode(",", $arg_list);
+                        $main_args = array();
+                        foreach ($arg_list_args as $arg) {
+                            $trimmed_arg = trim($arg);
+                            if (preg_match('/[a-zA-Z_][a-zA-Z_0-9]*$/', $trimmed_arg, $matches) == 0)
+                                throw new Exception("librcd pp error: failed to match name of argument in argument list ($line)");
+                            $name = $matches[0];
+                            $main_args[$name] = $trimmed_arg;
+                        }
+                        $sf_t_name = trim($sf_t_name);
+                        $default_sf_t = (strlen($sf_t_name) == 0);
+                        $sf_t = ($default_sf_t? "rcd_sub_fiber_t*": "struct {$sf_t_name}__rcd_sf_t*");
+                        $declare_only = (strpos($pp_marker, "_declare") !== false);
+                        if ($declare_only) {
+                            $line = "rcd_fid_t __librcd_fiber_mitosis__$fn_name($arg_list);";
+                            $line .= "$sf_t __librcd_fiber_sf_mitosis__$fn_name($arg_list);";
+                        } else {
+                            $line = "struct __librcd_fiber_main_state__$fn_name {";
+                            $line .= implode(";", $main_args) . ";";
                             $line .= "};";
-                            $auto_reaccept = (strpos($pp_marker, "_auto_") !== false)? "1": "0";
-                            $server_side_accept = (strpos($pp_marker, "_server_") !== false)? "1": "0";
-                            $line .= "__lwt_ifc_accept(fn_list, sizeof(fn_list) / sizeof(*fn_list), &ifc_server_state, $auto_reaccept, $server_side_accept);";
+                            $line .= "void _$fn_name(void* arg_ptr);";
+                            $line .= "rcd_fid_t __librcd_fiber_mitosis__$fn_name($arg_list) {";
+                            $line .= "struct __librcd_fiber_main_state__$fn_name* fiber_args = lwt_alloc_new(sizeof(struct __librcd_fiber_main_state__$fn_name));";
+                            $line .= "*fiber_args = (struct __librcd_fiber_main_state__$fn_name) {" . implode(",", array_keys($main_args)) . "};";
+                            $line .= "static struct lwt_fiber_options fiber_options = {.name = \"$fn_name\"};";
+                            $line .= "return __lwt_fiber_stack_pop_mitosis(_$fn_name, fiber_args, fiber_name, &fiber_options);";
                             $line .= "}";
-                            $line .= $line_tail;
-                            str_replace("\n", "", $line);
-                            $line .= "\n";
-                        } else if (preg_match('/^\s*(rcd_pp_marker__fiber_main|rcd_pp_marker__fiber_main_declare)\s*([^;]*); rcd_fid_t\s+([^\(\s]+)\s*\(([^\)]+)\)\s*{(.*)/', $line, $matches) == 1) {
-                            $pp_marker = $matches[1];
-                            $sf_t_name = $matches[2];
-                            $fn_name = $matches[3];
-                            $arg_list = $matches[4];
-                            $line_tail = $matches[5];
-                            $arg_list_args = explode(",", $arg_list);
-                            $main_args = array();
-                            foreach ($arg_list_args as $arg) {
-                                $trimmed_arg = trim($arg);
-                                if (preg_match('/[a-zA-Z_][a-zA-Z_0-9]*$/', $trimmed_arg, $matches) == 0)
-                                    throw new Exception("librcd pp error: failed to match name of argument in argument list ($line)");
-                                $name = $matches[0];
-                                $main_args[$name] = $trimmed_arg;
-                            }
-                            $sf_t_name = trim($sf_t_name);
-                            $default_sf_t = (strlen($sf_t_name) == 0);
-                            $sf_t = ($default_sf_t? "rcd_sub_fiber_t*": "struct {$sf_t_name}__rcd_sf_t*");
-                            $declare_only = (strpos($pp_marker, "_declare") !== false);
-                            if ($declare_only) {
-                                $line = "rcd_fid_t __librcd_fiber_mitosis__$fn_name($arg_list);";
-                                $line .= "$sf_t __librcd_fiber_sf_mitosis__$fn_name($arg_list);";
-                            } else {
-                                $line = "struct __librcd_fiber_main_state__$fn_name {";
-                                $line .= implode(";", $main_args) . ";";
-                                $line .= "};";
-                                $line .= "void _$fn_name(void* arg_ptr);";
-                                $line .= "rcd_fid_t __librcd_fiber_mitosis__$fn_name($arg_list) {";
-                                $line .= "struct __librcd_fiber_main_state__$fn_name* fiber_args = lwt_alloc_new(sizeof(struct __librcd_fiber_main_state__$fn_name));";
-                                $line .= "*fiber_args = (struct __librcd_fiber_main_state__$fn_name) {" . implode(",", array_keys($main_args)) . "};";
-                                $line .= "static struct lwt_fiber_options fiber_options = {.name = \"$fn_name\"};";
-                                $line .= "return __lwt_fiber_stack_pop_mitosis(_$fn_name, fiber_args, fiber_name, &fiber_options);";
-                                $line .= "}";
-                                $line .= "$sf_t __librcd_fiber_sf_mitosis__$fn_name($arg_list) {";
-                                $line .= "return " . ($default_sf_t? "": "($sf_t)") . "lwt_wrap_sub_fiber(__librcd_fiber_mitosis__$fn_name(" . implode(",", array_keys($main_args)) . "));";
-                                $line .= "}";
-                                $line .= "void _$fn_name(void* arg_ptr) {";
-                                foreach ($main_args as $name => $declaration)
-                                    $line .= "$declaration = ((struct __librcd_fiber_main_state__$fn_name*) arg_ptr)->$name;";
-                            }
-                            $line .= "$line_tail\n";
+                            $line .= "$sf_t __librcd_fiber_sf_mitosis__$fn_name($arg_list) {";
+                            $line .= "return " . ($default_sf_t? "": "($sf_t)") . "lwt_wrap_sub_fiber(__librcd_fiber_mitosis__$fn_name(" . implode(",", array_keys($main_args)) . "));";
+                            $line .= "}";
+                            $line .= "void _$fn_name(void* arg_ptr) {";
+                            foreach ($main_args as $name => $declaration)
+                                $line .= "$declaration = ((struct __librcd_fiber_main_state__$fn_name*) arg_ptr)->$name;";
                         }
+                        $line .= "$line_tail\n";
                     }
-                    $line_prefix_out = "";
-                    if ($in_meta == 0) {
-                        exit_in_asm:
-                        // fwrite(STDERR, "parsing line [$line]\n");
-                        $post_meta_line = null;
-                        $earliest_meta_offs = null;
-                        $earliest_meta_trigger = null;
-                        foreach ($meta_triggers as $meta_trigger) {
-                            $meta_offs = strpos($line, $meta_trigger);
-                            if ($meta_offs !== false) {
-                                if ($earliest_meta_offs === null || $meta_offs < $earliest_meta_offs) {
-                                    $earliest_meta_offs = $meta_offs;
-                                    $earliest_meta_trigger = $meta_trigger;
-                                }
-                            }
-                        }
-                        if ($earliest_meta_offs !== null) {
-                            $earliest_meta_offs += strlen($earliest_meta_trigger);
-                            // fwrite(STDERR, "in meta was triggered\n");
-                            $post_meta_line = substr($line, $earliest_meta_offs);
-                            $line = substr($line, 0, $earliest_meta_offs);
-                        }
-                        $line = preg_replace_callback('/\'\\\\.\'|\'.\'|("(([^"\\\\]*|\\\\.)+)"\s*)+/', function($matches) {
-                            $match = trim($matches[0]);
-                            if ($match[0] == '\'')
-                                return $matches[0];
-                            preg_match('/\s*$/', $matches[0], $matches2);
-                            $trailing_ws = $matches2[0];
-                            return (strlen($match) > 2 ? "((fstr_t) {.len = sizeof($match) - 1, .str = (uint8_t*) $match})" : "((fstr_t) {0})") . $trailing_ws;
-                        }, $line);
-                        if ($post_meta_line !== null) {
-                            $in_meta = 1;
-                            $line_prefix_out .= $line;
-                            $line = $post_meta_line;
-                            goto enter_in_asm;
-                        }
-                    } else {
-                        enter_in_asm:
-                        while (strlen($line) > 0) {
-                            // fwrite(STDERR, "in meta [$in_meta]: matching remaining line [$line]\n");
-                            if (preg_match('/^(([^"\)]+)|"(([^"\\\\]*|\\\\.)+)")/', $line, $matches) != 0) {
-                                $in_meta += (isset($matches[2])? substr_count($matches[2], "("): 0);
-                                // fwrite(STDERR, "in meta [$in_meta]: found string or range not containing end of paranthesis [$matches[0]]\n");
-                                $line_prefix_out .= $matches[0];
-                                $line = substr($line, strlen($matches[0]));
-                            } else {
-                                $in_meta -= 1;
-                                // fwrite(STDERR, "in meta [$in_meta]: found end of paranthesis\n");
-                                $line_prefix_out .= $line[0];
-                                $line = substr($line, 1);
-                                if ($in_meta == 0)
-                                    goto exit_in_asm;
-                            }
-                        }
-                    }
-                    // throw new Exception(var_export(array($line_prefix_out, $line), true));
-                    if (strlen($line_prefix_out) > 0)
-                        $line = $line_prefix_out . $line;
                 }
-                if ($found_fstr_declarations)
-                    $line = str_replace("\x01", '"', $line);
-            /*}
-            // Can only cache lines which does not open with is_meta and does not leave in_meta open.
-            if ($is_meta_begin == 0 && $in_meta == 0 && $post_librcd_enabled === $librcd_enabled) {
-                /*$occ_cache[$librcd_enabled][$line_in] = ($line === $line_in? true: $line);
-                $occ_cache_updated = true;*/
-                /*apc_store(($librcd_enabled? "1": "0") . $line_in, ($line === $line_in? true: $line));*/
-                /*$tmp_name = "/tmp/rcd-pp-cache/" . uniqid("_tmp_", true);
-                file_put_contents($tmp_name, ($line === $line_in? "\x00": $line));
-                rename($tmp_name, $line_in_key_path);
-            }*/
+                $line_prefix_out = "";
+                if ($in_meta == 0) {
+                    exit_in_asm:
+                    // fwrite(STDERR, "parsing line [$line]\n");
+                    $post_meta_line = null;
+                    $earliest_meta_offs = null;
+                    $earliest_meta_trigger = null;
+                    foreach ($meta_triggers as $meta_trigger) {
+                        $meta_offs = strpos($line, $meta_trigger);
+                        if ($meta_offs !== false) {
+                            if ($earliest_meta_offs === null || $meta_offs < $earliest_meta_offs) {
+                                $earliest_meta_offs = $meta_offs;
+                                $earliest_meta_trigger = $meta_trigger;
+                            }
+                        }
+                    }
+                    if ($earliest_meta_offs !== null) {
+                        $earliest_meta_offs += strlen($earliest_meta_trigger);
+                        // fwrite(STDERR, "in meta was triggered\n");
+                        $post_meta_line = substr($line, $earliest_meta_offs);
+                        $line = substr($line, 0, $earliest_meta_offs);
+                    }
+                    $line = preg_replace_callback('/\'\\\\.\'|\'.\'|("(([^"\\\\]*|\\\\.)+)"\s*)+/', function($matches) {
+                        $match = trim($matches[0]);
+                        if ($match[0] == '\'')
+                            return $matches[0];
+                        preg_match('/\s*$/', $matches[0], $matches2);
+                        $trailing_ws = $matches2[0];
+                        return (strlen($match) > 2 ? "((fstr_t) {.len = sizeof($match) - 1, .str = (uint8_t*) $match})" : "((fstr_t) {0})") . $trailing_ws;
+                    }, $line);
+                    if ($post_meta_line !== null) {
+                        $in_meta = 1;
+                        $line_prefix_out .= $line;
+                        $line = $post_meta_line;
+                        goto enter_in_asm;
+                    }
+                } else {
+                    enter_in_asm:
+                    while (strlen($line) > 0) {
+                        // fwrite(STDERR, "in meta [$in_meta]: matching remaining line [$line]\n");
+                        if (preg_match('/^(([^"\)]+)|"(([^"\\\\]*|\\\\.)+)")/', $line, $matches) != 0) {
+                            $in_meta += (isset($matches[2])? substr_count($matches[2], "("): 0);
+                            // fwrite(STDERR, "in meta [$in_meta]: found string or range not containing end of paranthesis [$matches[0]]\n");
+                            $line_prefix_out .= $matches[0];
+                            $line = substr($line, strlen($matches[0]));
+                        } else {
+                            $in_meta -= 1;
+                            // fwrite(STDERR, "in meta [$in_meta]: found end of paranthesis\n");
+                            $line_prefix_out .= $line[0];
+                            $line = substr($line, 1);
+                            if ($in_meta == 0)
+                                goto exit_in_asm;
+                        }
+                    }
+                }
+                // throw new Exception(var_export(array($line_prefix_out, $line), true));
+                if (strlen($line_prefix_out) > 0)
+                    $line = $line_prefix_out . $line;
+            }
+            if ($found_fstr_declarations)
+                $line = str_replace("\x01", '"', $line);
         }
         fwrite(STDOUT, $line);
     }
