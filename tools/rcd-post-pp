@@ -364,8 +364,8 @@ class RegexRef {
 class RegexFin {
     // Offset of fin point. Can be both integer (physical offset) and string (virtual offset).
     public $offset;
-    // Label to jump to after reaching this point.
-    public $jump_name;
+    // Exit statement (e.g. goto) to execute when reaching this point.
+    public $exit_statement;
 }
 
 class RegexCaptureSlice {
@@ -700,10 +700,6 @@ function re2c_lex_braces_content(LexState $lex_state) {
     $content = "";
     while (re2c_lex_next_char($lex_state, $c)) {
         switch ($c) {
-        case ' ':
-        case "\n":
-        case "\r":
-            break;
         case "}":
             if ($content === "")
                 re2c_lex_error($lex_state, "unexpected braces end");
@@ -1040,12 +1036,16 @@ function re2c_lex(LexState $lex_state, $is_sub_match, array &$all_capture_slices
                 $regex_lex_append_to_line_fn($capture_wrap_end);
                 // Prevent complex and probably buggy semantics from being allowed by soldering the last pending lex here.
                 $regex_lex_append_to_line_fn(null);
-            } else if (preg_match('/^@([a-z_0-9]+)$/', $braces_content, $matches) == 1) {
+            } else if (preg_match('/^@(([a-z_0-9]+)|(return\s.*))$/', $braces_content, $matches) == 1) {
                 if ($is_sub_match)
                     re2c_lex_error($lex_state, "unexpected finalizer - can only finalize on main level");
                 // Creating final regex fin node and terminating root branch.
                 $fin = new RegexFin();
-                $fin->jump_name = $matches[1];
+                if (strlen($matches[2]) === 0) {
+                    $fin->exit_statement = fix_c_strings($matches[3]);
+                } else {
+                    $fin->exit_statement = "goto " . $matches[2];
+                }
                 $fin->offset = $lex_state->offset;
                 $regex_lex_append_to_line_fn($fin);
                 $regex_lex_append_to_line_fn(null);
@@ -1526,7 +1526,7 @@ function re2c_gen_code(Re2cConfig $config, Re2cState $re2c_state, DFAState $dfa_
         }
         // Jump to point specified by fin to indicate successful regex match.
         $regex_fin = $dfa_state->fin_arc->regex_fin;
-        $out_code[] = "goto $regex_fin->jump_name;";
+        $out_code[] = "$regex_fin->exit_statement;";
     } else {
         // Eat another rune from the buffer unless this is a start of file state.
         $all_arcs = $dfa_state->arcs;
@@ -1703,7 +1703,7 @@ function _visualize_asg($node, $indent = 0) {
         fwrite(STDERR, "\n");
         _visualize_asg($node->ref, $indent + 1);
     } else if ($node instanceof RegexFin) {
-        fwrite(STDERR, " [jump_name=$node->jump_name]\n");
+        fwrite(STDERR, " [exit_statement=$node->exit_statement]\n");
     } else {
         fwrite(STDERR, " *UNKNOWN*\n");
     }
@@ -1728,7 +1728,7 @@ function _visualize_fsm(DFAState $state = null, $max_depth = -1) {
             fwrite(STDERR, " [$indicator@$location->offset]");
         } else if ($location instanceof RegexFin) {
             $scenario_id = $scenario !== null? $scenario->id: "n/a";
-            fwrite(STDERR, " [$indicator@$location->offset(FIN#$location->jump_name)]");
+            fwrite(STDERR, " [$indicator@$location->offset(FIN#$location->exit_statement)]");
         } else {
             fwrite(STDERR, " *UNKNOWN*");
         }
