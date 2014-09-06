@@ -21,6 +21,17 @@
 #
 ####################################################################
 
+function fix_c_strings($line) {
+    return preg_replace_callback('/\'\\\\.\'|\'.\'|("(([^"\\\\]*|\\\\.)+)"\s*)+/', function($matches) {
+        $match = trim($matches[0]);
+        if ($match[0] == '\'')
+            return $matches[0];
+        preg_match('/\s*$/', $matches[0], $matches2);
+        $trailing_ws = $matches2[0];
+        return (strlen($match) > 2 ? "((fstr_t) {.len = sizeof($match) - 1, .str = (uint8_t*) $match})" : "((fstr_t) {0})") . $trailing_ws;
+    }, $line);
+}
+
 exit(call_user_func(function() {
     assert_options(ASSERT_BAIL, 1);
     set_error_handler(function($errno, $errstr, $errfile, $errline) {
@@ -288,14 +299,7 @@ exit(call_user_func(function() {
                         $post_meta_line = substr($line, $earliest_meta_offs);
                         $line = substr($line, 0, $earliest_meta_offs);
                     }
-                    $line = preg_replace_callback('/\'\\\\.\'|\'.\'|("(([^"\\\\]*|\\\\.)+)"\s*)+/', function($matches) {
-                        $match = trim($matches[0]);
-                        if ($match[0] == '\'')
-                            return $matches[0];
-                        preg_match('/\s*$/', $matches[0], $matches2);
-                        $trailing_ws = $matches2[0];
-                        return (strlen($match) > 2 ? "((fstr_t) {.len = sizeof($match) - 1, .str = (uint8_t*) $match})" : "((fstr_t) {0})") . $trailing_ws;
-                    }, $line);
+                    $line = fix_c_strings($line);
                     if ($post_meta_line !== null) {
                         $in_meta = 1;
                         $line_prefix_out .= $line;
