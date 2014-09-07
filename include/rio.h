@@ -799,6 +799,16 @@ uint128_t rio_get_time_timer();
 /// Throws an io exception if reading the time value failed.
 uint128_t rio_get_time_clock();
 
+/// Returns true if specified year is a leap year.
+static inline bool rio_is_leap_year(size_t year) {
+    return (!((year) % 4) && (((year) % 100) || !((year) % 400)));
+}
+
+/// Returns the number of days in the specified year.
+static inline uint32_t rio_year_days(size_t year) {
+    return (rio_is_leap_year(year)? 366: 365);
+}
+
 /// Converts a clock time to date time.
 rio_date_time_t rio_clock_to_date_time(uint128_t clock_time);
 
