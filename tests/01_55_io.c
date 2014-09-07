@@ -357,6 +357,43 @@ void rcd_self_test_io() {
             fstr_t rfc3339_10 = fss(rio_clock_to_rfc3339(test_clock_time, 10));
             atest(fstr_equal(rfc3339_10, "2009-08-27T00:34:35.000090000Z"));
         }
+        // Test serializing a clock with rfc1123.
+        sub_heap {
+            fstr_t rfc1123_0 = fss(rio_clock_to_rfc1123(0));
+            atest(fstr_equal(rfc1123_0, "Thu, 01 Jan 1970 00:00:00 GMT"));
+            fstr_t rfc1123_1 = fss(rio_clock_to_rfc1123(1));
+            atest(fstr_equal(rfc1123_1, "Thu, 01 Jan 1970 00:00:00 GMT"));
+            fstr_t rfc1123_2 = fss(rio_clock_to_rfc1123(2));
+            atest(fstr_equal(rfc1123_2, "Thu, 01 Jan 1970 00:00:00 GMT"));
+            fstr_t rfc1123_3 = fss(rio_clock_to_rfc1123(RIO_NS_SEC - 1));
+            atest(fstr_equal(rfc1123_3, "Thu, 01 Jan 1970 00:00:00 GMT"));
+            fstr_t rfc1123_4 = fss(rio_clock_to_rfc1123(1 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_4, "Thu, 01 Jan 1970 00:00:01 GMT"));
+            fstr_t rfc1123_5 = fss(rio_clock_to_rfc1123(10 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_5, "Thu, 01 Jan 1970 00:00:10 GMT"));
+            fstr_t rfc1123_6 = fss(rio_clock_to_rfc1123(100 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_6, "Thu, 01 Jan 1970 00:01:40 GMT"));
+            fstr_t rfc1123_7 = fss(rio_clock_to_rfc1123(1000 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_7, "Thu, 01 Jan 1970 00:16:40 GMT"));
+            fstr_t rfc1123_8 = fss(rio_clock_to_rfc1123(10000 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_8, "Thu, 01 Jan 1970 02:46:40 GMT"));
+            fstr_t rfc1123_9 = fss(rio_clock_to_rfc1123(100000 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_9, "Fri, 02 Jan 1970 03:46:40 GMT"));
+            fstr_t rfc1123_10 = fss(rio_clock_to_rfc1123(1000000 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_10, "Mon, 12 Jan 1970 13:46:40 GMT"));
+            fstr_t rfc1123_11 = fss(rio_clock_to_rfc1123(10000000 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_11, "Sun, 26 Apr 1970 17:46:40 GMT"));
+            fstr_t rfc1123_12 = fss(rio_clock_to_rfc1123(100000000 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_12, "Sat, 03 Mar 1973 09:46:40 GMT"));
+            fstr_t rfc1123_13 = fss(rio_clock_to_rfc1123(1000000000 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_13, "Sun, 09 Sep 2001 01:46:40 GMT"));
+            fstr_t rfc1123_14 = fss(rio_clock_to_rfc1123(2000000000 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_14, "Wed, 18 May 2033 03:33:20 GMT"));
+            fstr_t rfc1123_15 = fss(rio_clock_to_rfc1123(4000000000 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_15, "Tue, 02 Oct 2096 07:06:40 GMT"));
+            fstr_t rfc1123_16 = fss(rio_clock_to_rfc1123(10000000000 * RIO_NS_SEC));
+            atest(fstr_equal(rfc1123_16, "Sat, 20 Nov 2286 17:46:40 GMT"));
+        }
     }
     // Test absolute timeout and no repeat.
     sub_heap {
