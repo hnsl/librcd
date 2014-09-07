@@ -354,6 +354,8 @@ class Re2cConfig {
 class LexState {
     public $regex;
     public $offset;
+    // Current fin id. Increments after each new fin reached.
+    public $cur_fin_id = 0;
 }
 
 class RegexRef {
@@ -362,6 +364,8 @@ class RegexRef {
 }
 
 class RegexFin {
+    // The id of this fin.
+    public $id;
     // Offset of fin point. Can be both integer (physical offset) and string (virtual offset).
     public $offset;
     // Exit statement (e.g. goto) to execute when reaching this point.
@@ -369,8 +373,12 @@ class RegexFin {
 }
 
 class RegexCaptureSlice {
-    // Name of fstring to populate. Must be unique.
+    // Unique ID of capture slice. Is "$fin_id/$fstr_name".
     public $name;
+    // The fin id this capture slice belongs to.
+    public $fin_id;
+    // Name of fstring to populate.
+    public $fstr_name;
     // Array of RegexCaptureSlices that are used by the StatePosition. Used to calculate storage dynamically.
     public $used_by_state_positions = array();
 }
@@ -1018,7 +1026,10 @@ function re2c_lex(LexState $lex_state, $is_sub_match, array &$all_capture_slices
                     re2c_lex_error($lex_state, "unexpected operator $c");
                 // Got ourselves a capture or fin (depending on is_sub_match). Wrap the current pending lex in a capture branch here.
                 $capture_slice = new RegexCaptureSlice();
-                $capture_slice->name = $matches[0];
+                $fstr_name = $matches[0];
+                $capture_slice->name = "$lex_state->cur_fin_id/$fstr_name";
+                $capture_slice->fin_id = $lex_state->cur_fin_id;
+                $capture_slice->fstr_name = $fstr_name;
                 if (isset($all_capture_slices[$capture_slice->name]))
                     re2c_lex_error($lex_state, "capture slice name collision, \"$capture_slice->name\" already exists");
                 $all_capture_slices[$capture_slice->name] = $capture_slice;
@@ -1041,18 +1052,21 @@ function re2c_lex(LexState $lex_state, $is_sub_match, array &$all_capture_slices
                     re2c_lex_error($lex_state, "unexpected finalizer - can only finalize on main level");
                 // Creating final regex fin node and terminating root branch.
                 $fin = new RegexFin();
+                $fin->id = $lex_state->cur_fin_id;
+                $fin->offset = $lex_state->offset;
                 if (strlen($matches[2]) === 0) {
                     $fin->exit_statement = fix_c_strings($matches[3]);
                 } else {
                     $fin->exit_statement = "goto " . $matches[2];
                 }
-                $fin->offset = $lex_state->offset;
                 $regex_lex_append_to_line_fn($fin);
                 $regex_lex_append_to_line_fn(null);
                 $regex_lex_branches->branches[] = $regex_lex_line_start;
                 // Scan to any optional | that indicates new root branch.
                 if (!re2c_lex_next_root_branch($lex_state))
                     return $regex_lex_branches;
+                // Increment root branch id.
+                $lex_state->cur_fin_id++;
                 // Reset lex line and scan next.
                 $regex_lex_line_start = null;
                 $regex_lex_line_end = null;
@@ -1514,18 +1528,20 @@ function re2c_gen_code(Re2cConfig $config, Re2cState $re2c_state, DFAState $dfa_
                 re2c_gen_code_capture($config, $re2c_state, $dfa_state->fin_arc->capture_scenario_event, $out_code, $pass, false);
         }
         $scenario =  $dfa_state->fin_arc->scenario;
+        $regex_fin = $dfa_state->fin_arc->regex_fin;
         // Copy all scenario memory to their proper locations.
         foreach ($re2c_state->all_capture_slices as $capture_slice_name => $capture_slice) {
             assert($capture_slice instanceof RegexCaptureSlice);
+            if ($capture_slice->fin_id != $regex_fin->id)
+                continue;
             if (isset($scenario->capture_mem[$capture_slice_name])) {
                 $src_offset = $scenario->capture_mem[$capture_slice_name];
-                $out_code[] = "$capture_slice->name = capture_mem[$src_offset];";
+                $out_code[] = "$capture_slice->fstr_name = capture_mem[$src_offset];";
             } else {
-                $out_code[] = "$capture_slice->name = (fstr_t) {0};";
+                $out_code[] = "$capture_slice->fstr_name = (fstr_t) {0};";
             }
         }
         // Jump to point specified by fin to indicate successful regex match.
-        $regex_fin = $dfa_state->fin_arc->regex_fin;
         $out_code[] = "$regex_fin->exit_statement;";
     } else {
         // Eat another rune from the buffer unless this is a start of file state.
