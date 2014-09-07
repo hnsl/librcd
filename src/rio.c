@@ -1744,72 +1744,40 @@ uint128_t rio_get_time_clock() {
     return tp.tv_nsec + (uint128_t) tp.tv_sec * 1000000000;
 }
 
-// Integer division that nudges negative operands to round in the right direction.
-#define DIV_ROUND(a, b) ((a) > 0? (a) / (b) : -(((b) - (a) - 1) / (b)))
-
-#define DAYS_PER_400Y (365 * 400 + 97)
-#define DAYS_PER_100Y (365 * 100 + 24)
-#define DAYS_PER_4Y   (365 * 4 + 1)
-
 rio_date_time_t rio_clock_to_date_time(uint128_t clock_time) {
-    /* months are march-based */
-    static const int32_t days_thru_month[] = {31, 61, 92, 122, 153, 184, 214, 245, 275, 306, 337, 366};
-    uint64_t bigday;
-    uint32_t clock_time_sec, month_day, year4, year100;
-    int32_t year, year400, month, leap, hour, minute, second, week_day, year_day;
-    clock_time_sec = clock_time / RIO_NS_SEC;
-    /* start from 2000-03-01 (multiple of 400 years) */
-    clock_time_sec += -946684800 - 86400 * (31 + 29);
-    bigday = DIV_ROUND(clock_time_sec, 86400);
-    second = clock_time_sec - bigday * 86400;
-    hour = second / 3600;
-    second -= hour * 3600;
-    minute = second / 60;
-    second -= minute * 60;
-    /* 2000-03-01 was a wednesday */
-    week_day = (2 + bigday) % 7;
-    if (week_day < 0)
-        week_day += 7;
-    clock_time_sec = -946684800LL - 86400 * (31 + 29) + 9000000;
-    year400 = DIV_ROUND(bigday, DAYS_PER_400Y);
-    month_day = bigday - year400 * DAYS_PER_400Y;
-    year100 = month_day / DAYS_PER_100Y;
-    if (year100 == 4)
-        year100--;
-    month_day -= year100 * DAYS_PER_100Y;
-    year4 = month_day / DAYS_PER_4Y;
-    if (year4 == 25)
-        year4--;
-    month_day -= year4 * DAYS_PER_4Y;
-    year = month_day / 365;
-    if (year == 4)
-        year--;
-    month_day -= year * 365;
-    leap = !year && (year4 || !year100);
-    year_day = month_day + 31 + 28 + leap;
-    if (year_day >= 365 + leap)
-        year_day -= 365 + leap;
-    year += 4 * year4 + 100 * year100 + 400 * year400 + 2000 - 1900;
-    for (month = 0; days_thru_month[month] <= month_day; month++);
-    if (month)
-        month_day -= days_thru_month[month - 1];
-    month += 2;
-    if (month >= 12) {
-        month -= 12;
+    const size_t epoch_year = 1970;
+    const size_t sec_per_day = (24 * 60 * 60);
+    const uint8_t dpm[2][12] = {
+        {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
+        {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+    };
+    // Do main division.
+    uint128_t clock_time_s = (clock_time / RIO_NS_SEC);
+    uint32_t day_sec = clock_time_s % sec_per_day;
+    uint32_t day_n = clock_time_s / sec_per_day;
+    // Calculate time.
+    rio_date_time_t clock_dt;
+    clock_dt.second = day_sec % 60;
+    clock_dt.minute = (day_sec % 3600) / 60;
+    clock_dt.hour = day_sec / 3600;
+    clock_dt.week_day = (day_n + 3) % 7;
+    // Scan over years to calculate year + year day.
+    uint32_t year = epoch_year;
+    while (day_n >= rio_year_days(year)) {
+        day_n -= rio_year_days(year);
         year++;
     }
-    month_day += 1;
-    year += 1900;
-    month += 1;
-    rio_date_time_t clock_dt;
-    clock_dt.second = second;
-    clock_dt.minute = minute;
-    clock_dt.hour = hour;
-    clock_dt.month_day = month_day;
-    clock_dt.month = month;
     clock_dt.year = year;
-    clock_dt.week_day = week_day;
-    clock_dt.year_day = year_day;
+    clock_dt.year_day = day_n;
+    // Scan over months to calculate month + month day.
+    clock_dt.month = 0;
+    uint8_t is_leap_yr = rio_is_leap_year(year);
+    while (day_n >= dpm[is_leap_yr][clock_dt.month]) {
+        day_n -= dpm[is_leap_yr][clock_dt.month];
+        clock_dt.month++;
+    }
+    clock_dt.month++;
+    clock_dt.month_day = day_n + 1;
     return clock_dt;
 }
 
