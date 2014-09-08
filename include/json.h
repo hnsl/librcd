@@ -10,6 +10,13 @@
 #define json_array_v(x)  ((json_value_t){.type = JSON_ARRAY,  .array_value  = x})
 #define json_object_v(x) ((json_value_t){.type = JSON_OBJECT, .object_value = x})
 
+#define jnull json_null_v
+#define jbool(x) json_bool_v(x)
+#define jnum(x) json_number_v(x)
+#define jstr(x) json_string_v(x)
+#define jarr(x) json_array_v(x)
+#define jobj(x) json_object_v(x)
+
 /// Enter a scope with 'this' assigned to a particular JSON object value. This can be
 /// be helpful in making creation of JSON structures feel more natural.
 #define json_for_obj(obj) \
