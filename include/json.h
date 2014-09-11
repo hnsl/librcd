@@ -145,6 +145,9 @@ fstr_mem_t* json_stringify_pretty(json_value_t value);
 /// Serializes a JSON type to a human readable string.
 fstr_t json_serial_type(json_type_t type);
 
+/// Returns true if value is "truthy".
+bool json_truthy(json_value_t value);
+
 noret void _json_fail_invalid_type(json_type_t expected_type, json_type_t got_type);
 
 noret void _json_fail_missing_property(fstr_t prop_name);

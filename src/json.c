@@ -447,6 +447,23 @@ fstr_t json_serial_type(json_type_t type) {
     }}
 }
 
+bool json_truthy(json_value_t value) {
+    switch (value.type) {{
+    } case JSON_NULL: {
+        return false;
+    } case JSON_BOOL: {
+        return value.bool_value;
+    } case JSON_NUMBER: {
+        return value.number_value != 0;
+    } case JSON_STRING: {
+        return value.string_value.len > 0;
+    } case JSON_ARRAY: {
+        return list_count(value.array_value, json_value_t) > 0;
+    } case JSON_OBJECT: {
+        return dict_count(value.object_value, json_value_t) > 0;
+    }}
+}
+
 void _json_fail_invalid_type(json_type_t expected_type, json_type_t got_type) {
     emitosis(json_type, jd) {
         jd.expected = expected_type;
