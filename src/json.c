@@ -494,7 +494,7 @@ json_value_t json_clone(json_value_t value, bool copy_strings) {
             assert(insert_ok);
         }
         json_value_t new_value = {
-            .type = JSON_ARRAY,
+            .type = JSON_OBJECT,
             .object_value = new_dict_v,
         };
         return new_value;
@@ -504,10 +504,10 @@ json_value_t json_clone(json_value_t value, bool copy_strings) {
 json_tree_t* json_clone_tree(json_tree_t* tree, bool copy_strings) {
     lwt_heap_t* heap = lwt_alloc_heap();
     switch_heap (heap) {
-        json_tree_t* tree = new(json_tree_t);
-        tree->heap = heap;
-        tree->value = json_clone(tree->value, copy_strings);
-        return tree;
+        json_tree_t* tree_cln = new(json_tree_t);
+        tree_cln->heap = heap;
+        tree_cln->value = json_clone(tree->value, copy_strings);
+        return tree_cln;
     }
 }
 
