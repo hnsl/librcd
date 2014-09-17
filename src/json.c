@@ -464,6 +464,53 @@ bool json_truthy(json_value_t value) {
     }}
 }
 
+json_value_t json_clone(json_value_t value, bool copy_strings) {
+    switch (value.type) {{
+    } case JSON_NULL: {
+    } case JSON_BOOL: {
+    } case JSON_NUMBER: {
+        return value;
+    } case JSON_STRING: {
+        if (!copy_strings)
+            return value;
+        json_value_t new_value = {
+            .type = JSON_STRING,
+            .string_value = fsc(value.string_value),
+        };
+        return new_value;
+    } case JSON_ARRAY: {
+        list(json_value_t)* new_list_v = new_list(json_value_t);
+        list_foreach(value.array_value, json_value_t, cvalue)
+            list_push_end(new_list_v, json_value_t, json_clone(cvalue, copy_strings));
+        json_value_t new_value = {
+            .type = JSON_ARRAY,
+            .array_value = new_list_v,
+        };
+        return new_value;
+    } case JSON_OBJECT: {
+        dict(json_value_t)* new_dict_v = new_dict(json_value_t);
+        dict_foreach(value.object_value, json_value_t, ckey, cvalue) {
+            bool insert_ok = dict_insert(new_dict_v, json_value_t, ckey, json_clone(cvalue, copy_strings));
+            assert(insert_ok);
+        }
+        json_value_t new_value = {
+            .type = JSON_ARRAY,
+            .object_value = new_dict_v,
+        };
+        return new_value;
+    }}
+}
+
+json_tree_t* json_clone_tree(json_tree_t* tree, bool copy_strings) {
+    lwt_heap_t* heap = lwt_alloc_heap();
+    switch_heap (heap) {
+        json_tree_t* tree = new(json_tree_t);
+        tree->heap = heap;
+        tree->value = json_clone(tree->value, copy_strings);
+        return tree;
+    }
+}
+
 void _json_fail_invalid_type(json_type_t expected_type, json_type_t got_type) {
     emitosis(json_type, jd) {
         jd.expected = expected_type;
