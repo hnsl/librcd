@@ -513,7 +513,12 @@ void rcd_self_test_io() {
         rio_t *unix_dgram0_h, *unix_dgram1_h;
         rio_open_unix_socket_dgram_pair(&unix_dgram0_h, &unix_dgram1_h);
         // This does not work if there was a previous trap in the program (BREAKPT), the subprocess shuts down instantly with exit code 0, investigate this.
-        rio_proc_t* proc_h = rio_proc_execute(path, new_list(fstr_t, "01_55_io/ipc_test_post_execve"), unix_dgram1_h, 0, 0, 0, false);
+        rio_sub_exec_t se = { .exec = {
+            .path = path,
+            .args = new_list(fstr_t, "01_55_io/ipc_test_post_execve"),
+            .io_in = unix_dgram1_h,
+        }};
+        rio_proc_t* proc_h = rio_proc_execute(se);
         lwt_alloc_free(unix_dgram1_h);
         rio_t *unix_stream0_h, *unix_stream1_h;
         rio_open_unix_socket_stream_pair(&unix_stream0_h, &unix_stream1_h);
