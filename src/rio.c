@@ -953,14 +953,31 @@ uint32_t rio_process_getuid() {
     return getuid();
 }
 
+uint32_t rio_process_getgid() {
+    return getgid();
+}
+
 void rio_process_setuid(uint32_t uid) {
     int32_t setuid_r = setuid(uid);
     if (setuid_r == -1)
         RCD_SYSCALL_EXCEPTION(setuid, exception_io);
 }
 
+void rio_process_setgid(uint32_t gid) {
+    int32_t setgid_r = setgid(gid);
+    if (setgid_r == -1)
+        RCD_SYSCALL_EXCEPTION(setgid, exception_io);
+}
+
+void rio_process_setid(rio_id_t id) {
+    if (id.uid != 0)
+        rio_process_setuid(id.uid);
+    if (id.gid != 0)
+        rio_process_setgid(id.gid);
+}
+
 /// This function irreversibly changes standard streams and resets signal mask and so represents a point of no return for the process.
-static void rio_pre_execve(int32_t stdin_fd, int32_t stdout_fd, int32_t stderr_fd, uint32_t set_uid) {
+static void rio_pre_execve(int32_t stdin_fd, int32_t stdout_fd, int32_t stderr_fd, rio_id_t set_id) {
     // Dup-over standard streams, also disable CLOEXEC flags on standard file
     // descriptors to ensure that only they survive the exec. All other file
     // descriptors should be open with O_CLOEXEC and if they leak the bug is
@@ -988,20 +1005,19 @@ static void rio_pre_execve(int32_t stdin_fd, int32_t stdout_fd, int32_t stderr_f
     // Prevent signal procmask state from leaking into subprocess.
     rio_reset_sigprocmask();
     // Set new unix user id.
-    if (set_uid != 0)
-        rio_process_setuid(set_uid);
+    rio_process_setid(set_id);
 }
 
-void rio_process_execve(fstr_t path, list(fstr_t)* args, rio_t* rio_stdin, rio_t* rio_stdout, rio_t* rio_stderr, uint32_t set_uid) {
+void rio_process_execve(rio_exec_t e) {
     // If there is contention on calling this function we simply avoid multiple threads messing with the executable state.
     static int8_t lock = 0;
     atomic_spinlock_lock(&lock);
     // Make irreversible changes to the process state.
-    int32_t stdin_fd = rio_stdin != 0? rio_get_fd_read(rio_stdin): STDIN_FILENO;
-    int32_t stdout_fd = rio_stdout != 0? rio_get_fd_write(rio_stdout): STDOUT_FILENO;
-    int32_t stderr_fd = rio_stderr != 0? rio_get_fd_write(rio_stderr): STDERR_FILENO;
-    rio_pre_execve(stdin_fd, stdout_fd, stderr_fd, set_uid);
-    execve(fstr_to_cstr(path), rio_compile_argv(&path, args), 0);
+    int32_t stdin_fd = e.io_in != 0? rio_get_fd_read(e.io_in): STDIN_FILENO;
+    int32_t stdout_fd = e.io_out != 0? rio_get_fd_write(e.io_out): STDOUT_FILENO;
+    int32_t stderr_fd = e.io_err != 0? rio_get_fd_write(e.io_err): STDERR_FILENO;
+    rio_pre_execve(stdin_fd, stdout_fd, stderr_fd, e.set_id);
+    execve(fstr_to_cstr(e.path), rio_compile_argv(&e.path, e.args), 0);
     // If the execve fails we throw a fatal exception since we have already called rio_pre_execve() so the process is no longer in a catchable state.
     RCD_SYSCALL_EXCEPTION(execve, exception_fatal);
 }
@@ -1009,11 +1025,11 @@ void rio_process_execve(fstr_t path, list(fstr_t)* args, rio_t* rio_stdin, rio_t
 typedef struct rio_post_clone_args {
     char* path;
     char** argv;
-    char** env_list;
+    char** env;
     int32_t stdin_fd;
     int32_t stdout_fd;
     int32_t stderr_fd;
-    uint32_t set_uid;
+    rio_id_t set_id;
     int32_t exit_pipe_fd;
     volatile int32_t execve_errno;
 } rio_post_clone_args_t;
@@ -1030,9 +1046,9 @@ static void rio_execute_post_clone(void* arg_ptr) {
     if (prctl_r < 0)
         RCD_SYSCALL_EXCEPTION(prctl, exception_io);
     // Prevent signal procmask state from leaking into subprocess.
-    rio_pre_execve(args->stdin_fd, args->stdout_fd, args->stderr_fd, args->set_uid);
+    rio_pre_execve(args->stdin_fd, args->stdout_fd, args->stderr_fd, args->set_id);
     //-x-execute/ DBG("[rio_execute_post_clone]: calling execve(", fss(fstr_from_cstr(args->path)), ")");
-    int32_t execve_r = execve(args->path, args->argv, args->env_list);
+    int32_t execve_r = execve(args->path, args->argv, args->env);
     //-x-execute/ DBG("[rio_execute_post_clone]: execve failed");
     // Execve failed - return errno. Because the memory is shared we can
     // communicate this in the shared errno integer. We also share the errno
@@ -1069,7 +1085,7 @@ static void rio_proc_destruct(void* arg_ptr) { uninterruptible {
     }
 }}
 
-rio_proc_t* rio_proc_execute_env(fstr_t path, list(fstr_t)* args, list(fstr_t)* env_list, rio_t* rio_stdin, rio_t* rio_stdout, rio_t* rio_stderr, uint32_t set_uid, bool new_kernel_namespace) { sub_heap {
+rio_proc_t* rio_proc_execute(rio_sub_exec_t se) { sub_heap {
     // Create proc handle for subprocess.
     rio_proc_t* proc_h = lwt_alloc_destructable(sizeof(rio_proc_t), rio_proc_destruct);
     *proc_h = (rio_proc_t) {0};
@@ -1077,29 +1093,29 @@ rio_proc_t* rio_proc_execute_env(fstr_t path, list(fstr_t)* args, list(fstr_t)* 
     sub_heap {
         // Because we fork the file descriptor table after the clone we don't have a race between closing the file
         // descriptors we are given as standard in/out/err after returning and the execve() we're not waiting for.
-        int32_t stdin_fd = rio_stdin != 0? rio_get_fd_read(rio_stdin): STDIN_FILENO;
-        int32_t stdout_fd = rio_stdout != 0? rio_get_fd_write(rio_stdout): STDOUT_FILENO;
-        int32_t stderr_fd = rio_stderr != 0? rio_get_fd_write(rio_stderr): STDERR_FILENO;
+        int32_t stdin_fd = se.exec.io_in != 0? rio_get_fd_read(se.exec.io_in): STDIN_FILENO;
+        int32_t stdout_fd = se.exec.io_out != 0? rio_get_fd_write(se.exec.io_out): STDOUT_FILENO;
+        int32_t stderr_fd = se.exec.io_err != 0? rio_get_fd_write(se.exec.io_err): STDERR_FILENO;
         // Allocate some memory for the stack.
         size_t fast_execve_stack_size = PAGE_SIZE * 0x20;
         void* clone_stack = lwt_alloc_new(fast_execve_stack_size);
         void* aligned_stack_entry = (void*) vm_align_floor((uintptr_t) clone_stack + fast_execve_stack_size, 16) - 8;
         // Process all arguments into their raw c form allowing the new process to do as little work as possible before calling execve.
         rio_post_clone_args_t* pc_args = new(rio_post_clone_args_t);
-        pc_args->path = fstr_to_cstr(path);
-        pc_args->argv = rio_compile_argv(&path, args);
-        pc_args->env_list = env_list != 0? rio_compile_argv(0, env_list): 0;
+        pc_args->path = fstr_to_cstr(se.exec.path);
+        pc_args->argv = rio_compile_argv(&se.exec.path, se.exec.args);
+        pc_args->env = se.exec.env != 0? rio_compile_argv(0, se.exec.env): 0;
         pc_args->stdin_fd = stdin_fd;
         pc_args->stdout_fd = stdout_fd;
         pc_args->stderr_fd = stderr_fd;
-        pc_args->set_uid = set_uid;
+        pc_args->set_id = se.exec.set_id;
         pc_args->execve_errno = 0;
         // Create a pipe which has the only purpose of allowing us to waiting for
         // the forked child process to no longer be a thread in the current process image.
         rio_t* pre_wait_pipe = rio_open_pipe();
         // Create the new process which share our memory so we can clone quickly. This is the fast execve method.
         int32_t flags = CLONE_VM | SIGCHLD
-        | (new_kernel_namespace? CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWNET: 0)
+        | (se.new_kernel_ns? CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWNET: 0)
         | CLONE_SETTLS | CLONE_PARENT_SETTID | CLONE_CHILD_CLEARTID;
         struct lwt_physical_thread* phys_thread = 0;
         int32_t clone_r = lwt_start_new_thread(rio_execute_post_clone, aligned_stack_entry, flags, pc_args, &phys_thread);
@@ -1138,15 +1154,11 @@ rio_proc_t* rio_proc_execute_env(fstr_t path, list(fstr_t)* args, list(fstr_t)* 
     // This allows us to transform the act of waiting for the subprocess into the act of waiting
     // for a fiber, which enables performing interprocess concurrency as librcd concurrency.
     fmitosis {
-        fstr_t fiber_name = sconc(path, list_count(args, fstr_t) > 0? " ": "", fss(fstr_implode(args, " ")));
+        fstr_t fiber_name = sconc(se.exec.path, list_count(se.exec.args, fstr_t) > 0? " ": "", fss(fstr_implode(se.exec.args, " ")));
         proc_h->wait_fid = spawn_static_fiber(rio_proc_wait_fiber(fiber_name, proc_h));
     }
     return escape(proc_h);
 }}
-
-rio_proc_t* rio_proc_execute(fstr_t path, list(fstr_t)* args, rio_t* rio_stdin, rio_t* rio_stdout, rio_t* rio_stderr, uint32_t set_uid, bool new_kernel_namespace) {
-    return rio_proc_execute_env(path, args, 0, rio_stdin, rio_stdout, rio_stderr, set_uid, new_kernel_namespace);
-}
 
 int32_t rio_proc_get_pid(rio_proc_t* proc_h) {
     return proc_h->pid;
@@ -1167,7 +1179,16 @@ int32_t rio_proc_execute_and_wait(fstr_t path, list(fstr_t)* args, bool keep_std
     int32_t exit_code;
     sub_heap {
         rio_t* dev_null = rio_open_dev_null();
-        rio_proc_t* proc_h = rio_proc_execute(path, args, dev_null, dev_null, keep_stderr? 0: dev_null, 0, false);
+        rio_sub_exec_t se = {
+            .exec = {
+                .path = path,
+                .args = args,
+                .io_in = dev_null,
+                .io_out = dev_null,
+                .io_err = (keep_stderr? 0: dev_null),
+            },
+        };
+        rio_proc_t* proc_h = rio_proc_execute(se);
         lwt_alloc_free(dev_null);
         exit_code = rio_proc_wait(proc_h);
     }
@@ -1192,7 +1213,16 @@ void rio_shell(fstr_t command) {
 void rio_proc_execute_and_pipe(fstr_t path, list(fstr_t)* args, bool keep_stderr, rio_proc_t** out_proc_h, rio_t** out_rio_pipe) { sub_heap {
     rio_t* stdin_pipe = rio_open_pipe();
     rio_t* stdout_pipe = rio_open_pipe();
-    rio_proc_t* proc_h = rio_proc_execute(path, args, stdin_pipe, stdout_pipe, keep_stderr? 0: rio_open_dev_null(), 0, false);
+        rio_sub_exec_t se = {
+            .exec = {
+                .path = path,
+                .args = args,
+                .io_in = stdin_pipe,
+                .io_out = stdout_pipe,
+                .io_err = (keep_stderr? 0: rio_open_dev_null()),
+            },
+        };
+    rio_proc_t* proc_h = rio_proc_execute(se);
     // We combine the stdin_fd pipe and stdout_fd pipe so we read from the childs stdout_fd and write to the childs stdin_fd.
     rio_t* rio_pipe = rio_realloc_combined(stdout_pipe, stdin_pipe);
     *out_proc_h = escape(proc_h);

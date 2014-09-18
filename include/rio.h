@@ -208,6 +208,40 @@ typedef struct rio_tcp_ka {
     int32_t count_before_timeout;
 } rio_tcp_ka_t;
 
+/// User/group id.
+typedef struct rio_id {
+    int32_t uid;
+    int32_t gid;
+} rio_id_t;
+
+typedef struct rio_exec {
+    /// Path to executable to execute.
+    fstr_t path;
+    /// List of arguments passed to the executable.
+    list(fstr_t)* args;
+    /// List of environment variables passed to the executable.
+    /// Each item should have the format KEY=VALUE.
+    /// If 0 no environment is passed to the new executable.
+    list(fstr_t)* env;
+    /// Rio stream to use as stdin descriptor. If 0 stdin is inherited.
+    rio_t* io_in;
+    /// Rio stream to use as stdout descriptor. If 0 stdout is inherited.
+    rio_t* io_out;
+    /// Rio stream to use as stderr descriptor. If 0 stderr is inherited.
+    rio_t* io_err;
+    /// The uid/gid that will be set before executing.
+    /// See rio_process_setid() for more information.
+    rio_id_t set_id;
+} rio_exec_t;
+
+/// Arguments passed to rio_process_execve() when executing subprocesses.
+typedef struct rio_sub_exec {
+    rio_exec_t exec;
+    /// If true the subprocess will run in it's own kernel namespace and have
+    /// its own file descriptor table, pid list, mounts etc.
+    bool new_kernel_ns;
+} rio_sub_exec_t;
+
 /// Deprecated alias, do not use.
 typedef rio_date_time_t rio_clock_date_time_t __attribute__((deprecated("this type has been superseded by rio_date_time_t, please refactor your code")));
 
@@ -532,9 +566,22 @@ rio_t* rio_signal_chan_open(size_t n_signals, int32_t* signals);
 /// Returns the user id of the process. Never throws exceptions.
 uint32_t rio_process_getuid();
 
+/// Returns the group id of the process. Never throws exceptions.
+uint32_t rio_process_getgid();
+
 /// Sets the user id of the process. See setuid(2).
 /// Throws an io exception if any failure was reported by the system.
 void rio_process_setuid(uint32_t uid);
+
+/// Sets the group id of the process. See setuid(2).
+/// Throws an io exception if any failure was reported by the system.
+void rio_process_setgid(uint32_t gid);
+
+/// Sets the user/group id of the process in order. See setuid(2)/setgid(2).
+/// If id.uid or id.gid is 0 the set will be skipped. The operation is not
+/// atomic. If setgid fails the process could be running with a different uid.
+/// Throws an io exception if any failure was reported by the system.
+void rio_process_setid(rio_id_t id);
 
 /// Replaces the executable image by doing an execve(). Similar to
 /// rio_proc_execute() but completely replaces the process image instead
@@ -544,20 +591,11 @@ void rio_process_setuid(uint32_t uid);
 /// return. To prevent the execve from failing due to path or access errors
 /// it is recommended to use rio_file_access() first to check if the path
 /// is valid and executable.
-void rio_process_execve(fstr_t path, list(fstr_t)* args, rio_t* rio_stdin, rio_t* rio_stdout, rio_t* rio_stderr, uint32_t set_uid);
-
-/// Like rio_proc_execute() but also takes an environment list.
-/// Each item in the list should be of the format KEY=VALUE.
-/// Throws io exception if clone() fails.
-rio_proc_t* rio_proc_execute_env(fstr_t path, list(fstr_t)* args, list(fstr_t)* env_list, rio_t* rio_stdin, rio_t* rio_stdout, rio_t* rio_stderr, uint32_t set_uid, bool new_kernel_namespace);
+void rio_process_execve(rio_exec_t e);
 
 /// ** YOU PROBABLY WANT TO USE A HIGHER LEVEL FUNCTION THAN THIS, SEE
 /// rio_proc_execute_and_wait() AND rio_proc_execute_and_pipe(). **
-/// Wrapper for subprocess execution. Takes 3 rio handles that will be
-/// used for respective standard file operations. If set_uid is non-zero the
-/// owner of the process will be set to that unix user id before creating it.
-/// If new_namespace is true the subprocess will run in it's own kernel
-/// namespace and have it's own file descriptor table, pid list, mounts etc.
+/// Wrapper for subprocess execution. See rio_exec_t for argument documentation.
 /// Starts an internal avatar fiber for the subprocess that continously waits
 /// for it and cleans it up with SIGKILL if it's free'd.
 /// Returns a rio_type_subprocess type rio handle for the process which is not
@@ -567,7 +605,7 @@ rio_proc_t* rio_proc_execute_env(fstr_t path, list(fstr_t)* args, list(fstr_t)* 
 /// standard stream parameters are used which if set to 0 is inherited
 /// to be the same as the parent process (not recommended except for stderr).
 /// Throws io exception if clone() fails or execve() fails.
-rio_proc_t* rio_proc_execute(fstr_t path, list(fstr_t)* args, rio_t* rio_stdin, rio_t* rio_stdout, rio_t* rio_stderr, uint32_t set_uid, bool new_kernel_namespace);
+rio_proc_t* rio_proc_execute(rio_sub_exec_t se);
 
 /// Returns the child process id of the subprocess. Only useful for libraries
 /// that wish to perform direct linux interaction with the process.
