@@ -145,8 +145,9 @@ fstr_mem_t* json_stringify_pretty(json_value_t value);
 /// Serializes a JSON type to a human readable string.
 fstr_t json_serial_type(json_type_t type);
 
-/// Returns true if value is "truthy".
-bool json_truthy(json_value_t value);
+/// Returns true if value is empty, i.e. null, false or zero length string,
+/// array or object.
+bool json_is_empty(json_value_t value);
 
 /// Deep clones a json value.
 json_value_t json_clone(json_value_t value, bool copy_strings);

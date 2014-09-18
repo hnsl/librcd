@@ -447,7 +447,7 @@ fstr_t json_serial_type(json_type_t type) {
     }}
 }
 
-bool json_truthy(json_value_t value) {
+bool json_is_empty(json_value_t value) {
     switch (value.type) {{
     } case JSON_NULL: {
         return false;
