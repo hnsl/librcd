@@ -577,10 +577,14 @@ void rio_process_setuid(uint32_t uid);
 /// Throws an io exception if any failure was reported by the system.
 void rio_process_setgid(uint32_t gid);
 
-/// Sets the user/group id of the process in order. See setuid(2)/setgid(2).
-/// If id.uid or id.gid is 0 the set will be skipped. The operation is not
-/// atomic. If setgid fails the process could be running with a different uid.
+/// Sets the user/group id of the process. If id.uid or id.gid is 0 the set
+/// will be skipped.
+/// The uid/gid is set in gid, uid order. This order is important as setting
+/// the uid usually drops permission of setting the gid. The operation is not
+/// atomic. If the last setuid fails the process could be running with a
+/// different gid.
 /// Throws an io exception if any failure was reported by the system.
+/// See setuid(2)/setgid(2) for more information.
 void rio_process_setid(rio_id_t id);
 
 /// Replaces the executable image by doing an execve(). Similar to

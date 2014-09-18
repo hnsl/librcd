@@ -970,10 +970,10 @@ void rio_process_setgid(uint32_t gid) {
 }
 
 void rio_process_setid(rio_id_t id) {
-    if (id.uid != 0)
-        rio_process_setuid(id.uid);
     if (id.gid != 0)
         rio_process_setgid(id.gid);
+    if (id.uid != 0)
+        rio_process_setuid(id.uid);
 }
 
 /// This function irreversibly changes standard streams and resets signal mask and so represents a point of no return for the process.
