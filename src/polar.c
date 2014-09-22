@@ -34,24 +34,7 @@ typedef struct tls_session {
  //   fstr_t write_buffer;
 } tls_session_t;
 
-/// Every thread has a cached prng state for fast random number generation.
-RCD_DEFINE_THREAD_STATIC_MEMORY(sec_prng_state_t sec_prng_thread_state) = {0};
-RCD_DEFINE_THREAD_STATIC_MEMORY(bool sec_prng_thread_is_initialized) = false;
-
-static sec_prng_state_t* polar_prng_get_thread_state() {
-    sec_prng_state_t* state = lwt_get_thread_static_ptr(&sec_prng_thread_state);
-    bool* is_initialized = lwt_get_thread_static_ptr(&sec_prng_thread_is_initialized);
-    if (!*is_initialized) {
-        entropy_init(&state->entropy);
-        fstr_t ctr_drbg_pers = "librcd-ctr-drbg";
-        RCD_POLAR_ECE(ctr_drbg_init(&state->ctr_drbg, entropy_func, &state->entropy, ctr_drbg_pers.str, ctr_drbg_pers.len), exception_fatal);
-        *is_initialized = true;
-    }
-    return state;
-}
-
-int32_t polar_secure_drbg_random(void* __unused, unsigned char* output, size_t output_len) {
-    sec_prng_state_t* state = polar_prng_get_thread_state();
+join_locked(int32_t) sec_drgb_fill(unsigned char* output, size_t output_len, join_server_params, sec_prng_state_t* state) {
     for (;;) {
         size_t chunk_size = MIN(output_len, CTR_DRBG_MAX_REQUEST);
         RCD_POLAR_ECE(ctr_drbg_random(&state->ctr_drbg, output, output_len), exception_fatal);
@@ -61,6 +44,36 @@ int32_t polar_secure_drbg_random(void* __unused, unsigned char* output, size_t o
         output += chunk_size;
     }
     return 0;
+}
+
+fiber_main sec_drgb_fiber(fiber_main_attr, sec_prng_state_t* state) {
+    auto_accept_join(sec_drgb_fill, join_server_params, state);
+}
+
+static void init_sec_rng_fid(void* arg_ptr) {
+    rcd_fid_t* fid_ptr = arg_ptr;
+    try uninterruptible {
+        fmitosis {
+            sec_prng_state_t* state = new(sec_prng_state_t);
+            entropy_init(&state->entropy);
+            fstr_t ctr_drbg_pers = "librcd-ctr-drbg";
+            RCD_POLAR_ECE(ctr_drbg_init(&state->ctr_drbg, entropy_func, &state->entropy, ctr_drbg_pers.str, ctr_drbg_pers.len), exception_fatal);
+            *fid_ptr = spawn_static_fiber(sec_drgb_fiber("", state));
+        }
+    } catch (exception_any, e) {
+        throw_fwd("initializing rng failed", exception_fatal, e);
+    }
+}
+
+int32_t polar_secure_drbg_random(void* __unused, unsigned char* output, size_t output_len) {
+    static rcd_fid_t sec_drgb_fid = 0;
+    static lwt_once_t sec_drgb_once = LWT_ONCE_INIT;
+    lwt_once(&sec_drgb_once, init_sec_rng_fid, &sec_drgb_fid);
+    try {
+        return sec_drgb_fill(output, output_len, sec_drgb_fid);
+    } catch (exception_inner_join_fail, e) {
+        throw_fwd(e->message, exception_fatal, e);
+    }
 }
 
 void polar_secure_drbg_fill(fstr_t buffer) {
