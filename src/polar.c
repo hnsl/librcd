@@ -116,15 +116,19 @@ join_locked(fstr_t) tls_read(fstr_t buffer, bool* more_hint_out, join_server_par
     }
 }
 
-join_locked(void) tls_write(fstr_t buffer, bool more_hint, join_server_params, tls_session_t* session) {
+join_locked(fstr_t) tls_write(fstr_t buffer, bool more_hint, join_server_params, tls_session_t* session) {
     if (buffer.len == 0)
-        return;
+        return buffer;
     if (session->pending_exception != 0)
         throw_fwd("tls io error", exception_io, lwt_copy_exception(session->pending_exception));
     session->write_hint = more_hint;
     int32_t ssl_write_ret = ssl_write(&session->ssl_ctx, buffer.str, buffer.len);
-    if (ssl_write_ret < 0 && ssl_write_ret != POLARSSL_ERR_NET_WANT_WRITE)
+    if (ssl_write_ret < 0) {
+        if (ssl_write_ret == POLARSSL_ERR_NET_WANT_WRITE)
+            return buffer;
         RCD_POLAR_ECE(ssl_write_ret, exception_io);
+    }
+    return fstr_slice(buffer, ssl_write_ret, -1);
 }
 
 join_locked(bool) tls_poll(bool read, join_server_params, tls_session_t* session) {
@@ -178,23 +182,7 @@ fiber_main tls_epoll_fiber(fiber_main_attr, notify_join_fn_t notify_join_fn, rio
     }
 } catch (exception_canceled, e); }
 
-fiber_main tls_client_session_fiber(fiber_main_attr, fstr_t host_cname, rio_t* socket) { try {
-    tls_session_t session = {
-        .rio_h = socket,
-    };
-    char* host_cname_cstr = (host_cname.len > 0)? fstr_to_cstr(host_cname): 0;
-    RCD_POLAR_ECE(ssl_init(&session.ssl_ctx), exception_fatal);
-    /* ssl_set_dbg(&session.ssl_ctx, tls_session_dbg, 0); */
-    ssl_set_endpoint(&session.ssl_ctx, SSL_IS_CLIENT);
-    ssl_set_authmode(&session.ssl_ctx, SSL_VERIFY_REQUIRED);
-    ssl_set_ca_chain(&session.ssl_ctx, tls_get_ca_chain(), 0, host_cname_cstr);
-    ssl_set_bio(&session.ssl_ctx, tls_bio_recv, &session, tls_bio_send, &session);
-    // TODO: We disable renegotiation. We should fix this for protection against leaking entropy.
-    ssl_set_renegotiation(&session.ssl_ctx, SSL_RENEGOTIATION_DISABLED);
-    ssl_legacy_renegotiation(&session.ssl_ctx, SSL_LEGACY_NO_RENEGOTIATION);
-    ssl_set_rng(&session.ssl_ctx, polar_secure_drbg_random, 0);
-    // This is a modern TLS lib so we should support host name extension.
-    ssl_set_hostname(&session.ssl_ctx, host_cname_cstr);
+static void tls_session(tls_session_t session) {
     try {
         for (bool handshake_done = false; !handshake_done;) {
             int32_t handshake_r = ssl_handshake(&session.ssl_ctx);
@@ -213,13 +201,13 @@ fiber_main tls_client_session_fiber(fiber_main_attr, fstr_t host_cname, rio_t* s
         // Create a sub fiber that monitors for kernel read epoll events and notifies to allow the set of
         // accepted functions to be refreshed based on the new volatile return value of rio_poll().
         fmitosis {
-            rio_epoll_t* epoll_h = rio_epoll_create(socket, rio_epoll_event_inlvl);
+            rio_epoll_t* epoll_h = rio_epoll_create(session.rio_h, rio_epoll_event_inlvl);
             spawn_fiber(tls_epoll_fiber("r", tls_epollr_notify, epoll_h, rcd_self));
         }
         // Create a sub fiber that monitors for kernel write epoll events and notifies to allow the set of
         // accepted functions to be refreshed based on the new volatile return value of ssl_flush_output().
         fmitosis {
-            rio_epoll_t* epoll_h = rio_epoll_create(socket, rio_epoll_event_outlvl);
+            rio_epoll_t* epoll_h = rio_epoll_create(session.rio_h, rio_epoll_event_outlvl);
             spawn_fiber(tls_epoll_fiber("w", tls_epollw_notify, epoll_h, rcd_self));
         }
         for (;;) {
@@ -258,7 +246,59 @@ fiber_main tls_client_session_fiber(fiber_main_attr, fstr_t host_cname, rio_t* s
         session.pending_exception = e;
         auto_accept_join(tls_poll, tls_read, tls_write, join_server_params, &session);
     }
-} catch (exception_canceled, e); }
+}
+
+static int tls_server_sni_cb(void* parameter, ssl_context* ssl, const unsigned char* hostname_ptr, size_t len) {
+    polar_tls_sni_cb_t* sni_cb = parameter;
+    fstr_t hostname = {.str = (void*) hostname_ptr, .len = len};
+    polar_sck_t sck;
+    if (!sni_cb->fn(hostname, &sck, sni_cb->arg_ptr))
+        return 1;
+    ssl_set_own_cert(ssl, sck.own_cert, sck.rsa_key);
+    return 0;
+}
+
+fiber_main tls_server_session_fiber(fiber_main_attr, rio_t* socket, polar_sck_t* sck, polar_tls_sni_cb_t* sni_cb) { try {
+    tls_session_t session = {
+        .rio_h = socket,
+    };
+    RCD_POLAR_ECE(ssl_init(&session.ssl_ctx), exception_fatal);
+    /* ssl_set_dbg(&session.ssl_ctx, tls_session_dbg, 0); */
+    ssl_set_endpoint(&session.ssl_ctx, SSL_IS_SERVER);
+    ssl_set_authmode(&session.ssl_ctx, SSL_VERIFY_NONE);
+    ssl_set_bio(&session.ssl_ctx, tls_bio_recv, &session, tls_bio_send, &session);
+    if (sck != 0)
+        ssl_set_own_cert(&session.ssl_ctx, sck->own_cert, sck->rsa_key);
+    if (sni_cb != 0)
+        ssl_set_sni(&session.ssl_ctx, tls_server_sni_cb, sni_cb);
+    // TODO: We disable renegotiation. We should fix this for protection against leaking entropy.
+    ssl_set_renegotiation(&session.ssl_ctx, SSL_RENEGOTIATION_DISABLED);
+    ssl_legacy_renegotiation(&session.ssl_ctx, SSL_LEGACY_NO_RENEGOTIATION);
+    ssl_set_rng(&session.ssl_ctx, polar_secure_drbg_random, 0);
+    // Enter tls session.
+    tls_session(session);
+} catch (exception_desync, e); }
+
+fiber_main tls_client_session_fiber(fiber_main_attr, rio_t* socket, fstr_t host_cname) { try {
+    tls_session_t session = {
+        .rio_h = socket,
+    };
+    char* host_cname_cstr = (host_cname.len > 0)? fstr_to_cstr(host_cname): 0;
+    RCD_POLAR_ECE(ssl_init(&session.ssl_ctx), exception_fatal);
+    /* ssl_set_dbg(&session.ssl_ctx, tls_session_dbg, 0); */
+    ssl_set_endpoint(&session.ssl_ctx, SSL_IS_CLIENT);
+    ssl_set_authmode(&session.ssl_ctx, SSL_VERIFY_REQUIRED);
+    ssl_set_ca_chain(&session.ssl_ctx, tls_get_ca_chain(), 0, host_cname_cstr);
+    ssl_set_bio(&session.ssl_ctx, tls_bio_recv, &session, tls_bio_send, &session);
+    // TODO: We disable renegotiation. We should fix this for protection against leaking entropy.
+    ssl_set_renegotiation(&session.ssl_ctx, SSL_RENEGOTIATION_DISABLED);
+    ssl_legacy_renegotiation(&session.ssl_ctx, SSL_LEGACY_NO_RENEGOTIATION);
+    ssl_set_rng(&session.ssl_ctx, polar_secure_drbg_random, 0);
+    // This is a modern TLS lib so we should support host name extension.
+    ssl_set_hostname(&session.ssl_ctx, host_cname_cstr);
+    // Enter tls session.
+    tls_session(session);
+} catch (exception_desync, e); }
 
 static fstr_t tls_rio_read(rcd_fid_t fid_arg, fstr_t buffer, bool* more_hint_out) {
     try {
@@ -274,11 +314,10 @@ static fstr_t tls_rio_read(rcd_fid_t fid_arg, fstr_t buffer, bool* more_hint_out
 
 static fstr_t tls_rio_write(rcd_fid_t fid_arg, fstr_t buffer, bool more_hint) {
     try {
-        tls_write(buffer, more_hint, fid_arg);
+        return tls_write(buffer, more_hint, fid_arg);
     } catch (exception_inner_join_fail, e) {
         throw_fwd("tls write failure", exception_io, e);
     }
-    return (fstr_t) {.str = buffer.str + buffer.len, .len = 0};
 }
 
 static bool tls_rio_poll(rcd_fid_t fid_arg, bool read, bool wait) {
@@ -300,21 +339,41 @@ static bool tls_rio_poll(rcd_fid_t fid_arg, bool read, bool wait) {
     }
 }
 
-rcd_sub_fiber_t* polar_tls_client_open_ka(rio_in_addr4_t addr, fstr_t host_cname, rio_tcp_ka_t ka, rio_t** rio_h_out) {
+const static rio_class_t tls_impl = {
+    .read_part_fn = tls_rio_read,
+    .write_part_fn = tls_rio_write,
+    .poll_fn = tls_rio_poll,
+};
+
+rcd_sub_fiber_t* polar_tls_server(rio_t* socket, polar_sck_t* sck, polar_tls_sni_cb_t* sni_cb, rio_t** rio_h_out) {
+    if (sck == 0 && sni_cb == 0)
+        throw("must specify either sck or sni_cb", exception_arg);
     rcd_sub_fiber_t* tls_sf;
     fmitosis {
-        rio_t* socket = rio_tcp_client(addr);
-        if (ka.idle_before_ping_s > 0 && ka.ping_interval_s > 0 && ka.count_before_timeout > 0)
-            rio_tcp_set_keepalive(socket, ka);
-        tls_sf = spawn_fiber(tls_client_session_fiber("", fsc(host_cname), socket));
+        rio_t* raw_socket = rio_realloc(socket);
+        tls_sf = spawn_fiber(tls_server_session_fiber("", raw_socket, cln(sck), cln(sni_cb)));
     }
-    const static rio_class_t tls_impl = {
-        .read_part_fn = tls_rio_read,
-        .write_part_fn = tls_rio_write,
-        .poll_fn = tls_rio_poll,
-    };
     *rio_h_out = rio_new_abstract(&tls_impl, sfid(tls_sf), 0);
     return tls_sf;
+}
+
+rcd_sub_fiber_t* polar_tls_client(rio_t* socket, fstr_t host_cname, rio_t** rio_h_out) {
+    rcd_sub_fiber_t* tls_sf;
+    fmitosis {
+        rio_t* raw_socket = rio_realloc(socket);
+        tls_sf = spawn_fiber(tls_client_session_fiber("", raw_socket, fsc(host_cname)));
+    }
+    *rio_h_out = rio_new_abstract(&tls_impl, sfid(tls_sf), 0);
+    return tls_sf;
+}
+
+rcd_sub_fiber_t* polar_tls_client_open_ka(rio_in_addr4_t addr, fstr_t host_cname, rio_tcp_ka_t ka, rio_t** rio_h_out) {
+    rio_t* socket = rio_tcp_client(addr);
+    if (ka.idle_before_ping_s > 0 && ka.ping_interval_s > 0 && ka.count_before_timeout > 0)
+        rio_tcp_set_keepalive(socket, ka);
+    rcd_sub_fiber_t* sf = polar_tls_client(socket, host_cname, rio_h_out);
+    lwt_alloc_free(socket);
+    return sf;
 }
 
 rcd_sub_fiber_t* polar_tls_client_open(rio_in_addr4_t addr, fstr_t host_cname, rio_t** rio_h_out) {

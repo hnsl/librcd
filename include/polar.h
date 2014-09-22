@@ -21,6 +21,23 @@
 
 #define RCD_POLAR_EC(r_code_expr) RCD_POLAR_ECE(r_code_expr, exception_io)
 
+/// Polarssl server certificate and key.
+typedef struct polar_sck {
+    struct _x509_cert* own_cert;
+    struct _rsa_context* rsa_key;
+} polar_sck_t;
+
+typedef struct polar_tls_sni_cb {
+    /// Callback from TLS handshake where client has presented the hostname it is
+    /// attempting to connect to. Should return the certificate and rsa key that
+    /// will be used from this point. If no cert or rsa key exist for the
+    /// specified host the function should return false so the handshake can
+    /// fail gracefully.
+    bool (*fn)(fstr_t hostname, polar_sck_t* out_sck, void* arg_ptr);
+    /// Third argument of callback fn.
+    void* arg_ptr;
+} polar_tls_sni_cb_t;
+
 /// Like polar_secure_drbg_fill() but the polarssl prng callback compatible interface.
 int32_t polar_secure_drbg_random(void* __unused, unsigned char* output, size_t output_len);
 
@@ -32,6 +49,24 @@ void polar_secure_drbg_fill(fstr_t buffer);
 /// Throws an exception with a descriptive error message of the specified type.
 /// Assumes r_code is a polarssl return value.
 noret void polar_error(int32_t r_code, fstr_t expr_str, rcd_exception_type_t etype);
+
+/// Starts a new tls server session on the specified socket. The session is
+/// executed on an internal session sub fiber which the socket is passed to.
+/// The socket becomes useless after this call and should be thrown away.
+/// The server should either have a static sck (cert + key) or a sni callback,
+/// an arg exception will be thrown otherwise. The sck and sni_cb memory
+/// must not be valid after the call returns but any internal passed cert or
+/// key memory must be valid for the life time of tls session fiber.
+/// A new rio stream is returned to rio_h_out which should be used for I/O.
+/// The session sub fiber is returned.
+rcd_sub_fiber_t* polar_tls_server(rio_t* socket, polar_sck_t* sck, polar_tls_sni_cb_t* sni_cb, rio_t** rio_h_out);
+
+/// Starts a new tls client session on the specified socket. The session is
+/// executed on an internal session fiber which the socket is passed to. The
+/// socket becomes useless after this call and should be thrown away.
+/// A new rio stream is returned to rio_h_out which should be used for I/O.
+/// The session sub fiber is returned.
+rcd_sub_fiber_t* polar_tls_client(rio_t* socket, fstr_t host_cname, rio_t** rio_h_out);
 
 /// Same function as polar_tls_client_open() but allows specifying the tcp
 /// keep alive configuration for the underlying tcp connection.
