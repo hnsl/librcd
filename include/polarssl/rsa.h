@@ -132,7 +132,7 @@
 /**
  * \brief          RSA context structure
  */
-typedef struct
+typedef struct _rsa_context
 {
     int ver;                    /*!<  always 0          */
     size_t len;                 /*!<  size(N) in chars  */
