@@ -175,7 +175,10 @@ def main(argv):
                     # We're interested in those entries where a new state is assigned.
                     if entry.state is None or entry.state.end_sequence:
                         continue
-                    if prevstate:
+                    # Ignore erroneous ranges that span over multiple files.
+                    # They are known to be caused by weak attribute and having symbol conflicts
+                    # that is merged by the linker in multiple distinct object files.
+                    if prevstate and (entry.state.file == prevstate.file):
                         length = entry.state.address - prevstate.address
                         line = prevstate.line
                         addr_line_map.append({'addr': prevstate.address, 'len': length, 'line': line})
