@@ -3146,6 +3146,8 @@ rcd_fid_t lwt_get_fiber_id() {
 }
 
 rcd_fid_t lwt_get_sub_fiber_id(rcd_sub_fiber_t* sub_fiber) {
+    if (sub_fiber == 0)
+        return 0;
     return sub_fiber->fiber_id;
 }
 
