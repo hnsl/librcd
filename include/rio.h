@@ -811,6 +811,15 @@ rio_t* rio_tcp_accept(rio_t* rio_tcp_server, rio_in_addr4_t* out_remote_addr) NO
 /// Configures TCP keep alive on the specified TCP client stream.
 void rio_tcp_set_keepalive(rio_t* rio, rio_tcp_ka_t cfg);
 
+/// Waits until the tcp connection phase is complete.
+/// On successfully established connection the function returns true.
+/// If connection was not successfully established the function returns
+/// false. If out_so_error is not 0 it returns the error status from the
+/// underlying socket SO_ERROR option on failure. It has no well defined
+/// meaning to call this function after reading or writing to a tcp stream or
+/// after the function has already returned a result for a tcp stream.
+bool rio_tcp_conn_wait(rio_t* rio, int32_t* out_so_error);
+
 /// Creates a UDP client socket that can be used to send messages with.
 rio_t* rio_udp_client();
 

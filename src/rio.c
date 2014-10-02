@@ -1700,6 +1700,23 @@ void rio_tcp_set_keepalive(rio_t* rio, rio_tcp_ka_t ka) {
     }
 }
 
+bool rio_tcp_conn_wait(rio_t* rio, int32_t* out_so_error) {
+    RIO_CHECK_TYPE(rio, rio_type_tcp);
+    // Wait until socket is writable.
+    rio_poll(rio, false, true);
+    // Get pending error with SO_ERROR.
+    int32_t so_error;
+    socklen_t so_error_len = sizeof(so_error);
+    int32_t getsockopt_r = getsockopt(rio->xfer.duplex.fd, SOL_SOCKET, SO_ERROR, &so_error, &so_error_len);
+    if (getsockopt_r == -1)
+        RCD_SYSCALL_EXCEPTION(getsockopt, exception_io);
+    if (so_error == 0)
+        return true;
+    if (out_so_error != 0)
+        *out_so_error = so_error;
+    return false;
+}
+
 rio_t* rio_udp_client() {
     int32_t fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (fd == -1)
