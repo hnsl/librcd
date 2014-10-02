@@ -311,7 +311,7 @@ static inline struct sf_t_name##__rcd_fid_t sf_t_name##_sf2id(sf(sf_t_name)* sf)
     return (struct sf_t_name##__rcd_fid_t) {.fid = sf2id(sf_t_name, sf)}; \
 }
 
-// *** Libraries that declare core types required by rcd type declarations. ****
+// *** Core libraries that declare core symbols required by rcd syntax. ****
 
 #include "sys-limit.h"
 #include "cassert.h"
@@ -321,8 +321,8 @@ static inline struct sf_t_name##__rcd_fid_t sf_t_name##_sf2id(sf(sf_t_name)* sf)
 #include "fstring.h"
 #include "list.h"
 #include "setjmp.h"
-#include "sort.h"
 #include "vm.h"
+
 
 // *** Built in lists of base types that can be used for rapidly creating public interfaces that accepts ordered lists of data. ***
 
@@ -751,15 +751,14 @@ extern int rcd_pp_marker__join_shared_declare;
 #define server_heap_flip \
     LET(uint8_t _rcd_shf_cl __attribute__((cleanup(__lwt_fiber_stack_pop_flip_server_heap))) = (__lwt_fiber_stack_push_flip_server_heap(), 0))
 
-// *** Libraries with headers that declare implementation (.c file) specific types and functions. ***
+// *** Core libraries with declarations that depend on rcd syntax. ***
 
 #include "reflect.h"
 #include "arithmetic.h"
 #include "prng.h"
 #include "lwthreads.h"
 #include "rio.h"
-#include "ifc.h"
-#include "polar.h"
+#include "sort.h"
 
 /// Main function for the program. Defined by the application.
 void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
@@ -856,5 +855,11 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
 // Assert that GNU extensions are enabled, so we have support for empty argument
 // lists for variadic macros.
 CASSERT(VA_NARGS() == 0);
+
+// *** Application level bundled useful libraries. ***
+#include "ifc.h"
+#include "polar.h"
+#include "rest.h"
+#include "json.h"
 
 #endif  /* RCD_H */
