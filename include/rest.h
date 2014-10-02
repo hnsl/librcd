@@ -23,10 +23,18 @@ fstr_mem_t* rest_basic_auth_val(fstr_t username, fstr_t password);
 /// encoded as "+". This is deprecated and should be avoided.
 fstr_mem_t* rest_urlencode(fstr_t str, bool plus_enc_sp);
 
-/// Convenience function for application/x-www-form-urlencoded data.
-fstr_mem_t* rest_urlencode_dict(dict(fstr_t)* kv);
+/// URL decodes the string as per rfc 3986. If plus_dec_sp is true "+" will be
+/// decoded as a space. This is deprecated and should be avoided.
+fstr_mem_t* rest_urldecode(fstr_t str, bool plus_dec_sp);
 
-fstr_mem_t* rest_path_conc_args(fstr_t path, dict(fstr_t)* kv);
+/// Encodes parameters into a url query suitable for appending to a URL after
+/// the "?" separator.
+fstr_mem_t* rest_url_query_encode(dict(fstr_t)* url_params);
+
+/// Decodes a URL query into it's respective parameters. If there are key
+/// collisions in the query it is undefined which key/value pair will be
+/// returned.
+dict(fstr_t)* rest_url_query_decode(fstr_t url_query);
 
 fstr_mem_t* rest_serialize_request(rest_req_t request);
 
