@@ -7,13 +7,21 @@ define_eio(rest);
 
 dict(fstr_t);
 
-typedef struct http_req {
+typedef struct http_request {
     fstr_t method;
     fstr_t host;
     fstr_t path;
     fstr_t body;
     dict(fstr_t)* headers;
-} rest_req_t;
+} rest_request_t;
+
+typedef struct rest_response {
+    uint16_t response_code;
+    fstr_t reason_phrase;
+    dict(fstr_t)* headers;
+} rest_head_t;
+
+list(fstr_t);
 
 /// Construct a correct Basic Auth line.
 fstr_mem_t* rest_basic_auth_val(fstr_t username, fstr_t password);
@@ -36,12 +44,12 @@ fstr_mem_t* rest_url_query_encode(dict(fstr_t)* url_params);
 /// returned.
 dict(fstr_t)* rest_url_query_decode(fstr_t url_query);
 
-fstr_mem_t* rest_serialize_request(rest_req_t request);
+list(fstr_t)* rest_serialize_request(rest_request_t request);
 
-/// Read a response using content-length or chunked transfer encoding.
-fstr_t rest_read_response(rio_t* rio_r, size_t max_size);
+/// Read the status line and headers from rio_r, body not touched.
+rest_head_t rest_read_head(rio_t* rio_r);
 
-fstr_t rest_call(rio_t* rio_h, rest_req_t request, size_t max_response_size);
+fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size);
 
 #endif	/* REST_H */
 

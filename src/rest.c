@@ -2,6 +2,11 @@
 
 #pragma librcd
 
+#define HTTP_MIN_ACCEPTED_HEADER_SIZE (0x1500)
+#define HTTP_MAX_STATUS_LINE (0x1000)
+#define HTTP_MAX_CHUNK_SIZE_LINE (0x10)
+
+static const fstr_t http_crlf = "\r\n";
 
 fstr_mem_t* rest_basic_auth_val(fstr_t username, fstr_t password) { sub_heap {
     return escape(conc("Basic ", fss(fstr_base64_encode(concs(username, ":", password)))));
@@ -105,93 +110,114 @@ dict(fstr_t)* rest_url_query_decode(fstr_t url_query) {
     return url_params;
 }
 
-static fstr_t header_line(fstr_t key, fstr_t val) {
-    return sconc(key, ": ", val, "\r\n");
+static fstr_mem_t* header_line(fstr_t key, fstr_t val) {
+    return conc(key, ": ", val, http_crlf);
 }
 
-fstr_mem_t* rest_serialize_request(rest_req_t request) { sub_heap {
+list(fstr_t)* rest_serialize_request(rest_request_t request){
     list(fstr_t)* req_lines = new_list(fstr_t);
     list_push_end(req_lines, fstr_t, sconc(request.method, " ", request.path, " HTTP/1.1\r\n"));
     bool host_set = false;
     if (request.headers != 0) {
         dict_foreach(request.headers, fstr_t, key, val) {
-            if (fstr_equal(fss(fstr_lower(key)), "host"))
+            if (fstr_equal_case(key, "host"))
                 host_set = true;
-            list_push_end(req_lines, fstr_t, header_line(key, val));
+            list_push_end(req_lines, fstr_t, fss(header_line(key, val)));
         }
     }
     if (!host_set)
-        list_push_end(req_lines, fstr_t, header_line("host", request.host));
+        list_push_end(req_lines, fstr_t, fss(header_line("host", request.host)));
     if (request.body.len > 0)
-        list_push_end(req_lines, fstr_t, header_line("content-length", ui2fs(request.body.len)));
-    list_push_end(req_lines, fstr_t, "\r\n");
+        list_push_end(req_lines, fstr_t, fss(header_line("content-length", ui2fs(request.body.len))));
+    list_push_end(req_lines, fstr_t, http_crlf);
     list_push_end(req_lines, fstr_t, request.body);
-    return escape(fstr_implode(req_lines, ""));
+    return req_lines;
+}
+
+rest_head_t rest_read_head(rio_t* rio_r) { sub_heap_txn(heap) {
+    rest_head_t resp;
+    fstr_mem_t* status_line_buffer = fstr_alloc_buffer(HTTP_MAX_STATUS_LINE);
+    fstr_t status_line = rio_read_to_separator(rio_r, http_crlf, fss(status_line_buffer));
+    fstr_t protocol, statuscode;
+    if ((!fstr_iterate(&status_line, " ", &protocol))
+        &&(!fstr_iterate(&status_line, " ", &statuscode)))
+        throw_eio("invalid status line", rest);
+    fstr_t reason_phrase = status_line;
+    if (!fstr_equal(protocol, "HTTP/1.1"))
+        throw_eio("server not http 1.1", rest);
+    resp.response_code = fs2ui(status_line);
+    switch_heap(heap) {
+        resp.reason_phrase = fsc(reason_phrase);
+    }
+    fstr_mem_t* header_buf = fstr_alloc_buffer(HTTP_MIN_ACCEPTED_HEADER_SIZE);
+    fstr_t headers = rio_read_to_separator(rio_r, "\r\n\r\n", fss(header_buf));
+
+    fstr_t header_line;
+    switch_heap(heap) {
+        resp.headers = new_dict(fstr_t);
+    }
+    while(fstr_iterate(&headers, http_crlf, &header_line)) {
+        fstr_t header_key, header_val;
+        if (!fstr_divide(header_line, ": ", &header_key, &header_val))
+            throw_eio("malformed header", rest);
+        fstr_t header_key_lc;
+        switch_heap(heap) {
+            header_key_lc = fss(fstr_lower(header_key));
+            dict_replace(resp.headers, fstr_t, header_key_lc, header_val);
+        }
+
+    }
+    return resp;
 }}
 
-fstr_t rest_read_response(rio_t* rio_r, size_t max_size) { sub_heap {
-    fstr_mem_t* header_buf = fstr_alloc(8192);
+fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size){ sub_heap_txn(heap) {
     bool has_chunked = false;
     bool has_content_length = false;
     size_t content_length;
-    fstr_t head = rio_read_to_separator(rio_r, "\r\n\r\n", fss(header_buf));
-    list(fstr_t)* head_lines = fstr_explode(head, "\r\n");
-    fstr_t status_line = fss(fstr_lower(fstr_trim(list_pop_start(head_lines, fstr_t))));
-    if (!fstr_equal(status_line, "http/1.1 200 ok"))
-        throw("request failed", exception_io);
-    list_foreach(head_lines, fstr_t, line) {
-        list(fstr_t)* header = fstr_explode(line, ": ");
-        fstr_t header_key = fss(fstr_lower(fstr_trim(list_pop_start(header, fstr_t))));
-        fstr_t header_val = fstr_trim(list_pop_start(header, fstr_t));
-        if (fstr_equal(header_key, "content-length")) {
-            has_content_length = true;
-            content_length = fs2ui(header_val);
-            continue;
-        } else if (fstr_equal(header_key, "transfer-encoding")
-            && fstr_equal(header_val, "chunked" )) {
-            has_chunked = true;
-            continue;
-        }
+    fstr_t* cl_ptr = dict_read(head.headers, fstr_t, "content-length");
+    if (cl_ptr != 0) {
+        has_content_length = true;
+        content_length = fs2ui(*cl_ptr);
     }
-    fstr_mem_t* body_buffer;
-    fstr_t body;
+    fstr_t* te_ptr = dict_read(head.headers, fstr_t, "transfer-encoding");
+    if ((te_ptr != 0) && fstr_equal("chunked", *te_ptr)) {
+        has_chunked = true;
+    }
+    fstr_mem_t* body_buffer = 0;
     if (has_chunked) {
-        body_buffer = fstr_alloc(max_size);
+        switch_heap(heap) {
+            body_buffer = fstr_alloc(max_size);
+        }
         size_t body_len = 0;
         fstr_t body_buffer_tail = fss(body_buffer);
-        // Chunks should be less than 4GB, if turns out to be a problem we will
-        // up this limit later.
-        fstr_mem_t* chunk_size_buffer = fstr_alloc(8);
-        bool more_chunks = true;
-        while (more_chunks) {
-            fstr_t chunk_size_str = rio_read_to_separator(rio_r, "\r\n", fss(chunk_size_buffer));
+        fstr_mem_t* chunk_size_buffer = fstr_alloc_buffer(HTTP_MAX_CHUNK_SIZE_LINE);
+        for (;;) {
+            fstr_t chunk_size_str = rio_read_to_separator(rio_r, http_crlf, fss(chunk_size_buffer));
             size_t c_size = chunk_size_str.len == 0? 0: fstr_to_uint(chunk_size_str, 16);
             if (c_size == 0) {
-                fstr_mem_t* end_buffer = fstr_alloc(2);
-                fstr_t end = rio_read(rio_r, fss(end_buffer));
-                if (fstr_equal(end, "\r\n"))
-                    break;
-                else
+                fstr_t end = rio_read(rio_r, fstr_slice(fss(chunk_size_buffer), 0, http_crlf.len));
+                if (!fstr_equal(end, http_crlf))
                     throw_eio("invalid HTTP response", rest);
+                break;
             }
-            if (c_size > (body_buffer_tail.len + 2))
-                throw_eio("too big response", rest);
-            fstr_t chunk = rio_read_to_separator(rio_r, "\r\n", fstr_slice(body_buffer_tail, 0, c_size +2));
-            assert(c_size == chunk.len);
+            if ((c_size + http_crlf.len) > body_buffer_tail.len)
+                throw_eio("too large response", rest);
+            rio_read_fill(rio_r, fstr_slice(body_buffer_tail, 0, c_size));
+            fstr_t chunk_break = fstr_slice(rio_peek(rio_r), 0, http_crlf.len);
+            if (!fstr_equal(chunk_break, http_crlf))
+                throw_eio("invalid chunk", rest);
+            rio_skip(rio_r, http_crlf.len);
             body_len += c_size;
         }
-        body = fstr_slice(fss(body_buffer), 0, body_len);
+        body_buffer->len = body_len;
     } else if (has_content_length) {
-        body_buffer = fstr_alloc(content_length);
-        body = fss(body_buffer);
-        rio_read_fill(rio_r, body);
-    } else
-        throw_eio("invalid HTTP response", rest);
-    escape_list(body_buffer);
-    return body;
+        if (content_length > max_size)
+            throw_eio("too large response", rest);
+        switch_heap(heap) {
+            body_buffer = fstr_alloc(content_length);
+        }
+        rio_read_fill(rio_r, fss(body_buffer));
+        body_buffer->len = content_length;
+    }
+    return body_buffer;
 }}
-
-fstr_t rest_call(rio_t* rio_h, rest_req_t request, size_t max_response_size) {
-    rio_write(rio_h, fss(rest_serialize_request(request)));
-    return rest_read_response(rio_h, max_response_size);
-}
