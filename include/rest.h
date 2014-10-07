@@ -7,7 +7,7 @@ define_eio(rest);
 
 dict(fstr_t);
 
-typedef struct http_request {
+typedef struct rest_request {
     fstr_t method;
     fstr_t host;
     fstr_t path;
