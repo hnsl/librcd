@@ -193,7 +193,7 @@ fiber_main tls_epoll_fiber(fiber_main_attr, notify_join_fn_t notify_join_fn, rio
         rio_epoll_poll(epoll_h, true);
         notify_join_fn(tls_fid);
     }
-} catch (exception_canceled, e); }
+} catch (exception_desync, e); }
 
 static void tls_session(tls_session_t session) {
     try {
