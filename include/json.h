@@ -17,13 +17,15 @@
 #define jarr(x) json_array_v(x)
 #define jobj(x) json_object_v(x)
 
-/// Enter a scope with 'this' assigned to a particular JSON object value. This can be
+/// Enter a scope with 'this' assigned to a particular JSON value. This can be
 /// be helpful in making creation of JSON structures feel more natural.
-#define json_for_obj(obj) \
+#define json_for(obj) \
     for (uint8_t __i = 0; __i == 0;) \
     for (json_value_t this = (obj); (__i++) == 0;)
 
-/// Create a new object as a property of 'this', and enter a scope with it set as 'this'.
+#define json_for_obj(obj) json_for(obj)
+
+/// Create a new object as a member of the object 'this', and enter a scope with it set as 'this'.
 /// Example usage:
 ///
 /// json_value_t val = json_new_object();
@@ -32,9 +34,29 @@
 ///         JSON_SET(this, "leaf", json_string_v("value"));
 ///     }
 /// }
-#define json_for_new_obj(key) \
+#define json_for_new_oobj(key) \
     for (uint8_t __i = 0; __i == 0;) \
-    for (json_value_t new_obj = json_new_object_in(this, (key)); __i == 0;) \
+    for (json_value_t new_obj = json_new_obj_in_obj(this, (key)); __i == 0;) \
+    for (json_value_t this = new_obj; (__i++) == 0;)
+
+#define json_for_new_obj(key) json_for_new_oobj(key)
+
+/// Create a new array as a member of the object 'this', and enter a scope with it set as 'this'.
+#define json_for_new_oarr(key) \
+    for (uint8_t __i = 0; __i == 0;) \
+    for (json_value_t new_obj = json_new_arr_in_obj(this, (key)); __i == 0;) \
+    for (json_value_t this = new_obj; (__i++) == 0;)
+
+/// Create a new object as a member of the array 'this', and enter a scope with it set as 'this'.
+#define json_for_new_aobj \
+    for (uint8_t __i = 0; __i == 0;) \
+    for (json_value_t new_obj = json_new_obj_in_arr(this); __i == 0;) \
+    for (json_value_t this = new_obj; (__i++) == 0;)
+
+/// Create a new array as a member of the array 'this', and enter a scope with it set as 'this'.
+#define json_for_new_aarr \
+    for (uint8_t __i = 0; __i == 0;) \
+    for (json_value_t new_obj = json_new_arr_in_arr(this); __i == 0;) \
     for (json_value_t this = new_obj; (__i++) == 0;)
 
 /// Traverse a chain of JSON properties in a lenient manner, returning a null JSON value
@@ -162,15 +184,44 @@ noret void _json_fail_missing_property(fstr_t prop_name);
 static inline fstr_t __attribute__((overloadable)) STR(json_value_t x) { return fss(json_stringify(x)); }
 static inline fstr_t __attribute__((overloadable)) STR(json_type_t x) { return json_serial_type(x); }
 
+static inline json_value_t json_new_array() {
+    return json_array_v(new_list(json_value_t));
+}
+
 static inline json_value_t json_new_object() {
     return json_object_v(new_dict(json_value_t));
 }
 
 /// Create a new object and assign it as a property of another object.
-static inline json_value_t json_new_object_in(json_value_t parent, fstr_t key) {
+static inline json_value_t json_new_obj_in_obj(json_value_t parent, fstr_t key) {
     json_value_t obj = json_new_object();
     JSON_SET(parent, key, obj);
     return obj;
+}
+
+/// Create a new array and assign it as a property of another object.
+static json_value_t json_new_arr_in_obj(json_value_t parent, fstr_t key) {
+    json_value_t arr = json_new_array();
+    JSON_SET(parent, key, arr);
+    return arr;
+}
+
+/// Create a new object and append it to another array.
+static json_value_t json_new_obj_in_arr(json_value_t parent) {
+    json_value_t obj = json_new_object();
+    if (parent.type != JSON_ARRAY)
+        _json_fail_invalid_type(JSON_ARRAY, parent.type);
+    list_push_end(parent.array_value, json_value_t, obj);
+    return obj;
+}
+
+/// Create a new array and append it to another array.
+static json_value_t json_new_arr_in_arr(json_value_t parent) {
+    json_value_t arr = json_new_array();
+    if (parent.type != JSON_ARRAY)
+        _json_fail_invalid_type(JSON_ARRAY, parent.type);
+    list_push_end(parent.array_value, json_value_t, arr);
+    return arr;
 }
 
 static inline void _json_type_expect(json_value_t value, json_type_t expected_type) {
