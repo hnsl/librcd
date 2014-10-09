@@ -40,7 +40,7 @@ fstr_mem_t* rest_url_query_encode(dict(fstr_t)* url_params);
 /// returned.
 dict(fstr_t)* rest_url_query_decode(fstr_t url_query);
 
-list(fstr_t)* rest_serialize_request(rest_request_t request);
+void rest_write_request(rio_t* rio_h, rest_request_t request);
 
 /// Read the status line and headers from rio_r, body not touched.
 rest_head_t rest_read_head(rio_t* rio_r);

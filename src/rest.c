@@ -113,7 +113,7 @@ static fstr_mem_t* header_line(fstr_t key, fstr_t val) {
     return conc(key, ": ", val, crlf);
 }
 
-list(fstr_t)* rest_serialize_request(rest_request_t request){
+void rest_write_request(rio_t* rio_h, rest_request_t request) { sub_heap {
     list(fstr_t)* req_lines = new_list(fstr_t);
     list_push_end(req_lines, fstr_t, sconc(request.method, " ", request.path, " HTTP/1.1\r\n"));
     bool host_set = false;
@@ -129,11 +129,11 @@ list(fstr_t)* rest_serialize_request(rest_request_t request){
     if (request.body.len > 0)
         list_push_end(req_lines, fstr_t, fss(header_line("content-length", ui2fs(request.body.len))));
     list_push_end(req_lines, fstr_t, crlf);
-    list_push_end(req_lines, fstr_t, request.body);
-    return req_lines;
-}
+    rio_write(rio_h, fss(fstr_implode(req_lines, "")));
+    rio_write(rio_h, request.body);
+}}
 
-rest_head_t rest_read_head(rio_t* rio_r) { sub_heap_txn(heap) {
+rest_head_t rest_read_head(rio_t* rio_r) { sub_heap_txn(heap){
     rest_head_t resp;
     fstr_mem_t* status_line_buffer = fstr_alloc_buffer(HTTP_MAX_STATUS_LINE);
     fstr_t status_line = rio_read_to_separator(rio_r, crlf, fss(status_line_buffer));
