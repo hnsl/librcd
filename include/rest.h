@@ -5,8 +5,6 @@
 
 define_eio(rest);
 
-dict(fstr_t);
-
 typedef struct rest_request {
     fstr_t method;
     fstr_t host;
@@ -20,8 +18,6 @@ typedef struct rest_response {
     fstr_t reason_phrase;
     dict(fstr_t)* headers;
 } rest_head_t;
-
-list(fstr_t);
 
 /// Construct a correct Basic Auth line.
 fstr_mem_t* rest_basic_auth_val(fstr_t username, fstr_t password);
