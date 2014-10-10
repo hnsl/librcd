@@ -1279,18 +1279,14 @@ static fstr_t rio_read_direct(rio_t* rio, fstr_t buffer, bool* out_more_hint) {
         throw("the specified rio handle does not support the operation read", exception_arg);
     for (;;) {
         n_read = read(read_fd, buffer.str, buffer.len);
+        if (n_read == 0)
+            throw_eio("read() failed: end of stream reached", rio_eos);
         if (n_read > 0)
             break;
-        if (n_read == -1) {
-            if (errno == EWOULDBLOCK)
-                lwt_block_until_edge_level_io_event(read_fd, lwt_fd_event_read);
-            else if (errno == EINTR)
-                continue;
-            else
-                RCD_SYSCALL_EXCEPTION(read, exception_io);
-        } else {
-            throw("read() failed: end of stream reached", exception_io);
-        }
+        if (errno == EWOULDBLOCK)
+            lwt_block_until_edge_level_io_event(read_fd, lwt_fd_event_read);
+        else if (errno != EINTR)
+            RCD_SYSCALL_EXCEPTION(read, exception_io);
     }
     fstr_t slice = fstr_slice(buffer, 0, n_read);
     if (out_more_hint != 0) {
@@ -1343,7 +1339,7 @@ fstr_t rio_read_to_end(rio_t* rio, fstr_t buffer) {
             fstr_t head_done = rio_read(rio, tail_left);
             tail_left = fstr_slice(tail_left, head_done.len, tail_left.len);
         }
-    } catch (exception_io, e) {}
+    } catch_eio (rio_eos, e);
     return fstr_sslice(buffer, 0, -tail_left.len - 1);
 }
 

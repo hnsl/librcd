@@ -242,6 +242,10 @@ typedef struct rio_sub_exec {
     bool new_kernel_ns;
 } rio_sub_exec_t;
 
+/// End of stream. Thrown when reading and a a stream is gracefully ended.
+/// For files this is the end of file. For TCP this is a graceful connection close.
+define_eio(rio_eos);
+
 /// INTERNAL RIO FUNCTION that returns the read file descriptor associated with
 /// a rio handle. Only useful when dealing with external file descriptors.
 /// Normally you should not call this function directly.
@@ -681,12 +685,12 @@ fstr_t rio_read_part(rio_t* rio, fstr_t buffer, bool* out_more_hint) NOT_NULL_AR
 /// more bytes to read.
 void rio_read_fill(rio_t* rio, fstr_t buffer) NO_NULL_ARGS;
 
-/// Reads until either the buffer or the stream ends. If an io error is
-/// encountered while the stream is being read (e.g. end of file) the error
-/// is silently caught and the function returns whatever data was read.
+/// Reads until either the buffer or the stream ends. If an rio_eos io
+/// exception is encountered while the stream is being read it's discarded
+/// and the function returns whatever data was read.
 /// Useful when the data source is trusted and the message has an undefined
 /// length (e.g. when reading subprocess output).
-/// Does not throw any exceptions.
+/// Throws other io exceptions on read error.
 fstr_t rio_read_to_end(rio_t* rio, fstr_t buffer) NO_NULL_ARGS;
 
 /// Skips over this many bytes in the rio stream. Can currently only skip over
