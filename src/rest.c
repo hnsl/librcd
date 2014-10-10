@@ -4,6 +4,7 @@
 
 #define HTTP_MIN_ACCEPTED_HEADER_SIZE (0x1500)
 #define HTTP_MAX_STATUS_LINE (0x1000)
+#define HTTP_MAX_CHUNK_DEF_LINE (0x100)
 
 static const fstr_t crlf = "\r\n";
 
@@ -113,9 +114,23 @@ static fstr_mem_t* header_line(fstr_t key, fstr_t val) {
     return conc(key, ": ", val, crlf);
 }
 
+static void parse_headers(fstr_t headers, dict(fstr_t)* headers_io, lwt_heap_t* heap) {
+    fstr_t header_line;
+    while(fstr_iterate(&headers, crlf, &header_line)) {
+        fstr_t header_key, header_val;
+        if (!fstr_divide(header_line, ":", &header_key, &header_val))
+            throw_eio("malformed header", rest);
+        fstr_t header_key_lc;
+        switch_heap(heap) {
+            header_key_lc = fss(fstr_lower(header_key));
+            dict_replace(headers_io, fstr_t, header_key_lc, fsc(fstr_trim(header_val)));
+        }
+    }
+}
+
 void rest_write_request(rio_t* rio_h, rest_request_t request) { sub_heap {
     list(fstr_t)* req_lines = new_list(fstr_t);
-    list_push_end(req_lines, fstr_t, sconc(request.method, " ", request.path, " HTTP/1.1\r\n"));
+    list_push_end(req_lines, fstr_t, concs(request.method, " ", request.path, " HTTP/1.1\r\n"));
     bool host_set = false;
     if (request.headers != 0) {
         dict_foreach(request.headers, fstr_t, key, val) {
@@ -133,7 +148,7 @@ void rest_write_request(rio_t* rio_h, rest_request_t request) { sub_heap {
     rio_write(rio_h, request.body);
 }}
 
-rest_head_t rest_read_head(rio_t* rio_r) { sub_heap_txn(heap){
+rest_head_t rest_read_head(rio_t* rio_r) { sub_heap_txn(heap) {
     rest_head_t resp;
     fstr_mem_t* status_line_buffer = fstr_alloc_buffer(HTTP_MAX_STATUS_LINE);
     fstr_t status_line = rio_read_to_separator(rio_r, crlf, fss(status_line_buffer));
@@ -147,26 +162,16 @@ rest_head_t rest_read_head(rio_t* rio_r) { sub_heap_txn(heap){
     switch_heap(heap) {
         resp.reason_phrase = fsc(reason_phrase);
     }
-    fstr_mem_t* header_buf = fstr_alloc_buffer(HTTP_MIN_ACCEPTED_HEADER_SIZE);
-    fstr_t headers = rio_read_to_separator(rio_r, "\r\n\r\n", fss(header_buf));
-    fstr_t header_line;
     switch_heap(heap) {
         resp.headers = new_dict(fstr_t);
     }
-    while(fstr_iterate(&headers, crlf, &header_line)) {
-        fstr_t header_key, header_val;
-        if (!fstr_divide(header_line, ":", &header_key, &header_val))
-            throw_eio("malformed header", rest);
-        fstr_t header_key_lc;
-        switch_heap(heap) {
-            header_key_lc = fss(fstr_lower(header_key));
-            dict_replace(resp.headers, fstr_t, header_key_lc, fstr_trim(header_val));
-        }
-    }
+    fstr_mem_t* header_buf = fstr_alloc_buffer(HTTP_MIN_ACCEPTED_HEADER_SIZE);
+    fstr_t headers = rio_read_to_separator(rio_r, "\r\n\r\n", fss(header_buf));
+    parse_headers(headers, resp.headers, heap);
     return resp;
 }}
 
-fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size){ sub_heap_txn(heap){
+fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size){ sub_heap_txn(heap) {
     bool has_chunked = false;
     bool has_content_length = false;
     size_t content_length;
@@ -186,14 +191,23 @@ fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size){ sub
         }
         size_t body_len = 0;
         fstr_t body_buffer_tail = fss(body_buffer);
+        // chunk-def is "chunk-size [ chunk-extension ] CRLF"
+        fstr_mem_t* chunk_def_buffer = fstr_alloc_buffer(HTTP_MAX_CHUNK_DEF_LINE);
+        fstr_t end_buffer;
+        FSTR_STACK_DECL(end_buffer, 2);
         for (;;) {
-            fstr_t chunk_size_str = rio_read_to_separator(rio_r, crlf, body_buffer_tail);
+            fstr_t chunk_def_str = rio_read_to_separator(rio_r, crlf, fss(chunk_def_buffer));
+            fstr_t chunk_size_str;
+            // There might be chunk-extensions, they will be ignored.
+            if (!fstr_divide(chunk_def_str, ";", &chunk_size_str, 0))
+                chunk_size_str = chunk_def_str;
             size_t c_size = chunk_size_str.len == 0? 0: fstr_to_uint(chunk_size_str, 16);
             if (c_size == 0) {
-                fstr_t end = fstr_slice(body_buffer_tail, 0, crlf.len);
-                rio_read_fill(rio_r, end);
-                if (!fstr_equal(end, crlf))
-                    throw_eio("invalid HTTP response", rest);
+                rio_read_fill(rio_r, end_buffer);
+                if (!fstr_equal(end_buffer, crlf)) {
+                    fstr_t rest_trailing_headers = rio_read_to_separator(rio_r, "\r\n\r\n", body_buffer_tail);
+                    parse_headers(concs(end_buffer, rest_trailing_headers), head.headers, heap);
+                }
                 break;
             }
             if ((c_size + crlf.len) > body_buffer_tail.len)
