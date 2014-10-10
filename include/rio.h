@@ -242,9 +242,6 @@ typedef struct rio_sub_exec {
     bool new_kernel_ns;
 } rio_sub_exec_t;
 
-/// Deprecated alias, do not use.
-typedef rio_date_time_t rio_clock_date_time_t __attribute__((deprecated("this type has been superseded by rio_date_time_t, please refactor your code")));
-
 /// INTERNAL RIO FUNCTION that returns the read file descriptor associated with
 /// a rio handle. Only useful when dealing with external file descriptors.
 /// Normally you should not call this function directly.
