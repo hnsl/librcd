@@ -18,10 +18,9 @@
 #define jobj(x) json_object_v(x)
 
 /// Enter a scope with 'this' assigned to a particular JSON value. This can be
-/// be helpful in making creation of JSON structures feel more natural.
+/// helpful in making creation of JSON structures feel more natural.
 #define json_for(obj) \
-    for (uint8_t __i = 0; __i == 0;) \
-    for (json_value_t this = (obj); (__i++) == 0;)
+    LET(json_value_t this = obj)
 
 #define json_for_obj(obj) json_for(obj)
 
@@ -35,29 +34,25 @@
 ///     }
 /// }
 #define json_for_new_oobj(key) \
-    for (uint8_t __i = 0; __i == 0;) \
-    for (json_value_t new_obj = json_new_obj_in_obj(this, (key)); __i == 0;) \
-    for (json_value_t this = new_obj; (__i++) == 0;)
+    LET(json_value_t new_obj = json_new_obj_in_obj(this, (key))) \
+    LET(json_value_t this = new_obj)
 
 #define json_for_new_obj(key) json_for_new_oobj(key)
 
 /// Create a new array as a member of the object 'this', and enter a scope with it set as 'this'.
 #define json_for_new_oarr(key) \
-    for (uint8_t __i = 0; __i == 0;) \
-    for (json_value_t new_obj = json_new_arr_in_obj(this, (key)); __i == 0;) \
-    for (json_value_t this = new_obj; (__i++) == 0;)
+    LET(json_value_t new_obj = json_new_arr_in_obj(this, (key))) \
+    LET(json_value_t this = new_obj)
 
 /// Create a new object as a member of the array 'this', and enter a scope with it set as 'this'.
 #define json_for_new_aobj \
-    for (uint8_t __i = 0; __i == 0;) \
-    for (json_value_t new_obj = json_new_obj_in_arr(this); __i == 0;) \
-    for (json_value_t this = new_obj; (__i++) == 0;)
+    LET(json_value_t new_obj = json_new_obj_in_arr(this)) \
+    LET(json_value_t this = new_obj)
 
 /// Create a new array as a member of the array 'this', and enter a scope with it set as 'this'.
 #define json_for_new_aarr \
-    for (uint8_t __i = 0; __i == 0;) \
-    for (json_value_t new_obj = json_new_arr_in_arr(this); __i == 0;) \
-    for (json_value_t this = new_obj; (__i++) == 0;)
+    LET(json_value_t new_obj = json_new_arr_in_arr(this)) \
+    LET(json_value_t this = new_obj)
 
 /// Traverse a chain of JSON properties in a lenient manner, returning a null JSON value
 /// if any link in the chain does not exist. Example usage:
