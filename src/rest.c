@@ -17,7 +17,7 @@ fstr_mem_t* rest_urlencode(fstr_t str, bool plus_enc_sp) {
     fstr_t buf_tail = fss(buf);
     for (size_t i = 0; i < str.len; i++) {
         uint8_t ch = str.str[i];
-        if ((ch >= 0 && ch <= 9)
+        if ((ch >= '0' && ch <= '9')
         || (ch >= 'A' && ch <= 'Z')
         || (ch >= 'a' && ch <= 'z')
         || (ch == '-')
