@@ -158,7 +158,7 @@ rest_head_t rest_read_head(rio_t* rio_r) { sub_heap_txn(heap) {
     fstr_t reason_phrase = status_line;
     if (!fstr_equal(protocol, "HTTP/1.1"))
         throw_eio("server not http 1.1", rest);
-    resp.response_code = fs2ui(status_line);
+    resp.response_code = fs2ui(statuscode);
     switch_heap(heap) {
         resp.reason_phrase = fsc(reason_phrase);
     }
