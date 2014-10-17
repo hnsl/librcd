@@ -65,10 +65,8 @@ static inline void skip_ws(parser_t* parser) {
 }
 
 static bool validate_number(fstr_t str) {
-#pragma re2c(str): ^ -? (0|[1-9][0-9]*) (\.[0-9]+)? ([eE][-\+]?[0-9]+)? $ {@match}
+    #pragma re2c(str): ^ -? (0|[1-9][0-9]*) (\.[0-9]+)? ([eE][-\+]?[0-9]+)? $ {@return 1}
     return false;
-match:
-    return true;
 }
 
 static inline bool is_primitive_char(uint8_t c) {
