@@ -120,7 +120,7 @@ void ifc_pipe_write(rcd_fid_t pipe_fid, fstr_t src) {
 rcd_sub_fiber_t* ifc_create_pipe(size_t buffer_size) {
     rcd_sub_fiber_t* pipe_fiber;
     fmitosis {
-        fstr_t fiber_name = fss(conc("[lwt-pipe(for fid #", fss(fstr_from_int((uint64_t) lwt_get_fiber_id(), 10)), ")]"));
+        fstr_t fiber_name = fss(conc("[lwt-pipe(for fid #", rcd_self, ")]"));
         pipe_fiber = spawn_fiber(ifc_pipe_fiber(fiber_name, fss(fstr_alloc_buffer(buffer_size))));
     }
     return pipe_fiber;
