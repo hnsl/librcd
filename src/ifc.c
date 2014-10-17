@@ -54,19 +54,17 @@ join_locked(uint64_t) event_fiber_consume(join_server_params, uint64_t* current_
     return return_count;
 }
 
-fiber_main event_fiber(fiber_main_attr) {
+fiber_main event_fiber(fiber_main_attr) { try {
     uint64_t count = 0;
-    try {
-        for (;;) {
-            accept_join( \
-                event_fiber_trigger if (count < ULONG_MAX), \
-                event_fiber_consume if (count > 0), \
-                join_server_params, \
-                &count \
-            );
-        }
-    } catch (exception_canceled, e) {}
-}
+    for (;;) {
+        accept_join(
+            event_fiber_trigger if (count < ULONG_MAX),
+            event_fiber_consume if (count > 0),
+            join_server_params,
+            &count
+        );
+    }
+} catch (exception_desync, e); }
 
 rcd_fid_t ifc_create_event_fiber() {
     rcd_fid_t event_fid;
