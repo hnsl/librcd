@@ -276,6 +276,8 @@ fiber_main tls_server_session_fiber(fiber_main_attr, rio_t* socket, polar_sck_t*
         .rio_h = socket,
     };
     RCD_POLAR_ECE(ssl_init(&session.ssl_ctx), exception_fatal);
+    // TLS versions lower than 1.0 are insecure and vulnerable to MitM attack.
+    ssl_set_min_version(&session.ssl_ctx, SSL_MAJOR_VERSION_3, SSL_MINOR_VERSION_1);
     /* ssl_set_dbg(&session.ssl_ctx, tls_session_dbg, 0); */
     ssl_set_endpoint(&session.ssl_ctx, SSL_IS_SERVER);
     ssl_set_authmode(&session.ssl_ctx, SSL_VERIFY_NONE);
@@ -298,6 +300,8 @@ fiber_main tls_client_session_fiber(fiber_main_attr, rio_t* socket, fstr_t host_
     };
     char* host_cname_cstr = (host_cname.len > 0)? fstr_to_cstr(host_cname): 0;
     RCD_POLAR_ECE(ssl_init(&session.ssl_ctx), exception_fatal);
+    // TLS versions lower than 1.0 are insecure and vulnerable to MitM attack.
+    ssl_set_min_version(&session.ssl_ctx, SSL_MAJOR_VERSION_3, SSL_MINOR_VERSION_1);
     /* ssl_set_dbg(&session.ssl_ctx, tls_session_dbg, 0); */
     ssl_set_endpoint(&session.ssl_ctx, SSL_IS_CLIENT);
     ssl_set_authmode(&session.ssl_ctx, SSL_VERIFY_REQUIRED);
