@@ -158,11 +158,11 @@ Memory allocated in sub heaps can be escaped to allow it to survive when the reg
         return escape(fstr_implode(fstr_explode(source, find), replace));
     }}
 
-In the above example `fstr_explode` leaks a linked list of strings into the fstr_replace frame. This list is then glued together with `fstr_implode` in a newly allocated `fstr_mem_t*`. This allocation is then escaped to the callers heap (the parent heap) while returning. The root sub heap of the function prevents all memory leaks.
+In the above example `fstr_explode` leaks a linked list of strings into the fstr_replace frame. This list is then glued together with `fstr_implode` in a newly allocated `fstr_mem_t*`. This allocation is then escaped to the caller's heap (the parent heap) while returning. The root sub heap of the function prevents all memory leaks.
 
 Also note that in librcd all dynamic allocations should generally be done with the heap and not the stack. Using VLAs and alloca() is supported but pointless since they are implemented as calls to the memory allocator and not with the stack. This is because the stack itself is allocated on the heap since librcd uses segmented stacks.
 
-In general sub_heaps and escaping gets you quite far but when state truly needs to be passed through an cyclic runtime graph that can't be expressed as a tree you start to require more advanced tools for managing memory. One such example is implementations of data structures. Therefore it's also possible to create "context less" heaps with `lwt_new_heap()` (which are free'd and connected to the current heap just like any other allocations), switch to that heap with `switch_heap` and then import allocations with `import`. 
+In general sub_heaps and escaping gets you quite far but when state truly needs to be passed through an cyclic runtime graph that can't be expressed as a tree you start to require more advanced tools for managing memory. One such example is implementations of data structures. Therefore it's also possible to create "contextless" heaps with `lwt_new_heap()` (which are free'd and connected to the current heap just like any other allocations), switch to that heap with `switch_heap` and then import allocations with `import`. 
 
 When passing "complex" data structures around which are not just flat allocations (for example structs with pointers) that need to be passed around through various contexts, one useful pattern is to allocate a heap for them and connect it to the root struct. This is how exceptions are implemented in librcd, see the source code and documentation for more information on these advanced patterns.
 
@@ -192,11 +192,11 @@ Let's do something harder: parsing a text file where each line has "key: value".
         for (fstr_t line; fstr_iterate_trim(&raw_input, "\n", &line);) {
             // Divide key from value.
             fstr_t line_key, line_value;
-            if (!fstr_divide_trim(line, ":", &line_key, &line_value))
+            if (!fstr_divide(line, ":", &line_key, &line_value))
                 continue;
             // Print value if key matches.
-            if (fstr_equal_case(key, line_key)) {         
-                rio_write(stream, line_value);
+            if (fstr_equal_case(key, fstr_trim(line_key))) {
+                rio_write(stream, fstr_trim(line_value));
                 return true;
             }
         }
@@ -208,21 +208,22 @@ Note that `fstr_iterate()`, `fstr_divide()` and friends is impossible to impleme
     void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env) {
         // Parse arguments.
         fstr_t path, key;
-        list_unpack(main_args, fstr_t, &path, &key);
+        if (!list_unpack(main_args, fstr_t, &path, &key))
+            lwt_exit(2);
         // Read file and parse it, scanning for the specified key.
         fstr_t raw_input = fss(rio_read_file_contents(path));
-    	rio_t* stream = rio_stdout();
-    	bool found = print_line_key(stream, raw_input, key);
-    	lwt_exit(found? 0: 1);
+        rio_t* stream = rio_stdout();
+        bool found = print_line_key(stream, raw_input, key);
+        lwt_exit(found? 0: 1);
     }
 
 Compiling and using the program:
     
-    > echo -e " coffee: black  \n tomato:red\n\t cucumber :\tgreen\n lemon   :yellow\nsalt:white" > colorsofthings
-    > ./build/getlineval colorsofthings cucumber
+    $ echo -e " coffee: black  \n tomato:red\n\t cucumber :\tgreen\n lemon   :yellow\nsalt:white" > colorsofthings
+    $ ./build/getlineval colorsofthings cucumber
     green
-    > ./build/getlineval colorsofthings lime
-    > ./build/getlineval colorsofthings coffee
+    $ ./build/getlineval colorsofthings lime
+    $ ./build/getlineval colorsofthings coffee
     black
 
 Even simple low level pointer arithmetics can be replaced with safer fixed string based logic. Let's take this function which replaces all non-ASCII values in a null terminated string with "`[?]`" and prints the final string:
@@ -232,7 +233,7 @@ Even simple low level pointer arithmetics can be replaced with safer fixed strin
         char o_buf[strlen(x) * 3];
         char* o = o_buf;
         for (;*x != 0; x++) {
-            if (*x < 0x80) {
+            if (*x > 0) {
                 *o++ = *x;
             } else {
                 *o++ = '[';
@@ -240,11 +241,11 @@ Even simple low level pointer arithmetics can be replaced with safer fixed strin
                 *o++ = ']';
             }
         }
-        *o++ = '0';
+        *o++ = 0;
         printf("%s", o_buf);
     }
 
-The above C function has undefined behavior due to a subtle off-by-one error. The final null terminator is written beyond the end of the buffer in the worst case. This should corrupt the stack or heap in the rare case when `o` happens to have a size dividable with 8 or 16 as the VLA allocation won't get trailing alignment padding. It's a pretty severe form of undefined behaviors since the severity of a bug increases with how rarely it reproduces.
+The above C function has undefined behavior due to a subtle off-by-one error. The final null terminator is written beyond the end of the buffer in the worst case. This should corrupt the stack or heap in the rare case when `o` happens to have a size dividable with 8 or 16 as the VLA allocation won't get trailing alignment padding. It's a pretty severe form of undefined behavior since the severity of a bug increases with how rarely it reproduces.
 
 Let's compare it with the following fstr based function:
 
@@ -261,7 +262,7 @@ Let's compare it with the following fstr based function:
                 fstr_putc(&o_tail, ']');
             }
         }
-        rio_debug(fstr_detail(o_buf, o_tail));        
+        rio_debug(fstr_detail(o_buf, o_tail));
     }}
 
 Instead of pretending that the variable allocation belongs on the stack when it's dynamic we go with a proper heap allocated buffer and a dynamic length. The sub heap throws away the buffer when the function returns. The function then uses a recurring fixed string theme when working with buffers: tail buffers. The tail buffer is the tracked end range of the buffer that has not yet been written.
@@ -290,11 +291,11 @@ The idea that those control flows should be visible is flawed. If you have you c
 
 I agree that it easy to miss catching some type of exception which is why librcd has less than 5 interesting exceptions. Preferably the compiler should warn if you are leaking an exception out of a main fiber function. This is theoretically possible to implement but I never found this to be a big problem and I have not had the resources to implement it.
 
-##### 2. "Exceptions breaks atomic code and leaves data structures corrupt."
+##### 2. "Exceptions break atomic code and leave data structures corrupt."
 
-With sub heaps/region based allocation, this is not a problem. By escaping the final allocation or complex data structure at the last possible time you can ensure any half done memory allocations are unwounded and free'd, for example when parsing a JSON and building a tree data structure out of it (we do this, and use exceptions for parse errors!). 
+With sub heaps/region based allocation, this is not a problem. By escaping the final allocation or complex data structure at the last possible time you can ensure any half-finished memory allocations are unwound and free'd, for example when parsing JSON and building a tree data structure out of it. We do this, and use exceptions for parse errors!
 
-You should never use (non-fatal) exceptions for core data structure errors. For example in implementations of red black trees or linked lists. Librcd doesn't do this. It's better to just crash the entire program with a "memory is corrupt or software bug"-esque message. 
+You should never use (non-fatal) exceptions for core data structure errors, for example in implementations of red black trees or linked lists. Librcd doesn't do this. It's better to just crash the entire program with a "memory is corrupt or software bug"-esque message. 
 
 In high level code it can however be more desirable to use an `exception_arg` though whenever possible. They are documented as run time assertion failures. This is simply for robustness, for example if you wish to write a fiber that can restart itself when this is the best thing to do. Throwing them should be equivalent to crashing the fiber instead of the program if the fiber wishes to catch them.
 
@@ -306,11 +307,11 @@ I doubt anyone has claimed this is their intended use and I don't see how you wo
 
 Librcd specifically uses exceptions to implement non locking concurrency and CSP. Cancellation exceptions are extremely useful to write execution contexts that should just be cancelled and thrown away when their underlying precondition is falsified which destroys their reason for existence. Join race exceptions are extremely useful to mute the endless possibilities of non existence relationships many execution context can have to one another which bogs down the code with uninteresting noise. More about that further down in the "Concurrency is not parallelism" chapter.
 
-An author also tries to claim exceptions are useless because you cannot unwind over several different actor contexts. If I had 40 worker fibers in librcd I would just save the exception for later and throw it (with forwarding) when joining to return the result. This is a pattern I have used many several times and works great. If you want to abort processing right away you can simply do that cancellation exceptions.
+An author also tries to claim exceptions are useless because you cannot unwind over several different actor contexts. If I had 40 worker fibers in librcd I would just save the exception for later and throw it (with forwarding) when joining to return the result. This is a pattern I have used many several times and it works great. If you want to abort processing right away you can simply do that with cancellation exceptions.
 
 ---
 
-Librcd implements support for exceptions through the use of macros, `setjmp`/`longjmp` and some gcc C extensions that are implemented by clang. When throwing exceptions all regions entered after entering the try region will be unwounded. Throwing an exception in a sub heap will therefore deallocate all memory allocated in that region.
+Librcd implements support for exceptions through the use of macros, `setjmp`/`longjmp` and some gcc C extensions that are implemented by clang. When throwing exceptions all regions entered after entering the try region will be unwound. Throwing an exception in a sub heap will therefore deallocate all memory allocated in that region.
 
 As an example we'll set up a server that reads some numbers from a tcp session and adds them together. The numbers are decimal and separated by line endings. The server should be strict and throw an exception if the format is not recognised. The source code:
 
@@ -361,7 +362,7 @@ As an example we'll set up a server that reads some numbers from a tcp session a
             }
         } catch (exception_any, e) {
             // Forwarding the inner exception allows us to preserve context when the exception is printed later.
-            // Leaking an exception out of a fiber main is equiviallent to throwing a fatal exception and crashing the program.
+            // Leaking an exception out of a fiber main function is equivalent to throwing a fatal exception and crashing the program.
             throw_fwd("Server crash! :(", exception_io, e);
         }
     }
@@ -376,7 +377,7 @@ Normally when writing networked applications in C a programmer has to resort to 
 
 When librcd starts it spawns exactly as many worker threads as it detects cores in the system. This provides opaque multithreading without any special syntax. If two fibers can be run in parallel (because they are not "joined") the scheduler probably will if the system has more than one core. But it's also up to the Linux kernel: librcd worker threads have currently no core affinity and if Linux forces the program to run on one core, all workers will. Correct code should not depend on or care about the time domain(s) it is executed in.
 
-Currently the librcd scheduler is very naive compared to the schedulers in modern concurrency focused languages such as golang. It has a global run queue of fibers which causes contention and wasted time in spinlocks. Fibers also have no "inertia" that reduces the rate of thread/core switches. This causes unnecessary CPU cache misses which is especially harmful in NUMA configurations. But what it lacks in performance it makes up for in simplicity. It should be easy to improve if needed and also simple to debug.
+Currently the librcd scheduler is very naive compared to the schedulers in modern concurrency-focused languages such as golang. It has a global run queue of fibers which causes contention and wasted time in spinlocks. Fibers also have no "inertia" that reduces the rate of thread/core switches. This causes unnecessary CPU cache misses which is especially harmful in NUMA configurations. But what it lacks in performance it makes up for in simplicity. It should be easy to improve if needed and also simple to debug.
 
 Here's an example:
 
@@ -408,7 +409,7 @@ In my opinion pointer based references is just an unnecessary restriction and th
 
 The fiber id in librcd (`rcd_fid_t`) is instead a 128 bit number (`uint128_t`). This is large enough that the possibility of wrap around can be completely dismissed and the life of a fiber is represented with a handle that is assumed to be unique forever. Librcd also has a `rcd_sub_fiber_t*` and its relationship with `rcd_fid_t` is analogous with the relationship between `fstr_mem_t*` and `fstr_t`. The sub fiber pointer represents ownership of a fiber which will be synchronously cancelled and cleaned up on exit when the allocation is free'd through use of memory destructors (a feature in librcd). The `rcd_fid_t` is however a global reference that can be used anywhere and shared wildly.
 
-Let's look at some actual examples. Assume we have a program which receives warnings from a sensor and as soon as we receive one we should do an internet API call to a system that logs how many times the warning was triggered. This remote API could be down sometimes in which case the program should retry the API call until it's successful. Because this API call can take unspecified time we want to concurrently keep counting the triggered warnings and report the number of warnings since the last successful report. What we need in that case is some form of synchronized counter that can log the number of events.
+Let's look at some actual examples. Assume we have a program which receives warnings from a sensor and as soon as we receive one we should do an internet API call to a system that logs how many times the warning was triggered. This remote API could be down sometimes in which case the program should retry the API call until it's successful. Because this API call can take an unspecified time we want to concurrently keep counting the triggered warnings and report the number of warnings since the last successful report. What we need in that case is some form of synchronized counter that can log the number of events.
 
 Librcd comes with a small library called ifc which has solutions for common concurrency problems. It includes an "event" solution we could use here that is analogous to [eventfd(2)](http://man7.org/linux/man-pages/man2/eventfd.2.html). It's implemented as follows:
 
@@ -585,7 +586,7 @@ I have never personally required optimizations that reduce the overhead from sta
 
 Another solution is to do "stack copying". [This has been discussed in the golang community](https://groups.google.com/forum/#!topic/golang-dev/i7vORoJ3XIw). I don't like this solution because it requires extensive rewrite of all C code since all stack references would be unsafe.
 
-It may also be interesting to note that segmented stacks broke GDB for us because it makes assumptions about that stack that isn't true in librcd programs. Therefore we maintain a separate fork of GDB with some patches that disables these assumptions.
+It may also be interesting to note that segmented stacks broke GDB for us because it makes assumptions about the stack that aren't true in librcd programs. Therefore we maintain a separate fork of GDB with some patches that remove these assumptions.
 
 ### Regular expressions
 
