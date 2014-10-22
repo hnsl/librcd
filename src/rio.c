@@ -1787,7 +1787,16 @@ uint128_t rio_get_time_clock() {
     return tp.tv_nsec + (uint128_t) tp.tv_sec * 1000000000;
 }
 
-rio_date_time_t rio_clock_to_date_time(uint128_t clock_time) {
+size_t rio_year_day(bool leap_year, size_t month, size_t month_day) {
+    const uint128_t days_before_month[2][12] = {
+        {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 },
+        {0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 }
+    };
+    // Month and month_day are 1 indexed.
+    return days_before_month[leap_year? 1: 0][month -1] + (month_day - 1);
+}
+
+rio_clock_time_t rio_clock_time_inflate(uint128_t clock_time) {
     const size_t epoch_year = 1970;
     const size_t sec_per_day = (24 * 60 * 60);
     const uint8_t dpm[2][12] = {
@@ -1799,34 +1808,67 @@ rio_date_time_t rio_clock_to_date_time(uint128_t clock_time) {
     uint32_t day_sec = clock_time_s % sec_per_day;
     uint32_t day_n = clock_time_s / sec_per_day;
     // Calculate time.
-    rio_date_time_t clock_dt;
-    clock_dt.second = day_sec % 60;
-    clock_dt.minute = (day_sec % 3600) / 60;
-    clock_dt.hour = day_sec / 3600;
-    clock_dt.week_day = (day_n + 3) % 7;
+    rio_clock_time_t clock_tt;
+    clock_tt.nanosecond = clock_time % RIO_NS_SEC;
+    clock_tt.second = day_sec % 60;
+    clock_tt.minute = (day_sec % 3600) / 60;
+    clock_tt.hour = day_sec / 3600;
     // Scan over years to calculate year + year day.
     uint32_t year = epoch_year;
     while (day_n >= rio_year_days(year)) {
         day_n -= rio_year_days(year);
         year++;
     }
-    clock_dt.year = year;
-    clock_dt.year_day = day_n;
+    clock_tt.year = year;
     // Scan over months to calculate month + month day.
-    clock_dt.month = 0;
+    clock_tt.month = 0;
     uint8_t is_leap_yr = rio_is_leap_year(year);
-    while (day_n >= dpm[is_leap_yr][clock_dt.month]) {
-        day_n -= dpm[is_leap_yr][clock_dt.month];
-        clock_dt.month++;
+    while (day_n >= dpm[is_leap_yr][clock_tt.month]) {
+        day_n -= dpm[is_leap_yr][clock_tt.month];
+        clock_tt.month++;
     }
-    clock_dt.month++;
-    clock_dt.month_day = day_n + 1;
-    return clock_dt;
+    clock_tt.month++;
+    clock_tt.month_day = day_n + 1;
+    return clock_tt;
+}
+
+uint128_t rio_clock_time_deflate(rio_clock_time_t clock_time) {
+    const size_t epoch_year = 1970;
+    const uint128_t sec_ns = RIO_NS_SEC;
+    const uint128_t min_ns = sec_ns * 60;
+    const uint128_t hour_ns = min_ns * 60;
+    const uint128_t day_ns = hour_ns *24;
+    size_t days = rio_days_year(clock_time.year)
+        - rio_days_year(epoch_year)
+        + rio_year_day(rio_is_leap_year(clock_time.year), clock_time.month, clock_time.month_day);
+        // Days are 1 indexed so passed days in the year are one less.
+        //- 1;
+    return days * day_ns
+        + clock_time.hour * hour_ns
+        + clock_time.minute * min_ns
+        + clock_time.second * sec_ns
+        + clock_time.nanosecond;
+}
+
+rio_date_time_t rio_clock_to_date_time(uint128_t clock_time) {
+    rio_clock_time_t ct = rio_clock_time_inflate(clock_time);
+    size_t year_day = rio_year_day(rio_is_leap_year(ct.year), ct.month, ct.month_day);
+    size_t epoch_day = clock_time / RIO_NS_SEC / 60 / 60 / 24;
+    return (rio_date_time_t) {
+        .second = ct.second,
+        .minute = ct.minute,
+        .hour = ct.hour,
+        .month_day = ct.month_day,
+        .month = ct.month,
+        .year = ct.year,
+        .year_day = year_day,
+        .week_day = (epoch_day + 3) % 7
+    };
 }
 
 fstr_mem_t* rio_clock_to_rfc3339(uint128_t clock_time, size_t n_sec_frac) { sub_heap {
     n_sec_frac = MIN(n_sec_frac, 9);
-    rio_date_time_t date_time = rio_clock_to_date_time(clock_time);
+    rio_clock_time_t clock_tt =  rio_clock_time_inflate(clock_time);
     fstr_t date_fullyear, date_month, date_mday, time_hour, time_minute, time_second;
     FSTR_STACK_DECL(date_fullyear, 4);
     FSTR_STACK_DECL(date_month, 2);
@@ -1834,19 +1876,18 @@ fstr_mem_t* rio_clock_to_rfc3339(uint128_t clock_time, size_t n_sec_frac) { sub_
     FSTR_STACK_DECL(time_hour, 2);
     FSTR_STACK_DECL(time_minute, 2);
     FSTR_STACK_DECL(time_second, 2);
-    fstr_serial_uint(date_fullyear, date_time.year, 10);
-    fstr_serial_uint(date_month, date_time.month, 10);
-    fstr_serial_uint(date_mday, date_time.month_day, 10);
-    fstr_serial_uint(time_hour, date_time.hour, 10);
-    fstr_serial_uint(time_minute, date_time.minute, 10);
-    fstr_serial_uint(time_second, date_time.second, 10);
+    fstr_serial_uint(date_fullyear, clock_tt.year, 10);
+    fstr_serial_uint(date_month, clock_tt.month, 10);
+    fstr_serial_uint(date_mday, clock_tt.month_day, 10);
+    fstr_serial_uint(time_hour, clock_tt.hour, 10);
+    fstr_serial_uint(time_minute, clock_tt.minute, 10);
+    fstr_serial_uint(time_second, clock_tt.second, 10);
     // Serialize fraction.
     fstr_t frac_final_buf;
     FSTR_STACK_DECL(frac_final_buf, 16);
     fstr_t time_sec_frac;
     if (n_sec_frac > 0) {
-        uint128_t ns_part = (clock_time % RIO_NS_SEC);
-        fstr_t ns_slice = fss(fstr_from_int_pad(ns_part, 10, 9));
+        fstr_t ns_slice = fss(fstr_from_int_pad(clock_tt.nanosecond, 10, 9));
         assert(ns_slice.len == 9);
         frac_final_buf.str[0] = '.';
         size_t i = 0;
@@ -1879,6 +1920,40 @@ fstr_mem_t* rio_clock_to_rfc1123(uint128_t clock_time) { sub_heap {
     fstr_serial_uint(time_second, date_time.second, 10);
     return escape(conc(wday, ", ", date_mday, " ", month, " ", date_fullyear, " ", time_hour, ":", time_minute, ":", time_second, " GMT"));
 }}
+
+rio_clock_time_t rio_rfc3339_to_clock(fstr_t clock_str) {
+    const size_t ns_frac_digits = 9;
+    fstr_t year_s, month_s, day_s, hour_s, minute_s, second_s, sec_frac_s;
+    {
+        #pragma ocre2c(clock_str):  \
+        ^ (\d{4,4}){year_s} - (\d{2,2}){month_s} - (\d{2,2}){day_s} \
+        T (\d{2,2}){hour_s} : (\d{2,2}){minute_s} : (\d{2,2}){second_s} \
+        ((\.\d+)?){sec_frac_s} (Z | [\+-]\d{2,2}:\d{2,2}) $ {@match}
+        throw("not valid rfc3339 time", exception_io);
+    } match: {
+        rio_clock_time_t clock_time = {
+            .year = fs2ui(year_s),
+            .month = fs2ui(month_s),
+            .month_day = fs2ui(day_s),
+            .hour = fs2ui(hour_s),
+            .minute = fs2ui(minute_s),
+            .second = fs2ui(second_s)
+        };
+        if (sec_frac_s.len > 1) {
+            if (!fstr_equal(fstr_slice(sec_frac_s, 0, 1), "."))
+                throw("rfc3339 time-secfrac", exception_io);
+            // Cut off the dot and digits after 9.
+            fstr_t sec_frac_part = fstr_slice(sec_frac_s, 1, MIN(1 + ns_frac_digits, sec_frac_s.len));
+            // Pad the fraction string with zeroes to be 9 digits
+            fstr_t sec_frac_ns_buf;
+            FSTR_STACK_DECL(sec_frac_ns_buf, ns_frac_digits);
+            fstr_fill(sec_frac_ns_buf, '0');
+            fstr_cpy_over(fstr_slice(sec_frac_ns_buf, 0, sec_frac_part.len), sec_frac_part, 0, 0);
+            clock_time.nanosecond = fs2ui(sec_frac_ns_buf);
+        }
+        return clock_time;
+    }
+}
 
 rio_t* rio_timer_create() {
     int32_t fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);

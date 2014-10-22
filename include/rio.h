@@ -201,6 +201,23 @@ typedef struct rio_date_time {
     int32_t year_day;
 } rio_date_time_t;
 
+typedef struct rio_clock_time {
+    /// Nanosecond. [0-999,999,999]
+    int32_t nanosecond;
+    /// Seconds. [0-60] (1 leap second)
+    int32_t second;
+    /// Minutes. [0-59]
+    int32_t minute;
+    /// Hours. [0-23]
+    int32_t hour;
+    /// Day. [1-31]
+    int32_t month_day;
+    /// Month. [1-12]
+    int32_t month;
+    /// Year.
+    int32_t year;
+} rio_clock_time_t;
+
 /// Keep alive configuration for a tcp stream.
 typedef struct rio_tcp_ka {
     int32_t idle_before_ping_s;
@@ -861,6 +878,9 @@ static inline uint32_t rio_year_days(size_t year) {
     return (rio_is_leap_year(year)? 366: 365);
 }
 
+/// Returns the day of the year, begins at zero.
+size_t rio_year_day(bool leap_year, size_t month, size_t month_day);
+
 /// Converts a clock time to date time.
 rio_date_time_t rio_clock_to_date_time(uint128_t clock_time);
 
@@ -870,6 +890,20 @@ fstr_mem_t* rio_clock_to_rfc3339(uint128_t clock_time, size_t n_sec_frac);
 
 /// Converts a clock time to rfc1123 format.
 fstr_mem_t* rio_clock_to_rfc1123(uint128_t clock_time);
+
+/// Returns the days since past since year 0 at the beginning of year.
+static inline size_t rio_days_year(size_t year) {
+    return year * 365 + year / 4 - year / 100 + year / 400;
+}
+
+/// Converts timestamps in the rfc3339 format. Second fractions are
+/// truncated to nanoseconds.
+rio_clock_time_t rio_rfc3339_to_clock(fstr_t clock_str);
+
+/// Converts clock_time to nanoseconds since epoch.
+uint128_t rio_clock_time_deflate(rio_clock_time_t clock_time);
+
+rio_clock_time_t rio_clock_time_inflate(uint128_t clock_time);
 
 /// Creates a new timer I/O based on timer measurement. See rio_get_time_timer()
 /// for more information.
