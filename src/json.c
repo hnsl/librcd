@@ -428,6 +428,29 @@ fstr_mem_t* json_stringify_pretty(json_value_t value) { sub_heap {
     return escape(fstr_implode(parts, ""));
 }}
 
+fstr_mem_t* json_flatten(json_value_t value) { sub_heap {
+    switch (value.type) {{
+    } case JSON_BOOL: {
+        return escape(fstr_cpy(value.bool_value? "true": "false"));
+    } case JSON_NUMBER: {
+        return escape(fstr_from_double(value.number_value));
+    } case JSON_STRING: {
+        return escape(fstr_cpy(value.string_value));
+    } case JSON_NULL: {
+        return escape(fstr_cpy(""));
+    } case JSON_ARRAY: {
+        list(fstr_t)* toks = new_list(fstr_t);
+        list_foreach(value.array_value, json_value_t, tok)
+            list_push_end(toks, fstr_t, fss(json_flatten(tok)));
+        return escape(fstr_implode(toks, ","));
+    } case JSON_OBJECT: {
+        list(fstr_t)* toks = new_list(fstr_t);
+        dict_foreach(value.object_value, json_value_t, key, tok)
+            list_push_end_n(toks, fstr_t, key, " => ", fss(json_flatten(tok)));
+        return escape(fstr_implode(toks, ","));
+    }}
+}}
+
 fstr_t json_serial_type(json_type_t type) {
     switch (type) {{
     } case JSON_NULL: {

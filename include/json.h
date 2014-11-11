@@ -159,6 +159,11 @@ fstr_mem_t* json_stringify(json_value_t value);
 /// Serializes a JSON tree structure in a human-readable manner.
 fstr_mem_t* json_stringify_pretty(json_value_t value);
 
+/// Flattens a JSON value to a string. This destroys the type information
+/// but makes the data easier to work with in cases where the type information
+/// is irrelevant.
+fstr_mem_t* json_flatten(json_value_t value);
+
 /// Serializes a JSON type to a human readable string.
 fstr_t json_serial_type(json_type_t type);
 
