@@ -9,15 +9,24 @@
 #pragma librcd
 
 void rcd_self_test_dict() {
-    sub_heap {
-        dict(fstr_t)* word_book = new_dict(fstr_t);
-        atest(dict_count(word_book, fstr_t) == 0);
-        atest(dict_insert(word_book, fstr_t, "hello", "hej"));
-        dict_replace(word_book, fstr_t, "bye", "vi ses");
-        atest(!dict_insert(word_book, fstr_t, "bye", "conflict"));
-        atest(dict_count(word_book, fstr_t) == 2);
-        atest(dict_insert(word_book, fstr_t, "stuff", "saker"));
-        atest(dict_count(word_book, fstr_t) == 3);
+    for (size_t i = 0; i < 2; i++) sub_heap {
+        dict(fstr_t)* word_book;
+        if (i == 0) {
+            word_book = new_dict(fstr_t);
+            atest(dict_count(word_book, fstr_t) == 0);
+            atest(dict_insert(word_book, fstr_t, "hello", "hej"));
+            dict_replace(word_book, fstr_t, "bye", "vi ses");
+            atest(!dict_insert(word_book, fstr_t, "bye", "conflict"));
+            atest(dict_count(word_book, fstr_t) == 2);
+            atest(dict_insert(word_book, fstr_t, "stuff", "saker"));
+            atest(dict_count(word_book, fstr_t) == 3);
+        } else {
+            word_book = new_dict(fstr_t,
+                {"hello", "hej"},
+                {"bye", "vi ses"},
+                {"stuff", "saker"},
+            );
+        }
         {
             fstr_t* word = dict_read(word_book, fstr_t, "hello");
             atest(fstr_equal(*word, "hej"));
