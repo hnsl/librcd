@@ -141,6 +141,18 @@ typedef struct rcd_abstract_dict {
     } \
 })
 
+#define dict_replace_n(set, type, ...) ({ \
+    struct { \
+        fstr_t key; \
+        type value; \
+    } _rkv[] = {__VA_ARGS__}; \
+    for (size_t _i = 0;; _i++) { \
+        if (_i == LENGTHOF(_rkv)) \
+            break; \
+        dict_replace(set, type, _rkv[_i].key, _rkv[_i].value); \
+    } \
+})
+
 #define __dict_get(set, type, fstr_key) ({ \
     fstr_t __cmp_key = fstr_key; \
     char __cmp_mem[sizeof(rcd_abstract_dict_element_t) + __cmp_key.len]; \
@@ -301,12 +313,14 @@ typedef struct rcd_abstract_dict {
 
 int rcd_dict_cmp(const rbtree_node_t* node1, const rbtree_node_t* node2);
 
-#define new_dict(type) ({ \
+#define new_dict(type, ...) ({ \
     rcd_abstract_dict_t* _abstract_dict = new(rcd_abstract_dict_t); \
     _abstract_dict->seq = 0; \
     _abstract_dict->length = 0; \
     rbtree_init(&_abstract_dict->tree, rcd_dict_cmp); \
-    (dict(type)*) _abstract_dict; \
+    dict(type)* _dict = (void*) _abstract_dict; \
+    dict_replace_n(_dict, type, __VA_ARGS__); \
+    _dict; \
 })
 
 /// Allocates a new list containing the in-memory keys of the dict.
