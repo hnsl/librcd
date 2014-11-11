@@ -153,10 +153,10 @@ define_eio_complex(json_type, expected, got);
 /// Parse a string into a json_tree_t. Throws exception_io on failure.
 json_tree_t* json_parse(fstr_t str);
 
-/// Stringify a JSON tree structure.
+/// Serializes a JSON tree structure.
 fstr_mem_t* json_stringify(json_value_t value);
 
-/// Stringify a JSON tree structure in a human-readable manner.
+/// Serializes a JSON tree structure in a human-readable manner.
 fstr_mem_t* json_stringify_pretty(json_value_t value);
 
 /// Serializes a JSON type to a human readable string.
