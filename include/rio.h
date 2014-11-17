@@ -882,14 +882,14 @@ static inline uint32_t rio_year_days(size_t year) {
 size_t rio_year_day(bool leap_year, size_t month, size_t month_day);
 
 /// Converts a clock time to date time.
-rio_date_time_t rio_clock_to_date_time(uint128_t epoch_ns);
+rio_date_time_t rio_epoch_to_date_time(uint128_t epoch_ns);
 
 /// Converts a clock time to rfc3339 format. The n_sec_frac is the fixed
 /// number of second fractions to include. If n_sec_frac is ceiled at 9.
-fstr_mem_t* rio_clock_to_rfc3339(uint128_t epoch_ns, size_t n_sec_frac);
+fstr_mem_t* rio_epoch_to_rfc3339(uint128_t epoch_ns, size_t n_sec_frac);
 
 /// Converts a clock time to rfc1123 format.
-fstr_mem_t* rio_clock_to_rfc1123(uint128_t epoch_ns);
+fstr_mem_t* rio_epoch_to_rfc1123(uint128_t epoch_ns);
 
 /// Returns the days since past since year 0 at the beginning of year.
 static inline size_t rio_days_year(size_t year) {
