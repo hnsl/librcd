@@ -1796,7 +1796,7 @@ size_t rio_year_day(bool leap_year, size_t month, size_t month_day) {
     return days_before_month[leap_year? 1: 0][month -1] + (month_day - 1);
 }
 
-uint128_t rio_clock_time_deflate(rio_clock_time_t clock_time) {
+uint128_t rio_clock_time_to_epoch(rio_clock_time_t clock_time) {
     const size_t epoch_year = 1970;
     const uint128_t sec_ns = RIO_NS_SEC;
     const uint128_t min_ns = sec_ns * 60;
@@ -1812,7 +1812,7 @@ uint128_t rio_clock_time_deflate(rio_clock_time_t clock_time) {
         + clock_time.nanosecond;
 }
 
-rio_clock_time_t rio_clock_time_inflate(uint128_t epoch_ns) {
+rio_clock_time_t rio_epoch_clock_time(uint128_t epoch_ns) {
     const size_t epoch_year = 1970;
     const size_t sec_per_day = (24 * 60 * 60);
     const uint8_t dpm[2][12] = {
@@ -1850,7 +1850,7 @@ rio_clock_time_t rio_clock_time_inflate(uint128_t epoch_ns) {
 
 rio_date_time_t rio_clock_to_date_time(rio_clock_time_t clock) {
     size_t year_day = rio_year_day(rio_is_leap_year(clock.year), clock.month, clock.month_day);
-    size_t epoch_day = rio_clock_time_deflate(clock) / RIO_NS_SEC / 60 / 60 / 24;
+    size_t epoch_day = rio_clock_time_to_epoch(clock) / RIO_NS_SEC / 60 / 60 / 24;
     return (rio_date_time_t) {
         .second = clock.second,
         .minute = clock.minute,
