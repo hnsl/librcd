@@ -325,6 +325,21 @@ void rcd_self_test_io() {
             atest(test_date_time.week_day == 1);
             atest(test_date_time.year_day == 352);
         }
+        // Test ISO 8061 serialization.
+        sub_heap {
+            rio_clock_time_t ct = rio_iso8601_date_to_clock("2009-03-04");
+            DBGFN(fss(rio_clock_to_iso8601_date(ct, false, false)));
+            atest(fstr_equal(fss(rio_clock_to_iso8601_date(ct, false, false)), "2009-03-04"));
+            atest(fstr_equal(fss(rio_clock_to_iso8601_date(ct, true, false)), "20090304"));
+            atest(fstr_equal(fss(rio_clock_to_iso8601_date(ct, false, true)), "2009-03"));
+            atest(ct.year == 2009);
+            atest(ct.month == 3);
+            atest(ct.month_day == 4);
+            atest(ct.hour == 0);
+            atest(ct.minute == 0);
+            atest(ct.second == 0);
+            atest(ct.nanosecond == 0);
+        }
         // Test serializing a clock with rfc3339.
         sub_heap {
             rio_clock_time_t test_clock_time = rio_epoch_clock_time(1388758009123456789);

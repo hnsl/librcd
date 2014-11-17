@@ -1954,12 +1954,20 @@ rio_clock_time_t rio_rfc3339_to_clock(fstr_t clock_str) {
 fstr_mem_t* rio_clock_to_iso8601_date(rio_clock_time_t clock_time, bool no_dash, bool no_day) { sub_heap {
     if (no_dash && no_day)
         throw("no dash and no day is not valid iso8601 format", exception_io);
+    fstr_t fullyear, month, month_day;
+    FSTR_STACK_DECL(fullyear, 4);
+    FSTR_STACK_DECL(month, 2);
+    FSTR_STACK_DECL(month_day, 2);
+    fstr_serial_uint(fullyear, clock_time.year, 10);
+    fstr_serial_uint(month, clock_time.month, 10);
+    if (!no_day)
+        fstr_serial_uint(month_day, clock_time.month_day, 10);
     fstr_t tokens[] = {
-        str(clock_time.year),
-        str(clock_time.month),
-        no_day? "": str(clock_time.month_day),
+        fullyear,
+        month,
+        month_day,
     };
-    return escape(fstr_concat(tokens, LENGTHOF(tokens), no_dash? "": "-"));
+    return escape(fstr_concat(tokens, LENGTHOF(tokens) - (no_day? 1: 0), no_dash? "": "-"));
 }}
 
 rio_clock_time_t rio_iso8601_date_to_clock(fstr_t clock_str) {
