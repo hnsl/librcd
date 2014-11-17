@@ -1796,6 +1796,22 @@ size_t rio_year_day(bool leap_year, size_t month, size_t month_day) {
     return days_before_month[leap_year? 1: 0][month -1] + (month_day - 1);
 }
 
+uint128_t rio_clock_time_deflate(rio_clock_time_t clock_time) {
+    const size_t epoch_year = 1970;
+    const uint128_t sec_ns = RIO_NS_SEC;
+    const uint128_t min_ns = sec_ns * 60;
+    const uint128_t hour_ns = min_ns * 60;
+    const uint128_t day_ns = hour_ns *24;
+    size_t days = rio_days_year(clock_time.year)
+        - rio_days_year(epoch_year)
+        + rio_year_day(rio_is_leap_year(clock_time.year), clock_time.month, clock_time.month_day);
+    return days * day_ns
+        + clock_time.hour * hour_ns
+        + clock_time.minute * min_ns
+        + clock_time.second * sec_ns
+        + clock_time.nanosecond;
+}
+
 rio_clock_time_t rio_clock_time_inflate(uint128_t epoch_ns) {
     const size_t epoch_year = 1970;
     const size_t sec_per_day = (24 * 60 * 60);
@@ -1832,43 +1848,23 @@ rio_clock_time_t rio_clock_time_inflate(uint128_t epoch_ns) {
     return clock_tt;
 }
 
-uint128_t rio_clock_time_deflate(rio_clock_time_t clock_time) {
-    const size_t epoch_year = 1970;
-    const uint128_t sec_ns = RIO_NS_SEC;
-    const uint128_t min_ns = sec_ns * 60;
-    const uint128_t hour_ns = min_ns * 60;
-    const uint128_t day_ns = hour_ns *24;
-    size_t days = rio_days_year(clock_time.year)
-        - rio_days_year(epoch_year)
-        + rio_year_day(rio_is_leap_year(clock_time.year), clock_time.month, clock_time.month_day);
-        // Days are 1 indexed so passed days in the year are one less.
-        //- 1;
-    return days * day_ns
-        + clock_time.hour * hour_ns
-        + clock_time.minute * min_ns
-        + clock_time.second * sec_ns
-        + clock_time.nanosecond;
-}
-
-rio_date_time_t rio_epoch_to_date_time(uint128_t epoch_ns) {
-    rio_clock_time_t ct = rio_clock_time_inflate(epoch_ns);
-    size_t year_day = rio_year_day(rio_is_leap_year(ct.year), ct.month, ct.month_day);
-    size_t epoch_day = epoch_ns / RIO_NS_SEC / 60 / 60 / 24;
+rio_date_time_t rio_clock_to_date_time(rio_clock_time_t clock) {
+    size_t year_day = rio_year_day(rio_is_leap_year(clock.year), clock.month, clock.month_day);
+    size_t epoch_day = rio_clock_time_deflate(clock) / RIO_NS_SEC / 60 / 60 / 24;
     return (rio_date_time_t) {
-        .second = ct.second,
-        .minute = ct.minute,
-        .hour = ct.hour,
-        .month_day = ct.month_day,
-        .month = ct.month,
-        .year = ct.year,
+        .second = clock.second,
+        .minute = clock.minute,
+        .hour = clock.hour,
+        .month_day = clock.month_day,
+        .month = clock.month,
+        .year = clock.year,
         .year_day = year_day,
         .week_day = (epoch_day + 3) % 7
     };
 }
 
-fstr_mem_t* rio_epoch_to_rfc3339(uint128_t epoch_ns, size_t n_sec_frac) { sub_heap {
+fstr_mem_t* rio_clock_to_rfc3339(rio_clock_time_t clock, size_t n_sec_frac) { sub_heap {
     n_sec_frac = MIN(n_sec_frac, 9);
-    rio_clock_time_t clock_tt =  rio_clock_time_inflate(epoch_ns);
     fstr_t date_fullyear, date_month, date_mday, time_hour, time_minute, time_second;
     FSTR_STACK_DECL(date_fullyear, 4);
     FSTR_STACK_DECL(date_month, 2);
@@ -1876,18 +1872,18 @@ fstr_mem_t* rio_epoch_to_rfc3339(uint128_t epoch_ns, size_t n_sec_frac) { sub_he
     FSTR_STACK_DECL(time_hour, 2);
     FSTR_STACK_DECL(time_minute, 2);
     FSTR_STACK_DECL(time_second, 2);
-    fstr_serial_uint(date_fullyear, clock_tt.year, 10);
-    fstr_serial_uint(date_month, clock_tt.month, 10);
-    fstr_serial_uint(date_mday, clock_tt.month_day, 10);
-    fstr_serial_uint(time_hour, clock_tt.hour, 10);
-    fstr_serial_uint(time_minute, clock_tt.minute, 10);
-    fstr_serial_uint(time_second, clock_tt.second, 10);
+    fstr_serial_uint(date_fullyear, clock.year, 10);
+    fstr_serial_uint(date_month, clock.month, 10);
+    fstr_serial_uint(date_mday, clock.month_day, 10);
+    fstr_serial_uint(time_hour, clock.hour, 10);
+    fstr_serial_uint(time_minute, clock.minute, 10);
+    fstr_serial_uint(time_second, clock.second, 10);
     // Serialize fraction.
     fstr_t frac_final_buf;
     FSTR_STACK_DECL(frac_final_buf, 16);
     fstr_t time_sec_frac;
     if (n_sec_frac > 0) {
-        fstr_t ns_slice = fss(fstr_from_int_pad(clock_tt.nanosecond, 10, 9));
+        fstr_t ns_slice = fss(fstr_from_int_pad(clock.nanosecond, 10, 9));
         assert(ns_slice.len == 9);
         frac_final_buf.str[0] = '.';
         size_t i = 0;
@@ -1901,8 +1897,8 @@ fstr_mem_t* rio_epoch_to_rfc3339(uint128_t epoch_ns, size_t n_sec_frac) { sub_he
     return escape(conc(date_fullyear, "-", date_month, "-", date_mday, "T", time_hour, ":", time_minute, ":", time_second, time_sec_frac, "Z"));
 }}
 
-fstr_mem_t* rio_epoch_to_rfc1123(uint128_t epoch_ns) { sub_heap {
-    rio_date_time_t date_time = rio_epoch_to_date_time(epoch_ns);
+fstr_mem_t* rio_clock_to_rfc1123(rio_clock_time_t clock_time) { sub_heap {
+    rio_date_time_t date_time = rio_clock_to_date_time(clock_time);
     static fstr_t wdays[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
     static fstr_t months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
     fstr_t wday = wdays[date_time.week_day];
