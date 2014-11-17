@@ -905,6 +905,14 @@ uint128_t rio_clock_time_deflate(rio_clock_time_t clock_time);
 /// Inverse of rio_clock_time_deflate.
 rio_clock_time_t rio_clock_time_inflate(uint128_t epoch_ns);
 
+/// Takes a clock time and serializes it into one of several possible iso-8601 date formats.
+/// The combination of no dash and no day is not valid iso-8601 as it is ambiguous and will throw an io exception.
+fstr_mem_t* rio_clock_to_iso8601_date(rio_clock_time_t clock_time, bool no_dash, bool no_day);
+
+/// Takes a iso8601 date and unserializes it into a clock time. The returned time is all zeroes.
+/// The function throws an io exception if the format is invalid or unsupported.
+rio_clock_time_t rio_iso8601_date_to_clock(fstr_t clock_str);
+
 /// Creates a new timer I/O based on timer measurement. See rio_get_time_timer()
 /// for more information.
 rio_t* rio_timer_create();

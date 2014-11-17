@@ -1955,6 +1955,38 @@ rio_clock_time_t rio_rfc3339_to_clock(fstr_t clock_str) {
     }
 }
 
+fstr_mem_t* rio_clock_to_iso8601_date(rio_clock_time_t clock_time, bool no_dash, bool no_day) { sub_heap {
+    if (no_dash && no_day)
+        throw("no dash and no day is not valid iso8601 format", exception_io);
+    fstr_t tokens[] = {
+        str(clock_time.year),
+        str(clock_time.month),
+        no_day? "": str(clock_time.month_day),
+    };
+    return escape(fstr_concat(tokens, LENGTHOF(tokens), no_dash? "": "-"));
+}}
+
+rio_clock_time_t rio_iso8601_date_to_clock(fstr_t clock_str) {
+    rio_clock_time_t clock_time = {0};
+    fstr_t year_s, month_s, day_s;
+    {
+        #pragma re2c(clock_str): \
+              ^ (\d{4,4}){year_s} - (\d{2,2}){month_s} - (\d{2,2}){day_s} $ {@match_ymd} \
+            | ^ (\d{4,4}){year_s} (\d{2,2}){month_s} (\d{2,2}){day_s} $ {@match_ymd} \
+            | ^ (\d{4,4}){year_s} - (\d{2,2}){month_s} $ {@match_ym} \
+            | ^ (\d{4,4}){year_s} $ {@match_y}
+        // Invalid format or a non supported iso 8601 format like "Ordinal dates".
+        throw("not valid iso8601 syntax or not implemented format", exception_io);
+    } match_ymd: {
+        clock_time.month_day = fs2ui(day_s);
+    } match_ym: {
+        clock_time.month = fs2ui(month_s);
+    } match_y: {
+        clock_time.year = fs2ui(year_s);
+    }
+    return clock_time;
+}
+
 rio_t* rio_timer_create() {
     int32_t fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
     if (fd == -1)
