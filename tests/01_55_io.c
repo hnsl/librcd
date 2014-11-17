@@ -396,7 +396,7 @@ void rcd_self_test_io() {
         }
         {
             // Test rfc3339 parsing.
-            rio_clock_time_t ct1 = rio_rfc3339_to_clock("2009-03-04T00:34:35.1234567899-12:15");
+            rio_clock_time_t ct1 = rio_rfc3339_to_clock("2009-03-04T00:34:35.1234567899Z");
             atest(ct1.year == 2009
                 && ct1.month == 3
                 && ct1.month_day == 4
@@ -404,12 +404,11 @@ void rcd_self_test_io() {
                 && ct1.minute == 34
                 && ct1.second == 35
                 && ct1.nanosecond == 123456789);
-            (void) rio_rfc3339_to_clock("2009-01-01T00:34:35.1234567899-12:15");
-            (void) rio_rfc3339_to_clock("2009-12-31T00:34:35+12:56");
+            (void) rio_rfc3339_to_clock("2009-12-31T00:34:35+00:00");
             (void) rio_rfc3339_to_clock("2000-02-10T23:34:35.009Z");
         }
         {
-            rio_clock_time_t ct1 = rio_rfc3339_to_clock("2009-03-04T00:34:35.123456789-12:15");
+            rio_clock_time_t ct1 = rio_rfc3339_to_clock("2009-03-04T00:34:35.123456789Z");
             atest(rio_clock_time_deflate(ct1) == 1236126875123456789);
             // Adds 2min 3s 123456789ns each loop.
             for (uint128_t t = 1236126875123456789; t < 1236126875123456789 + 123123456789 * 10000; t += 123123456789 )

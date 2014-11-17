@@ -1928,7 +1928,7 @@ rio_clock_time_t rio_rfc3339_to_clock(fstr_t clock_str) {
         #pragma ocre2c(clock_str):  \
         ^ (\d{4,4}){year_s} - (\d{2,2}){month_s} - (\d{2,2}){day_s} \
         T (\d{2,2}){hour_s} : (\d{2,2}){minute_s} : (\d{2,2}){second_s} \
-        ((\.\d+)?){sec_frac_s} (Z | [\+-]\d{2,2}:\d{2,2}) $ {@match}
+        ((\.\d+)?){sec_frac_s} (Z | \+00:00) $ {@match}
         throw("not valid rfc3339 time", exception_io);
     } match: {
         rio_clock_time_t clock_time = {
