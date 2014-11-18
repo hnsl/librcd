@@ -556,7 +556,7 @@ int32_t getaddrinfo(const char* restrict host, const char* restrict serv, const 
 
 struct tm* localtime_r(const time_t* restrict t, struct tm* restrict tm) {
     uint128_t clock_ns = (*t) * RIO_NS_SEC;
-    rio_date_time_t dt = rio_clock_to_date_time(rio_epoch_clock_time(clock_ns));
+    rio_date_time_t dt = rio_clock_to_date_time(rio_epoch_to_clock_time(clock_ns));
     tm->tm_sec = dt.second;
     tm->tm_min = dt.minute;
     tm->tm_hour = dt.hour;

@@ -905,7 +905,7 @@ rio_clock_time_t rio_rfc3339_to_clock(fstr_t clock_str);
 /// Converts clock_time to nanoseconds since epoch.
 uint128_t rio_clock_time_to_epoch(rio_clock_time_t clock_time);
 /// Inverse of rio_clock_time_deflate.
-rio_clock_time_t rio_epoch_clock_time(uint128_t epoch_ns);
+rio_clock_time_t rio_epoch_to_clock_time(uint128_t epoch_ns);
 
 /// Takes a clock time and serializes it into one of several possible iso-8601 date formats.
 /// The combination of no dash and no day is not valid iso-8601 as it is ambiguous and will throw an io exception.

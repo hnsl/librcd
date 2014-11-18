@@ -1812,7 +1812,7 @@ uint128_t rio_clock_time_to_epoch(rio_clock_time_t clock_time) {
         + clock_time.nanosecond;
 }
 
-rio_clock_time_t rio_epoch_clock_time(uint128_t epoch_ns) {
+rio_clock_time_t rio_epoch_to_clock_time(uint128_t epoch_ns) {
     const size_t epoch_year = 1970;
     const size_t sec_per_day = (24 * 60 * 60);
     const uint8_t dpm[2][12] = {

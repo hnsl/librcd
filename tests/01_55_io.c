@@ -310,11 +310,11 @@ void rcd_self_test_io() {
             atest(rio_clock_time_to_epoch(ct1) == 1236126875123456789);
             // Adds 2min 3s 123456789ns each loop.
             for (uint128_t t = 1236126875123456789; t < 1236126875123456789 + 123123456789 * 1000000; t += 62312345678900 )
-                atest(t == rio_clock_time_to_epoch(rio_epoch_clock_time(t)));
+                atest(t == rio_clock_time_to_epoch(rio_epoch_to_clock_time(t)));
         }
         // Test serializing a clock and expect a specific result.
         {
-            rio_clock_time_t test_clock_time = rio_epoch_clock_time(1355795881234905503);
+            rio_clock_time_t test_clock_time = rio_epoch_to_clock_time(1355795881234905503);
             rio_date_time_t test_date_time = rio_clock_to_date_time(test_clock_time);
             atest(test_date_time.year == 2012);
             atest(test_date_time.month == 12);
@@ -342,7 +342,7 @@ void rcd_self_test_io() {
         }
         // Test serializing a clock with rfc3339.
         sub_heap {
-            rio_clock_time_t test_clock_time = rio_epoch_clock_time(1388758009123456789);
+            rio_clock_time_t test_clock_time = rio_epoch_to_clock_time(1388758009123456789);
             fstr_t rfc3339_0 = fss(rio_clock_to_rfc3339(test_clock_time, 0));
             atest(fstr_equal(rfc3339_0, "2014-01-03T14:06:49Z"));
             fstr_t rfc3339_1 = fss(rio_clock_to_rfc3339(test_clock_time, 1));
@@ -359,7 +359,7 @@ void rcd_self_test_io() {
             atest(fstr_equal(rfc3339_10, "2014-01-03T14:06:49.123456789Z"));
         }
         sub_heap {
-            rio_clock_time_t test_clock_time = rio_epoch_clock_time(1251333275000000000);
+            rio_clock_time_t test_clock_time = rio_epoch_to_clock_time(1251333275000000000);
             fstr_t rfc3339_0 = fss(rio_clock_to_rfc3339(test_clock_time, 0));
             atest(fstr_equal(rfc3339_0, "2009-08-27T00:34:35Z"));
             fstr_t rfc3339_1 = fss(rio_clock_to_rfc3339(test_clock_time, 1));
@@ -376,7 +376,7 @@ void rcd_self_test_io() {
             atest(fstr_equal(rfc3339_10, "2009-08-27T00:34:35.000000000Z"));
         }
         sub_heap {
-            rio_clock_time_t test_clock_time = rio_epoch_clock_time(1251333275000090000);
+            rio_clock_time_t test_clock_time = rio_epoch_to_clock_time(1251333275000090000);
             fstr_t rfc3339_0 = fss(rio_clock_to_rfc3339(test_clock_time, 0));
             atest(fstr_equal(rfc3339_0, "2009-08-27T00:34:35Z"));
             fstr_t rfc3339_1 = fss(rio_clock_to_rfc3339(test_clock_time, 1));
@@ -394,39 +394,39 @@ void rcd_self_test_io() {
         }
         // Test serializing a clock with rfc1123.
         sub_heap {
-            fstr_t rfc1123_0 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(0)));
+            fstr_t rfc1123_0 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(0)));
             atest(fstr_equal(rfc1123_0, "Thu, 01 Jan 1970 00:00:00 GMT"));
-            fstr_t rfc1123_1 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(1)));
+            fstr_t rfc1123_1 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(1)));
             atest(fstr_equal(rfc1123_1, "Thu, 01 Jan 1970 00:00:00 GMT"));
-            fstr_t rfc1123_2 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(2)));
+            fstr_t rfc1123_2 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(2)));
             atest(fstr_equal(rfc1123_2, "Thu, 01 Jan 1970 00:00:00 GMT"));
-            fstr_t rfc1123_3 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(RIO_NS_SEC - 1)));
+            fstr_t rfc1123_3 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(RIO_NS_SEC - 1)));
             atest(fstr_equal(rfc1123_3, "Thu, 01 Jan 1970 00:00:00 GMT"));
-            fstr_t rfc1123_4 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(1 * RIO_NS_SEC)));
+            fstr_t rfc1123_4 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(1 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_4, "Thu, 01 Jan 1970 00:00:01 GMT"));
-            fstr_t rfc1123_5 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(10 * RIO_NS_SEC)));
+            fstr_t rfc1123_5 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(10 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_5, "Thu, 01 Jan 1970 00:00:10 GMT"));
-            fstr_t rfc1123_6 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(100 * RIO_NS_SEC)));
+            fstr_t rfc1123_6 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(100 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_6, "Thu, 01 Jan 1970 00:01:40 GMT"));
-            fstr_t rfc1123_7 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(1000 * RIO_NS_SEC)));
+            fstr_t rfc1123_7 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(1000 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_7, "Thu, 01 Jan 1970 00:16:40 GMT"));
-            fstr_t rfc1123_8 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(10000 * RIO_NS_SEC)));
+            fstr_t rfc1123_8 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(10000 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_8, "Thu, 01 Jan 1970 02:46:40 GMT"));
-            fstr_t rfc1123_9 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(100000 * RIO_NS_SEC)));
+            fstr_t rfc1123_9 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(100000 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_9, "Fri, 02 Jan 1970 03:46:40 GMT"));
-            fstr_t rfc1123_10 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(1000000 * RIO_NS_SEC)));
+            fstr_t rfc1123_10 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(1000000 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_10, "Mon, 12 Jan 1970 13:46:40 GMT"));
-            fstr_t rfc1123_11 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(10000000 * RIO_NS_SEC)));
+            fstr_t rfc1123_11 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(10000000 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_11, "Sun, 26 Apr 1970 17:46:40 GMT"));
-            fstr_t rfc1123_12 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(100000000 * RIO_NS_SEC)));
+            fstr_t rfc1123_12 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(100000000 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_12, "Sat, 03 Mar 1973 09:46:40 GMT"));
-            fstr_t rfc1123_13 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(1000000000 * RIO_NS_SEC)));
+            fstr_t rfc1123_13 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(1000000000 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_13, "Sun, 09 Sep 2001 01:46:40 GMT"));
-            fstr_t rfc1123_14 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(2000000000 * RIO_NS_SEC)));
+            fstr_t rfc1123_14 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(2000000000 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_14, "Wed, 18 May 2033 03:33:20 GMT"));
-            fstr_t rfc1123_15 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(4000000000 * RIO_NS_SEC)));
+            fstr_t rfc1123_15 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(4000000000 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_15, "Tue, 02 Oct 2096 07:06:40 GMT"));
-            fstr_t rfc1123_16 = fss(rio_clock_to_rfc1123(rio_epoch_clock_time(10000000000 * RIO_NS_SEC)));
+            fstr_t rfc1123_16 = fss(rio_clock_to_rfc1123(rio_epoch_to_clock_time(10000000000 * RIO_NS_SEC)));
             atest(fstr_equal(rfc1123_16, "Sat, 20 Nov 2286 17:46:40 GMT"));
         }
 
