@@ -261,7 +261,7 @@ void rcd_self_test_io() {
     sub_heap {
         uint128_t timer_time = rio_get_time_timer();
         atest(timer_time > 0);
-        uint128_t clock_time = rio_get_time_clock();
+        uint128_t clock_time = rio_epoch_ns_now();
         atest(clock_time > 0);
         rio_t* timer = rio_timer_create();
         atest(timer != 0);
@@ -279,7 +279,7 @@ void rcd_self_test_io() {
         }
         // This is technically undefined but the test should pass as long as nothing weird happens with the system.
         {
-            uint128_t clock_delta = rio_get_time_clock() - clock_time;
+            uint128_t clock_delta = rio_epoch_ns_now() - clock_time;
             atest(clock_delta > RIO_NS_MS * 2);
             atest(clock_delta < RIO_NS_SEC);
         }

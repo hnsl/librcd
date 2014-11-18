@@ -1779,22 +1779,6 @@ uint128_t rio_get_time_timer() {
     return tp.tv_nsec + (uint128_t) tp.tv_sec * 1000000000;
 }
 
-uint128_t rio_get_time_clock() {
-    struct timespec tp;
-    int32_t clock_gettime_r = clock_gettime(CLOCK_REALTIME, &tp);
-    if (clock_gettime_r == -1)
-        RCD_SYSCALL_EXCEPTION(clock_gettime, exception_io);
-    return tp.tv_nsec + (uint128_t) tp.tv_sec * 1000000000;
-}
-
-size_t rio_year_day(bool leap_year, size_t month, size_t month_day) {
-    const uint128_t days_before_month[2][12] = {
-        {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 },
-        {0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 }
-    };
-    // Month and month_day are 1 indexed.
-    return days_before_month[leap_year? 1: 0][month -1] + (month_day - 1);
-}
 
 uint128_t rio_clock_time_to_epoch(rio_clock_time_t clock_time) {
     const size_t epoch_year = 1970;
@@ -1846,6 +1830,23 @@ rio_clock_time_t rio_epoch_to_clock_time(uint128_t epoch_ns) {
     clock_tt.month++;
     clock_tt.month_day = day_n + 1;
     return clock_tt;
+}
+
+uint128_t rio_epoch_ns_now() {
+    struct timespec tp;
+    int32_t clock_gettime_r = clock_gettime(CLOCK_REALTIME, &tp);
+    if (clock_gettime_r == -1)
+        RCD_SYSCALL_EXCEPTION(clock_gettime, exception_io);
+    return tp.tv_nsec + (uint128_t) tp.tv_sec * 1000000000;
+}
+
+size_t rio_year_day(bool leap_year, size_t month, size_t month_day) {
+    const uint128_t days_before_month[2][12] = {
+        {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 },
+        {0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 }
+    };
+    // Month and month_day are 1 indexed.
+    return days_before_month[leap_year? 1: 0][month -1] + (month_day - 1);
 }
 
 rio_date_time_t rio_clock_to_date_time(rio_clock_time_t clock) {

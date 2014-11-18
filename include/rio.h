@@ -861,12 +861,21 @@ void rio_bind_to_device(rio_t* rio, fstr_t dev_name);
 /// Throws an io exception if reading the time value failed.
 uint128_t rio_get_time_timer();
 
+/// Converts clock_time to nanoseconds since epoch.
+uint128_t rio_clock_time_to_epoch(rio_clock_time_t clock_time);
+/// Inverse of rio_clock_time_deflate.
+rio_clock_time_t rio_epoch_to_clock_time(uint128_t epoch_ns);
+
 /// Returns the current time in nanoseconds since the Epoch. This value
 /// can change unpredictably due to politics, setting system clock, leap
 /// etc. It's probably not correct and should not be used for anything time
 /// critical or interval measurement.
 /// Throws an io exception if reading the time value failed.
-uint128_t rio_get_time_clock();
+uint128_t rio_epoch_ns_now();
+
+static rio_clock_time_t rio_clock_time_now() {
+    return rio_epoch_to_clock_time(rio_epoch_ns_now());
+}
 
 /// Returns true if specified year is a leap year.
 static inline bool rio_is_leap_year(size_t year) {
@@ -901,11 +910,6 @@ static inline size_t rio_days_year(size_t year) {
 /// Converts timestamps in the rfc3339 format. Second fractions are
 /// truncated to nanoseconds.
 rio_clock_time_t rio_rfc3339_to_clock(fstr_t clock_str);
-
-/// Converts clock_time to nanoseconds since epoch.
-uint128_t rio_clock_time_to_epoch(rio_clock_time_t clock_time);
-/// Inverse of rio_clock_time_deflate.
-rio_clock_time_t rio_epoch_to_clock_time(uint128_t epoch_ns);
 
 /// Takes a clock time and serializes it into one of several possible iso-8601 date formats.
 /// The combination of no dash and no day is not valid iso-8601 as it is ambiguous and will throw an io exception.
