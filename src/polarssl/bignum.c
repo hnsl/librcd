@@ -39,6 +39,11 @@
 
 /*NO-SYS #include <stdlib.h> */
 
+/* Implementation that should never be optimized out by the compiler */
+static void polarssl_zeroize( void *v, size_t n ) {
+    volatile unsigned char *p = v; while( n-- ) *p++ = 0;
+}
+
 #define ciL    (sizeof(t_uint))         /* chars in limb  */
 #define biL    (ciL << 3)               /* bits  in limb  */
 #define biH    (ciL << 2)               /* half limb size */
@@ -72,7 +77,7 @@ void mpi_free( mpi *X )
 
     if( X->p != NULL )
     {
-        memset( X->p, 0, X->n * ciL );
+        polarssl_zeroize( X->p, X->n * ciL );
         free( X->p );
     }
 
@@ -101,7 +106,7 @@ int mpi_grow( mpi *X, size_t nblimbs )
         if( X->p != NULL )
         {
             memcpy( p, X->p, X->n * ciL );
-            memset( X->p, 0, X->n * ciL );
+            polarssl_zeroize( X->p, X->n * ciL );
             free( X->p );
         }
 
@@ -934,8 +939,16 @@ int mpi_sub_int( mpi *X, const mpi *A, t_sint b )
 
 /*
  * Helper for mpi multiplication
- */ 
-static void mpi_mul_hlp( size_t i, t_uint *s, t_uint *d, t_uint b )
+ */
+static
+#if defined(__APPLE__) && defined(__arm__)
+/*
+ * Apple LLVM version 4.2 (clang-425.0.24) (based on LLVM 3.2svn)
+ * appears to need this to prevent bad ARM code generation at -O3.
+ */
+__attribute__ ((noinline))
+#endif
+void mpi_mul_hlp( size_t i, t_uint *s, t_uint *d, t_uint b )
 {
     t_uint c = 0, t = 0;
 
@@ -1096,9 +1109,9 @@ int mpi_div_mpi( mpi *Q, mpi *R, const mpi *A, const mpi *B )
     while( mpi_cmp_mpi( &X, &Y ) >= 0 )
     {
         Z.p[n - t]++;
-        mpi_sub_mpi( &X, &X, &Y );
+        MPI_CHK( mpi_sub_mpi( &X, &X, &Y ) );
     }
-    mpi_shift_r( &Y, biL * (n - t) );
+    MPI_CHK( mpi_shift_r( &Y, biL * (n - t) ) );
 
     for( i = n; i > t ; i-- )
     {
@@ -1106,7 +1119,17 @@ int mpi_div_mpi( mpi *Q, mpi *R, const mpi *A, const mpi *B )
             Z.p[i - t - 1] = ~0;
         else
         {
-#if defined(POLARSSL_HAVE_UDBL)
+            /*
+             * The version of Clang shipped by Apple with Mavericks around
+             * 2014-03 can't handle 128-bit division properly. Disable
+             * 128-bits division for this version. Let's be optimistic and
+             * assume it'll be fixed in the next minor version (next
+             * patchlevel is probably a bit too optimistic).
+             */
+#if defined(POLARSSL_HAVE_UDBL) &&                          \
+    ! ( defined(__x86_64__) && defined(__APPLE__) &&        \
+        defined(__clang_major__) && __clang_major__ == 5 && \
+        defined(__clang_minor__) && __clang_minor__ == 0 )
             t_udbl r;
 
             r  = (t_udbl) X.p[i] << biL;
@@ -1191,15 +1214,15 @@ int mpi_div_mpi( mpi *Q, mpi *R, const mpi *A, const mpi *B )
 
     if( Q != NULL )
     {
-        mpi_copy( Q, &Z );
+        MPI_CHK( mpi_copy( Q, &Z ) );
         Q->s = A->s * B->s;
     }
 
     if( R != NULL )
     {
-        mpi_shift_r( &X, k );
+        MPI_CHK( mpi_shift_r( &X, k ) );
         X.s = A->s;
-        mpi_copy( R, &X );
+        MPI_CHK( mpi_copy( R, &X ) );
 
         if( mpi_cmp_int( R, 0 ) == 0 )
             R->s = 1;
@@ -1315,14 +1338,13 @@ int mpi_mod_int( t_uint *r, const mpi *A, t_sint b )
 static void mpi_montg_init( t_uint *mm, const mpi *N )
 {
     t_uint x, m0 = N->p[0];
+    unsigned int i;
 
     x  = m0;
     x += ( ( m0 + 2 ) & 4 ) << 1;
-    x *= ( 2 - ( m0 * x ) );
 
-    if( biL >= 16 ) x *= ( 2 - ( m0 * x ) );
-    if( biL >= 32 ) x *= ( 2 - ( m0 * x ) );
-    if( biL >= 64 ) x *= ( 2 - ( m0 * x ) );
+    for( i = biL; i >= 8; i /= 2 )
+        x *= ( 2 - ( m0 * x ) );
 
     *mm = ~x + 1;
 }
@@ -1402,6 +1424,7 @@ int mpi_exp_mod( mpi *X, const mpi *A, const mpi *E, const mpi *N, mpi *_RR )
      */
     mpi_montg_init( &mm, N );
     mpi_init( &RR ); mpi_init( &T );
+    mpi_init( &Apos );
     memset( W, 0, sizeof( W ) );
 
     i = mpi_msb( E );
@@ -1421,8 +1444,6 @@ int mpi_exp_mod( mpi *X, const mpi *A, const mpi *E, const mpi *N, mpi *_RR )
      * Compensate for negative A (and correct at the end)
      */
     neg = ( A->s == -1 );
-
-    mpi_init( &Apos );
     if( neg )
     {
         MPI_CHK( mpi_copy( &Apos, A ) );
@@ -1449,8 +1470,11 @@ int mpi_exp_mod( mpi *X, const mpi *A, const mpi *E, const mpi *N, mpi *_RR )
      * W[1] = A * R^2 * R^-1 mod N = A * R mod N
      */
     if( mpi_cmp_mpi( A, N ) >= 0 )
-        mpi_mod_mpi( &W[1], A, N );
-    else   mpi_copy( &W[1], A );
+    {
+        MPI_CHK( mpi_mod_mpi( &W[1], A, N ) );
+    }
+    else
+        MPI_CHK( mpi_copy( &W[1], A ) );
 
     mpi_montmul( &W[1], &RR, N, mm, &T );
 
@@ -1472,7 +1496,7 @@ int mpi_exp_mod( mpi *X, const mpi *A, const mpi *E, const mpi *N, mpi *_RR )
 
         for( i = 0; i < wsize - 1; i++ )
             mpi_montmul( &W[j], &W[j], N, mm, &T );
-    
+
         /*
          * W[i] = W[i - 1] * W[1]
          */
@@ -1495,8 +1519,10 @@ int mpi_exp_mod( mpi *X, const mpi *A, const mpi *E, const mpi *N, mpi *_RR )
     {
         if( bufsize == 0 )
         {
-            if( nblimbs-- == 0 )
+            if( nblimbs == 0 )
                 break;
+
+            nblimbs--;
 
             bufsize = sizeof( t_uint ) << 3;
         }
@@ -1568,7 +1594,7 @@ int mpi_exp_mod( mpi *X, const mpi *A, const mpi *E, const mpi *N, mpi *_RR )
     if( neg )
     {
         X->s = -1;
-        mpi_add_mpi( X, N, X );
+        MPI_CHK( mpi_add_mpi( X, N, X ) );
     }
 
 cleanup:
@@ -1578,7 +1604,7 @@ cleanup:
 
     mpi_free( &W[1] ); mpi_free( &T ); mpi_free( &Apos );
 
-    if( _RR == NULL )
+    if( _RR == NULL || _RR->p == NULL )
         mpi_free( &RR );
 
     return( ret );
@@ -1636,16 +1662,28 @@ cleanup:
     return( ret );
 }
 
+/*
+ * Fill X with size bytes of random.
+ *
+ * Use a temporary bytes representation to make sure the result is the same
+ * regardless of the platform endianness (usefull when f_rng is actually
+ * deterministic, eg for tests).
+ */
 int mpi_fill_random( mpi *X, size_t size,
                      int (*f_rng)(void *, unsigned char *, size_t),
                      void *p_rng )
 {
     int ret;
+    unsigned char buf[POLARSSL_MPI_MAX_SIZE];
+
+    if( size > POLARSSL_MPI_MAX_SIZE )
+        return( POLARSSL_ERR_MPI_BAD_INPUT_DATA );
 
     MPI_CHK( mpi_grow( X, CHARS_TO_LIMBS( size ) ) );
     MPI_CHK( mpi_lset( X, 0 ) );
 
-    MPI_CHK( f_rng( p_rng, (unsigned char *) X->p, size ) );
+    MPI_CHK( f_rng( p_rng, buf, size ) );
+    MPI_CHK( mpi_read_binary( X, buf, size ) );
 
 cleanup:
     return( ret );
@@ -2019,7 +2057,8 @@ int mpi_self_test( int verbose )
         if( verbose != 0 )
             printf( "failed\n" );
 
-        return( 1 );
+        ret = 1;
+        goto cleanup;
     }
 
     if( verbose != 0 )
@@ -2044,7 +2083,8 @@ int mpi_self_test( int verbose )
         if( verbose != 0 )
             printf( "failed\n" );
 
-        return( 1 );
+        ret = 1;
+        goto cleanup;
     }
 
     if( verbose != 0 )
@@ -2065,7 +2105,8 @@ int mpi_self_test( int verbose )
         if( verbose != 0 )
             printf( "failed\n" );
 
-        return( 1 );
+        ret = 1;
+        goto cleanup;
     }
 
     if( verbose != 0 )
@@ -2087,7 +2128,8 @@ int mpi_self_test( int verbose )
         if( verbose != 0 )
             printf( "failed\n" );
 
-        return( 1 );
+        ret = 1;
+        goto cleanup;
     }
 
     if( verbose != 0 )
@@ -2102,15 +2144,16 @@ int mpi_self_test( int verbose )
         MPI_CHK( mpi_lset( &X, gcd_pairs[i][0] ) );
         MPI_CHK( mpi_lset( &Y, gcd_pairs[i][1] ) );
 
-	    MPI_CHK( mpi_gcd( &A, &X, &Y ) );
+        MPI_CHK( mpi_gcd( &A, &X, &Y ) );
 
-	    if( mpi_cmp_int( &A, gcd_pairs[i][2] ) != 0 )
-	    {
-		    if( verbose != 0 )
-			    printf( "failed at %d\n", i );
+        if( mpi_cmp_int( &A, gcd_pairs[i][2] ) != 0 )
+        {
+            if( verbose != 0 )
+                printf( "failed at %d\n", i );
 
-		    return( 1 );
-	    }
+            ret = 1;
+            goto cleanup;
+        }
     }
 
     if( verbose != 0 )

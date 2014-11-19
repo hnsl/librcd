@@ -1,7 +1,7 @@
 /*
  *  FIPS-180-2 compliant SHA-384/512 implementation
  *
- *  Copyright (C) 2006-2010, Brainspark B.V.
+ *  Copyright (C) 2006-2013, Brainspark B.V.
  *
  *  This file is part of PolarSSL (http://www.polarssl.org)
  *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
@@ -37,6 +37,13 @@
 #if defined(POLARSSL_FS_IO) || defined(POLARSSL_SELF_TEST)
 /*NO-SYS #include <stdio.h> */
 #endif
+
+/* Implementation that should never be optimized out by the compiler */
+static void polarssl_zeroize( void *v, size_t n ) {
+    volatile unsigned char *p = v; while( n-- ) *p++ = 0;
+}
+
+#if !defined(POLARSSL_SHA4_ALT)
 
 /*
  * 64-bit integer manipulation macros (big endian)
@@ -242,8 +249,7 @@ void sha4_update( sha4_context *ctx, const unsigned char *input, size_t ilen )
 
     if( left && ilen >= fill )
     {
-        memcpy( (void *) (ctx->buffer + left),
-                (void *) input, fill );
+        memcpy( (void *) (ctx->buffer + left), input, fill );
         sha4_process( ctx, ctx->buffer );
         input += fill;
         ilen  -= fill;
@@ -258,10 +264,7 @@ void sha4_update( sha4_context *ctx, const unsigned char *input, size_t ilen )
     }
 
     if( ilen > 0 )
-    {
-        memcpy( (void *) (ctx->buffer + left),
-                (void *) input, ilen );
-    }
+        memcpy( (void *) (ctx->buffer + left), input, ilen );
 }
 
 static const unsigned char sha4_padding[128] =
@@ -295,7 +298,7 @@ void sha4_finish( sha4_context *ctx, unsigned char output[64] )
     last = (size_t)( ctx->total[0] & 0x7F );
     padn = ( last < 112 ) ? ( 112 - last ) : ( 240 - last );
 
-    sha4_update( ctx, (unsigned char *) sha4_padding, padn );
+    sha4_update( ctx, sha4_padding, padn );
     sha4_update( ctx, msglen, 16 );
 
     PUT_UINT64_BE( ctx->state[0], output,  0 );
@@ -312,6 +315,8 @@ void sha4_finish( sha4_context *ctx, unsigned char output[64] )
     }
 }
 
+#endif /* !POLARSSL_SHA4_ALT */
+
 /*
  * output = SHA-512( input buffer )
  */
@@ -324,7 +329,7 @@ void sha4( const unsigned char *input, size_t ilen,
     sha4_update( &ctx, input, ilen );
     sha4_finish( &ctx, output );
 
-    memset( &ctx, 0, sizeof( sha4_context ) );
+    polarssl_zeroize( &ctx, sizeof( sha4_context ) );
 }
 
 #if defined(POLARSSL_FS_IO)
@@ -348,7 +353,7 @@ int sha4_file( const char *path, unsigned char output[64], int is384 )
 
     sha4_finish( &ctx, output );
 
-    memset( &ctx, 0, sizeof( sha4_context ) );
+    polarssl_zeroize( &ctx, sizeof( sha4_context ) );
 
     if( ferror( f ) != 0 )
     {
@@ -389,7 +394,7 @@ void sha4_hmac_starts( sha4_context *ctx, const unsigned char *key, size_t keyle
     sha4_starts( ctx, is384 );
     sha4_update( ctx, ctx->ipad, 128 );
 
-    memset( sum, 0, sizeof( sum ) );
+    polarssl_zeroize( sum, sizeof( sum ) );
 }
 
 /*
@@ -418,7 +423,7 @@ void sha4_hmac_finish( sha4_context *ctx, unsigned char output[64] )
     sha4_update( ctx, tmpbuf, hlen );
     sha4_finish( ctx, output );
 
-    memset( tmpbuf, 0, sizeof( tmpbuf ) );
+    polarssl_zeroize( tmpbuf, sizeof( tmpbuf ) );
 }
 
 /*
@@ -443,7 +448,7 @@ void sha4_hmac( const unsigned char *key, size_t keylen,
     sha4_hmac_update( &ctx, input, ilen );
     sha4_hmac_finish( &ctx, output );
 
-    memset( &ctx, 0, sizeof( sha4_context ) );
+    polarssl_zeroize( &ctx, sizeof( sha4_context ) );
 }
 
 #if defined(POLARSSL_SELF_TEST)

@@ -54,6 +54,11 @@
 }
 #endif
 
+/* Implementation that should never be optimized out by the compiler */
+static void polarssl_zeroize( void *v, size_t n ) {
+    volatile unsigned char *p = v; while( n-- ) *p++ = 0;
+}
+
 static void gcm_gen_table( gcm_context *ctx )
 {
     int i, j;
@@ -124,7 +129,8 @@ static const uint64_t last4[16] =
     0x9180, 0x8da0, 0xa9c0, 0xb5e0
 };
 
-void gcm_mult( gcm_context *ctx, const unsigned char x[16], unsigned char output[16] )
+static void gcm_mult( gcm_context *ctx, const unsigned char x[16],
+                      unsigned char output[16] )
 {
     int i = 0;
     unsigned char z[16];
@@ -191,7 +197,15 @@ int gcm_crypt_and_tag( gcm_context *ctx,
     size_t use_len;
     uint64_t orig_len = length * 8;
     uint64_t orig_add_len = add_len * 8;
-    unsigned char **xor_p;
+
+    /* IV and AD are limited to 2^64 bits, so 2^61 bytes */
+    if( ( (uint64_t) iv_len  ) >> 61 != 0 ||
+        ( (uint64_t) add_len ) >> 61 != 0 ||
+        tag_len > 16 || tag_len < 4 ||
+        length > 0x03FFFFE0llu )
+    {
+        return( POLARSSL_ERR_GCM_BAD_INPUT );
+    }
 
     memset( y, 0x00, 16 );
     memset( work_buf, 0x00, 16 );
@@ -203,11 +217,6 @@ int gcm_crypt_and_tag( gcm_context *ctx,
     {
         return( POLARSSL_ERR_GCM_BAD_INPUT );
     }
-
-    if( mode == GCM_ENCRYPT )
-        xor_p = (unsigned char **) &out_p;
-    else
-        xor_p = (unsigned char **) &p;
 
     if( iv_len == 12 )
     {
@@ -270,7 +279,10 @@ int gcm_crypt_and_tag( gcm_context *ctx,
         for( i = 0; i < use_len; i++ )
         {
             out_p[i] = ectr[i] ^ p[i];
-            buf[i] ^= (*xor_p)[i];
+            if( mode == GCM_ENCRYPT )
+                buf[i] ^= out_p[i];
+            else
+                buf[i] ^= p[i];
         }
         
         gcm_mult( ctx, buf, buf );
@@ -312,14 +324,20 @@ int gcm_auth_decrypt( gcm_context *ctx,
                       const unsigned char *input,
                       unsigned char *output )
 {
+    int ret;
     unsigned char check_tag[16];
 
-    gcm_crypt_and_tag( ctx, GCM_DECRYPT, length, iv, iv_len, add, add_len, input, output, tag_len, check_tag );
+    if( ( ret = gcm_crypt_and_tag( ctx, GCM_DECRYPT, length,
+                                   iv, iv_len, add, add_len,
+                                   input, output, tag_len, check_tag ) ) != 0 )
+    {
+        return( ret );
+    }
 
     if( memcmp( check_tag, tag, tag_len ) == 0 )
         return( 0 );
 
-    memset( output, 0, length );
+    polarssl_zeroize( output, length );
 
     return( POLARSSL_ERR_GCM_AUTH_FAILED );
 }

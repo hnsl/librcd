@@ -1,7 +1,7 @@
 /*
  *  RFC 1321 compliant MD5 implementation
  *
- *  Copyright (C) 2006-2010, Brainspark B.V.
+ *  Copyright (C) 2006-2013, Brainspark B.V.
  *
  *  This file is part of PolarSSL (http://www.polarssl.org)
  *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
@@ -37,6 +37,13 @@
 #if defined(POLARSSL_FS_IO) || defined(POLARSSL_SELF_TEST)
 /*NO-SYS #include <stdio.h> */
 #endif
+
+/* Implementation that should never be optimized out by the compiler */
+static void polarssl_zeroize( void *v, size_t n ) {
+    volatile unsigned char *p = v; while( n-- ) *p++ = 0;
+}
+
+#if !defined(POLARSSL_MD5_ALT)
 
 /*
  * 32-bit integer manipulation macros (little endian)
@@ -220,8 +227,7 @@ void md5_update( md5_context *ctx, const unsigned char *input, size_t ilen )
 
     if( left && ilen >= fill )
     {
-        memcpy( (void *) (ctx->buffer + left),
-                (void *) input, fill );
+        memcpy( (void *) (ctx->buffer + left), input, fill );
         md5_process( ctx, ctx->buffer );
         input += fill;
         ilen  -= fill;
@@ -237,8 +243,7 @@ void md5_update( md5_context *ctx, const unsigned char *input, size_t ilen )
 
     if( ilen > 0 )
     {
-        memcpy( (void *) (ctx->buffer + left),
-                (void *) input, ilen );
+        memcpy( (void *) (ctx->buffer + left), input, ilen );
     }
 }
 
@@ -269,7 +274,7 @@ void md5_finish( md5_context *ctx, unsigned char output[16] )
     last = ctx->total[0] & 0x3F;
     padn = ( last < 56 ) ? ( 56 - last ) : ( 120 - last );
 
-    md5_update( ctx, (unsigned char *) md5_padding, padn );
+    md5_update( ctx, md5_padding, padn );
     md5_update( ctx, msglen, 8 );
 
     PUT_UINT32_LE( ctx->state[0], output,  0 );
@@ -277,6 +282,8 @@ void md5_finish( md5_context *ctx, unsigned char output[16] )
     PUT_UINT32_LE( ctx->state[2], output,  8 );
     PUT_UINT32_LE( ctx->state[3], output, 12 );
 }
+
+#endif /* !POLARSSL_MD5_ALT */
 
 /*
  * output = MD5( input buffer )
@@ -289,7 +296,7 @@ void md5( const unsigned char *input, size_t ilen, unsigned char output[16] )
     md5_update( &ctx, input, ilen );
     md5_finish( &ctx, output );
 
-    memset( &ctx, 0, sizeof( md5_context ) );
+    polarssl_zeroize( &ctx, sizeof( md5_context ) );
 }
 
 #if defined(POLARSSL_FS_IO)
@@ -313,7 +320,7 @@ int md5_file( const char *path, unsigned char output[16] )
 
     md5_finish( &ctx, output );
 
-    memset( &ctx, 0, sizeof( md5_context ) );
+    polarssl_zeroize( &ctx, sizeof( md5_context ) );
 
     if( ferror( f ) != 0 )
     {
@@ -353,7 +360,7 @@ void md5_hmac_starts( md5_context *ctx, const unsigned char *key, size_t keylen 
     md5_starts( ctx );
     md5_update( ctx, ctx->ipad, 64 );
 
-    memset( sum, 0, sizeof( sum ) );
+    polarssl_zeroize( sum, sizeof( sum ) );
 }
 
 /*
@@ -377,7 +384,7 @@ void md5_hmac_finish( md5_context *ctx, unsigned char output[16] )
     md5_update( ctx, tmpbuf, 16 );
     md5_finish( ctx, output );
 
-    memset( tmpbuf, 0, sizeof( tmpbuf ) );
+    polarssl_zeroize( tmpbuf, sizeof( tmpbuf ) );
 }
 
 /*
@@ -402,7 +409,7 @@ void md5_hmac( const unsigned char *key, size_t keylen,
     md5_hmac_update( &ctx, input, ilen );
     md5_hmac_finish( &ctx, output );
 
-    memset( &ctx, 0, sizeof( md5_context ) );
+    polarssl_zeroize( &ctx, sizeof( md5_context ) );
 }
 
 #if defined(POLARSSL_SELF_TEST)

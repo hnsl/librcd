@@ -3,7 +3,7 @@
  *
  * \brief SSL/TLS functions.
  *
- *  Copyright (C) 2006-2012, Brainspark B.V.
+ *  Copyright (C) 2006-2013, Brainspark B.V.
  *
  *  This file is part of PolarSSL (http://www.polarssl.org)
  *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
@@ -64,7 +64,7 @@
 #define POLARSSL_ERR_SSL_CONN_EOF                          -0x7280  /**< The connection indicated an EOF. */
 #define POLARSSL_ERR_SSL_UNKNOWN_CIPHER                    -0x7300  /**< An unknown cipher was received. */
 #define POLARSSL_ERR_SSL_NO_CIPHER_CHOSEN                  -0x7380  /**< The server has no ciphersuites in common with the client. */
-#define POLARSSL_ERR_SSL_NO_SESSION_FOUND                  -0x7400  /**< No session to recover was found. */
+#define POLARSSL_ERR_SSL_NO_RNG                            -0x7400  /**< No RNG was provided to the SSL module. */
 #define POLARSSL_ERR_SSL_NO_CLIENT_CERTIFICATE             -0x7480  /**< No client certification received from the client, but required by the authentication mode. */
 #define POLARSSL_ERR_SSL_CERTIFICATE_TOO_LARGE             -0x7500  /**< Our own certificate(s) is/are too large to send in an SSL message.*/
 #define POLARSSL_ERR_SSL_CERTIFICATE_REQUIRED              -0x7580  /**< The own certificate is not set, but needed by the server. */
@@ -91,6 +91,7 @@
 #define POLARSSL_ERR_SSL_HW_ACCEL_FALLTHROUGH              -0x6F80  /**< Hardware acceleration function skipped / left alone data */
 #define POLARSSL_ERR_SSL_COMPRESSION_FAILED                -0x6F00  /**< Processing of the compression / decompression failed */
 #define POLARSSL_ERR_SSL_BAD_HS_PROTOCOL_VERSION           -0x6E80  /**< Handshake protocol not within min/max boundaries */
+#define POLARSSL_ERR_SSL_COUNTER_WRAPPING                  -0x6B80  /**< A counter would wrap (eg, too many messages exchanged). */
 
 /*
  * Various constants
@@ -123,7 +124,16 @@
 #define SSL_LEGACY_ALLOW_RENEGOTIATION  1
 #define SSL_LEGACY_BREAK_HANDSHAKE      2
 
-#define SSL_MAX_CONTENT_LEN         16384
+/*
+ * Size of the input / output buffer.
+ * Note: the RFC defines the default size of SSL / TLS messages. If you
+ * change the value here, other clients / servers may not be able to
+ * communicate with you anymore. Only change this value if you control
+ * both sides of the connection and have it reduced at both sides!
+ */
+#if !defined(POLARSSL_CONFIG_OPTIONS)
+#define SSL_MAX_CONTENT_LEN         16384   /**< Size of the input / output buffer */
+#endif /* !POLARSSL_CONFIG_OPTIONS */
 
 /*
  * Allow an extra 512 bytes for the record header
@@ -261,7 +271,9 @@
  * Generic function pointers for allowing external RSA private key
  * implementations.
  */
-typedef int (*rsa_decrypt_func)( void *ctx, int mode, size_t *olen,
+typedef int (*rsa_decrypt_func)( void *ctx,
+                        int (*f_rng)(void *, unsigned char *, size_t),
+                        void *p_rng, int mode, size_t *olen,
                         const unsigned char *input, unsigned char *output,
                         size_t output_max_len ); 
 typedef int (*rsa_sign_func)( void *ctx,
@@ -608,6 +620,12 @@ void ssl_set_endpoint( ssl_context *ssl, int endpoint );
  *
  *  SSL_VERIFY_REQUIRED:  peer *must* present a valid certificate,
  *                        handshake is aborted if verification failed.
+ *
+ * \note On client, SSL_VERIFY_REQUIRED is the recommended mode.
+ * With SSL_VERIFY_OPTIONAL, the user needs to call ssl_get_verify_result() at
+ * the right time(s), which may not be obvious, while REQUIRED always perform
+ * the verification as soon as possible. For example, REQUIRED was protecting
+ * against the "triple handshake" attack even before it was found.
  */
 void ssl_set_authmode( ssl_context *ssl, int authmode );
 
@@ -1123,6 +1141,21 @@ int ssl_parse_finished( ssl_context *ssl );
 int ssl_write_finished( ssl_context *ssl );
 
 void ssl_optimize_checksum( ssl_context *ssl, int ciphersuite );
+int ssl_get_ciphersuite_min_version( const int ciphersuite_id );
+
+/* constant-time buffer comparison */
+static inline int safer_memcmp( const void *a, const void *b, size_t n )
+{
+    size_t i;
+    const unsigned char *A = (const unsigned char *) a;
+    const unsigned char *B = (const unsigned char *) b;
+    unsigned char diff = 0;
+
+    for( i = 0; i < n; i++ )
+        diff |= A[i] ^ B[i];
+
+    return( diff );
+}
 
 #ifdef __cplusplus
 }

@@ -1,7 +1,7 @@
 /*
  *  An implementation of the ARCFOUR algorithm
  *
- *  Copyright (C) 2006-2010, Brainspark B.V.
+ *  Copyright (C) 2006-2013, Brainspark B.V.
  *
  *  This file is part of PolarSSL (http://www.polarssl.org)
  *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
@@ -33,6 +33,8 @@
 #if defined(POLARSSL_ARC4_C)
 
 #include "polarssl/arc4.h"
+
+#if !defined(POLARSSL_ARC4_ALT)
 
 /*
  * ARC4 key schedule
@@ -95,6 +97,8 @@ int arc4_crypt( arc4_context *ctx, size_t length, const unsigned char *input,
     return( 0 );
 }
 
+#endif /* !POLARSSL_ARC4_ALT */
+
 #if defined(POLARSSL_SELF_TEST)
 
 /*NO-SYS #include <string.h> */
@@ -143,7 +147,7 @@ int arc4_self_test( int verbose )
 
         memcpy( ibuf, arc4_test_pt[i], 8 );
 
-        arc4_setup( &ctx, (unsigned char *) arc4_test_key[i], 8 );
+        arc4_setup( &ctx, arc4_test_key[i], 8 );
         arc4_crypt( &ctx, 8, ibuf, obuf );
 
         if( memcmp( obuf, arc4_test_ct[i], 8 ) != 0 )

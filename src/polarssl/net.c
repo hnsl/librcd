@@ -60,7 +60,7 @@ static int wsa_init_done = 0;
 /*NO-SYS #include <errno.h> */
 
 #if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) ||  \
-    defined(__DragonflyBSD__)
+    defined(__DragonFly__)
 /*NO-SYS #include <sys/endian.h> */
 #elif defined(__APPLE__)
 /*NO-SYS #include <machine/endian.h> */
@@ -118,7 +118,7 @@ int net_connect( int *fd, const char *host, int port )
 
     if( wsa_init_done == 0 )
     {
-        if( WSAStartup( MAKEWORD(2,0), &wsaData ) == SOCKET_ERROR )
+        if( WSAStartup( MAKEWORD(2,0), &wsaData ) != 0 )
             return( POLARSSL_ERR_NET_SOCKET_FAILED );
 
         wsa_init_done = 1;
@@ -127,10 +127,12 @@ int net_connect( int *fd, const char *host, int port )
     signal( SIGPIPE, SIG_IGN );
 #endif
 
+    memset( &server_addr, 0, sizeof( server_addr ) );
+
     if( ( server_host = gethostbyname( host ) ) == NULL )
         return( POLARSSL_ERR_NET_UNKNOWN_HOST );
 
-    if( ( *fd = socket( AF_INET, SOCK_STREAM, IPPROTO_IP ) ) < 0 )
+    if( ( *fd = (int) socket( AF_INET, SOCK_STREAM, IPPROTO_IP ) ) < 0 )
         return( POLARSSL_ERR_NET_SOCKET_FAILED );
 
     memcpy( (void *) &server_addr.sin_addr,
@@ -172,12 +174,18 @@ int net_bind( int *fd, const char *bind_ip, int port )
     signal( SIGPIPE, SIG_IGN );
 #endif
 
-    if( ( *fd = socket( AF_INET, SOCK_STREAM, IPPROTO_IP ) ) < 0 )
+    memset( &server_addr, 0, sizeof( server_addr ) );
+
+    if( ( *fd = (int) socket( AF_INET, SOCK_STREAM, IPPROTO_IP ) ) < 0 )
         return( POLARSSL_ERR_NET_SOCKET_FAILED );
 
     n = 1;
-    setsockopt( *fd, SOL_SOCKET, SO_REUSEADDR,
-                (const char *) &n, sizeof( n ) );
+    if( setsockopt( *fd, SOL_SOCKET, SO_REUSEADDR,
+                    (const char *) &n, sizeof( n ) ) != 0 )
+    {
+        close( *fd );
+        return( POLARSSL_ERR_NET_SOCKET_FAILED );
+    }
 
     server_addr.sin_addr.s_addr = net_htonl( INADDR_ANY );
     server_addr.sin_family      = AF_INET;
@@ -216,14 +224,31 @@ int net_bind( int *fd, const char *bind_ip, int port )
     return( 0 );
 }
 
+#if ( defined(_WIN32) || defined(_WIN32_WCE) )
 /*
- * Check if the current operation is blocking
+ * Check if the requested operation would be blocking on a non-blocking socket
+ * and thus 'failed' with a negative return value.
  */
-static int net_is_blocking( void )
+static int net_would_block( int fd )
 {
-#if defined(_WIN32) || defined(_WIN32_WCE)
+    ((void) fd);
     return( WSAGetLastError() == WSAEWOULDBLOCK );
+}
 #else
+/*
+ * Check if the requested operation would be blocking on a non-blocking socket
+ * and thus 'failed' with a negative return value.
+ *
+ * Note: on a blocking socket this function always returns 0!
+ */
+static int net_would_block( int fd )
+{
+    /*
+     * Never return 'WOULD BLOCK' on a non-blocking socket
+     */
+    if( ( fcntl( fd, F_GETFL ) & O_NONBLOCK ) != O_NONBLOCK )
+        return( 0 );
+
     switch( errno )
     {
 #if defined EAGAIN
@@ -235,8 +260,8 @@ static int net_is_blocking( void )
             return( 1 );
     }
     return( 0 );
-#endif
 }
+#endif
 
 /*
  * Accept a connection from a remote client
@@ -252,12 +277,12 @@ int net_accept( int bind_fd, int *client_fd, void *client_ip )
     int n = (int) sizeof( client_addr );
 #endif
 
-    *client_fd = accept( bind_fd, (struct sockaddr *)
-                         &client_addr, &n );
+    *client_fd = (int) accept( bind_fd, (struct sockaddr *)
+                               &client_addr, &n );
 
     if( *client_fd < 0 )
     {
-        if( net_is_blocking() != 0 )
+        if( net_would_block( bind_fd ) != 0 )
             return( POLARSSL_ERR_NET_WANT_READ );
 
         return( POLARSSL_ERR_NET_ACCEPT_FAILED );
@@ -300,7 +325,12 @@ void net_usleep( unsigned long usec )
 {
     struct timeval tv;
     tv.tv_sec  = 0;
+#if !defined(_WIN32) && (defined(__unix__) || defined(__unix) || \
+    (defined(__APPLE__) && defined(__MACH__)))
+    tv.tv_usec = (suseconds_t) usec;
+#else
     tv.tv_usec = usec;
+#endif
     select( 0, NULL, NULL, NULL, &tv );
 }
 
@@ -308,12 +338,13 @@ void net_usleep( unsigned long usec )
  * Read at most 'len' characters
  */
 int net_recv( void *ctx, unsigned char *buf, size_t len )
-{ 
-    int ret = read( *((int *) ctx), buf, len );
+{
+    int fd = *((int *) ctx);
+    int ret = (int) read( fd, buf, len );
 
     if( ret < 0 )
     {
-        if( net_is_blocking() != 0 )
+        if( net_would_block( fd ) != 0 )
             return( POLARSSL_ERR_NET_WANT_READ );
 
 #if defined(_WIN32) || defined(_WIN32_WCE)
@@ -338,11 +369,12 @@ int net_recv( void *ctx, unsigned char *buf, size_t len )
  */
 int net_send( void *ctx, const unsigned char *buf, size_t len )
 {
-    int ret = write( *((int *) ctx), buf, len );
+    int fd = *((int *) ctx);
+    int ret = (int) write( fd, buf, len );
 
     if( ret < 0 )
     {
-        if( net_is_blocking() != 0 )
+        if( net_would_block( fd ) != 0 )
             return( POLARSSL_ERR_NET_WANT_WRITE );
 
 #if defined(_WIN32) || defined(_WIN32_WCE)

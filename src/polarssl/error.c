@@ -27,6 +27,8 @@
 
 #if defined(POLARSSL_ERROR_C)
 
+#include "polarssl/error.h"
+
 #if defined(POLARSSL_AES_C)
 #include "polarssl/aes.h"
 #endif
@@ -101,6 +103,14 @@
 
 #if defined(POLARSSL_PEM_C)
 #include "polarssl/pem.h"
+#endif
+
+#if defined(POLARSSL_PKCS12_C)
+#include "polarssl/pkcs12.h"
+#endif
+
+#if defined(POLARSSL_PKCS5_C)
+#include "polarssl/pkcs5.h"
 #endif
 
 #if defined(POLARSSL_RSA_C)
@@ -194,8 +204,8 @@ void error_strerror( int ret, char *buf, size_t buflen )
 #endif /* POLARSSL_MD_C */
 
 #if defined(POLARSSL_PEM_C)
-        if( use_ret == -(POLARSSL_ERR_PEM_NO_HEADER_PRESENT) )
-            snprintf( buf, buflen, "PEM - No PEM header found" );
+        if( use_ret == -(POLARSSL_ERR_PEM_NO_HEADER_FOOTER_PRESENT) )
+            snprintf( buf, buflen, "PEM - No PEM header or footer found" );
         if( use_ret == -(POLARSSL_ERR_PEM_INVALID_DATA) )
             snprintf( buf, buflen, "PEM - PEM string is not as expected" );
         if( use_ret == -(POLARSSL_ERR_PEM_MALLOC_FAILED) )
@@ -210,7 +220,31 @@ void error_strerror( int ret, char *buf, size_t buflen )
             snprintf( buf, buflen, "PEM - Given private key password does not allow for correct decryption" );
         if( use_ret == -(POLARSSL_ERR_PEM_FEATURE_UNAVAILABLE) )
             snprintf( buf, buflen, "PEM - Unavailable feature, e.g. hashing/encryption combination" );
+        if( use_ret == -(POLARSSL_ERR_PEM_BAD_INPUT_DATA) )
+            snprintf( buf, buflen, "PEM - Bad input parameters to function" );
 #endif /* POLARSSL_PEM_C */
+
+#if defined(POLARSSL_PKCS12_C)
+        if( use_ret == -(POLARSSL_ERR_PKCS12_BAD_INPUT_DATA) )
+            snprintf( buf, buflen, "PKCS12 - Bad input parameters to function" );
+        if( use_ret == -(POLARSSL_ERR_PKCS12_FEATURE_UNAVAILABLE) )
+            snprintf( buf, buflen, "PKCS12 - Feature not available, e.g. unsupported encryption scheme" );
+        if( use_ret == -(POLARSSL_ERR_PKCS12_PBE_INVALID_FORMAT) )
+            snprintf( buf, buflen, "PKCS12 - PBE ASN.1 data not as expected" );
+        if( use_ret == -(POLARSSL_ERR_PKCS12_PASSWORD_MISMATCH) )
+            snprintf( buf, buflen, "PKCS12 - Given private key password does not allow for correct decryption" );
+#endif /* POLARSSL_PKCS12_C */
+
+#if defined(POLARSSL_PKCS5_C)
+        if( use_ret == -(POLARSSL_ERR_PKCS5_BAD_INPUT_DATA) )
+            snprintf( buf, buflen, "PKCS5 - Bad input parameters to function" );
+        if( use_ret == -(POLARSSL_ERR_PKCS5_INVALID_FORMAT) )
+            snprintf( buf, buflen, "PKCS5 - Unexpected ASN.1 data" );
+        if( use_ret == -(POLARSSL_ERR_PKCS5_FEATURE_UNAVAILABLE) )
+            snprintf( buf, buflen, "PKCS5 - Requested encryption or digest alg not available" );
+        if( use_ret == -(POLARSSL_ERR_PKCS5_PASSWORD_MISMATCH) )
+            snprintf( buf, buflen, "PKCS5 - Given private key password does not allow for correct decryption" );
+#endif /* POLARSSL_PKCS5_C */
 
 #if defined(POLARSSL_RSA_C)
         if( use_ret == -(POLARSSL_ERR_RSA_BAD_INPUT_DATA) )
@@ -248,8 +282,8 @@ void error_strerror( int ret, char *buf, size_t buflen )
             snprintf( buf, buflen, "SSL - An unknown cipher was received" );
         if( use_ret == -(POLARSSL_ERR_SSL_NO_CIPHER_CHOSEN) )
             snprintf( buf, buflen, "SSL - The server has no ciphersuites in common with the client" );
-        if( use_ret == -(POLARSSL_ERR_SSL_NO_SESSION_FOUND) )
-            snprintf( buf, buflen, "SSL - No session to recover was found" );
+        if( use_ret == -(POLARSSL_ERR_SSL_NO_RNG) )
+            snprintf( buf, buflen, "SSL - No RNG was provided to the SSL module" );
         if( use_ret == -(POLARSSL_ERR_SSL_NO_CLIENT_CERTIFICATE) )
             snprintf( buf, buflen, "SSL - No client certification received from the client, but required by the authentication mode" );
         if( use_ret == -(POLARSSL_ERR_SSL_CERTIFICATE_TOO_LARGE) )
@@ -305,6 +339,8 @@ void error_strerror( int ret, char *buf, size_t buflen )
             snprintf( buf, buflen, "SSL - Processing of the compression / decompression failed" );
         if( use_ret == -(POLARSSL_ERR_SSL_BAD_HS_PROTOCOL_VERSION) )
             snprintf( buf, buflen, "SSL - Handshake protocol not within min/max boundaries" );
+        if( use_ret == -(POLARSSL_ERR_SSL_COUNTER_WRAPPING) )
+            snprintf( buf, buflen, "SSL - A counter would wrap (eg, too many messages exchanged)" );
 #endif /* POLARSSL_SSL_TLS_C */
 
 #if defined(POLARSSL_X509_PARSE_C)
@@ -352,6 +388,10 @@ void error_strerror( int ret, char *buf, size_t buflen )
             snprintf( buf, buflen, "X509 - Allocation of memory failed" );
         if( use_ret == -(POLARSSL_ERR_X509_FILE_IO_ERROR) )
             snprintf( buf, buflen, "X509 - Read/write of file failed" );
+        if( use_ret == -(POLARSSL_ERR_X509_PASSWORD_REQUIRED) )
+            snprintf( buf, buflen, "X509 - Private key password can't be empty" );
+        if( use_ret == -(POLARSSL_ERR_X509_PASSWORD_MISMATCH) )
+            snprintf( buf, buflen, "X509 - Given private key password does not allow for correct decryption" );
 #endif /* POLARSSL_X509_PARSE_C */
 
         if( strlen( buf ) == 0 )
@@ -468,6 +508,8 @@ void error_strerror( int ret, char *buf, size_t buflen )
         snprintf( buf, buflen, "ENTROPY - No more sources can be added" );
     if( use_ret == -(POLARSSL_ERR_ENTROPY_NO_SOURCES_DEFINED) )
         snprintf( buf, buflen, "ENTROPY - No sources have been added to poll" );
+    if( use_ret == -(POLARSSL_ERR_ENTROPY_FILE_IO_ERROR) )
+        snprintf( buf, buflen, "ENTROPY - Read/write error in file" );
 #endif /* POLARSSL_ENTROPY_C */
 
 #if defined(POLARSSL_GCM_C)

@@ -149,7 +149,7 @@ int rsa_check_pubkey( const rsa_context *ctx )
         return( POLARSSL_ERR_RSA_KEY_CHECK_FAILED );
 
     if( mpi_msb( &ctx->E ) < 2 ||
-        mpi_msb( &ctx->E ) > 64 )
+        mpi_cmp_mpi( &ctx->E, &ctx->N ) >= 0 )
         return( POLARSSL_ERR_RSA_KEY_CHECK_FAILED );
 
     return( 0 );
@@ -256,14 +256,17 @@ cleanup:
  * Do an RSA private key operation
  */
 int rsa_private( rsa_context *ctx,
+                 int (*f_rng)(void *, unsigned char *, size_t),
+                 void *p_rng,
                  const unsigned char *input,
                  unsigned char *output )
 {
     int ret;
     size_t olen;
-    mpi T, T1, T2;
+    mpi T, T1, T2, Vi, Vf;
 
     mpi_init( &T ); mpi_init( &T1 ); mpi_init( &T2 );
+    mpi_init( &Vi ); mpi_init( &Vf );
 
     MPI_CHK( mpi_read_binary( &T, input, ctx->len ) );
 
@@ -274,8 +277,40 @@ int rsa_private( rsa_context *ctx,
     }
 
 #if defined(POLARSSL_RSA_NO_CRT)
+    ((void) f_rng);
+    ((void) p_rng);
     MPI_CHK( mpi_exp_mod( &T, &T, &ctx->D, &ctx->N, &ctx->RN ) );
 #else
+    if( f_rng != NULL )
+    {
+        int count = 0;
+
+        /*
+         * Blinding
+         * T = T * Vi mod N
+         */
+        /* Unblinding value: Vf = random number */
+        do {
+            if( count++ > 10 )
+                return( POLARSSL_ERR_RSA_RNG_FAILED );
+
+            MPI_CHK( mpi_fill_random( &Vf, ctx->len - 1, f_rng, p_rng ) );
+            MPI_CHK( mpi_gcd( &Vi, &Vf, &ctx->N ) );
+        } while( mpi_cmp_int( &Vi, 1 ) != 0 );
+
+        /* Mathematically speaking, the algorithm should check Vf
+         * against 0, P and Q (Vf should be relatively prime to N, and 0 < Vf < N),
+         * so that Vf^-1 exists.
+         */
+
+        /* Blinding value: Vi =  Vf^(-e) mod N */
+        MPI_CHK( mpi_inv_mod( &Vi, &Vf, &ctx->N ) );
+        MPI_CHK( mpi_exp_mod( &Vi, &Vi, &ctx->E, &ctx->N, &ctx->RN ) );
+
+        MPI_CHK( mpi_mul_mpi( &T, &T, &Vi ) );
+        MPI_CHK( mpi_mod_mpi( &T, &T, &ctx->N ) );
+    }
+
     /*
      * faster decryption using the CRT
      *
@@ -297,6 +332,16 @@ int rsa_private( rsa_context *ctx,
      */
     MPI_CHK( mpi_mul_mpi( &T1, &T, &ctx->Q ) );
     MPI_CHK( mpi_add_mpi( &T, &T2, &T1 ) );
+
+    if( f_rng != NULL )
+    {
+        /*
+         * Unblind
+         * T = T * Vf mod N
+         */
+        MPI_CHK( mpi_mul_mpi( &T, &T, &Vf ) );
+        MPI_CHK( mpi_mod_mpi( &T, &T, &ctx->N ) );
+    }
 #endif
 
     olen = ctx->len;
@@ -305,6 +350,7 @@ int rsa_private( rsa_context *ctx,
 cleanup:
 
     mpi_free( &T ); mpi_free( &T1 ); mpi_free( &T2 );
+    mpi_free( &Vi ); mpi_free( &Vf );
 
     if( ret != 0 )
         return( POLARSSL_ERR_RSA_PRIVATE_FAILED + ret );
@@ -430,7 +476,7 @@ int rsa_rsaes_oaep_encrypt( rsa_context *ctx,
 
     return( ( mode == RSA_PUBLIC )
             ? rsa_public(  ctx, output, output )
-            : rsa_private( ctx, output, output ) );
+            : rsa_private( ctx, f_rng, p_rng, output, output ) );
 }
 #endif /* POLARSSL_PKCS1_V21 */
 
@@ -492,7 +538,7 @@ int rsa_rsaes_pkcs1_v15_encrypt( rsa_context *ctx,
 
     return( ( mode == RSA_PUBLIC )
             ? rsa_public(  ctx, output, output )
-            : rsa_private( ctx, output, output ) );
+            : rsa_private( ctx, f_rng, p_rng, output, output ) );
 }
 
 /*
@@ -527,7 +573,9 @@ int rsa_pkcs1_encrypt( rsa_context *ctx,
  * Implementation of the PKCS#1 v2.1 RSAES-OAEP-DECRYPT function
  */
 int rsa_rsaes_oaep_decrypt( rsa_context *ctx,
-                            int mode, 
+                            int (*f_rng)(void *, unsigned char *, size_t),
+                            void *p_rng,
+                            int mode,
                             const unsigned char *label, size_t label_len,
                             size_t *olen,
                             const unsigned char *input,
@@ -535,14 +583,17 @@ int rsa_rsaes_oaep_decrypt( rsa_context *ctx,
                             size_t output_max_len )
 {
     int ret;
-    size_t ilen;
-    unsigned char *p;
+    size_t ilen, i, pad_len;
+    unsigned char *p, bad, pad_done;
     unsigned char buf[POLARSSL_MPI_MAX_SIZE];
     unsigned char lhash[POLARSSL_MD_MAX_SIZE];
     unsigned int hlen;
     const md_info_t *md_info;
     md_context_t md_ctx;
 
+    /*
+     * Parameters sanity checks
+     */
     if( ctx->padding != RSA_PKCS_V21 )
         return( POLARSSL_ERR_RSA_BAD_INPUT_DATA );
 
@@ -551,57 +602,74 @@ int rsa_rsaes_oaep_decrypt( rsa_context *ctx,
     if( ilen < 16 || ilen > sizeof( buf ) )
         return( POLARSSL_ERR_RSA_BAD_INPUT_DATA );
 
-    ret = ( mode == RSA_PUBLIC )
-          ? rsa_public(  ctx, input, buf )
-          : rsa_private( ctx, input, buf );
-
-    if( ret != 0 )
-        return( ret );
-
-    p = buf;
-
-    if( *p++ != 0 )
-        return( POLARSSL_ERR_RSA_INVALID_PADDING );
-
     md_info = md_info_from_type( ctx->hash_id );
     if( md_info == NULL )
         return( POLARSSL_ERR_RSA_BAD_INPUT_DATA );
 
+    /*
+     * RSA operation
+     */
+    ret = ( mode == RSA_PUBLIC )
+          ? rsa_public(  ctx, input, buf )
+          : rsa_private( ctx, f_rng, p_rng, input, buf );
+
+    if( ret != 0 )
+        return( ret );
+
+    /*
+     * Unmask data and generate lHash
+     */
     hlen = md_get_size( md_info );
 
     md_init_ctx( &md_ctx, md_info );
 
-    // Generate lHash
-    //
+    /* Generate lHash */
     md( md_info, label, label_len, lhash );
 
-    // seed: Apply seedMask to maskedSeed
-    //
+    /* seed: Apply seedMask to maskedSeed */
     mgf_mask( buf + 1, hlen, buf + hlen + 1, ilen - hlen - 1,
                &md_ctx );
 
-    // DB: Apply dbMask to maskedDB
-    //
+    /* DB: Apply dbMask to maskedDB */
     mgf_mask( buf + hlen + 1, ilen - hlen - 1, buf + 1, hlen,
                &md_ctx );
 
-    p += hlen;
     md_free_ctx( &md_ctx );
 
-    // Check validity
-    //
-    if( memcmp( lhash, p, hlen ) != 0 )
-        return( POLARSSL_ERR_RSA_INVALID_PADDING );
+    /*
+     * Check contents, in "constant-time"
+     */
+    p = buf;
+    bad = 0;
 
-    p += hlen;
+    bad |= *p++; /* First byte must be 0 */
 
-    while( *p == 0 && p < buf + ilen )
-        p++;
+    p += hlen; /* Skip seed */
 
-    if( p == buf + ilen )
-        return( POLARSSL_ERR_RSA_INVALID_PADDING );
+    /* Check lHash */
+    for( i = 0; i < hlen; i++ )
+        bad |= lhash[i] ^ *p++;
 
-    if( *p++ != 0x01 )
+    /* Get zero-padding len, but always read till end of buffer
+     * (minus one, for the 01 byte) */
+    pad_len = 0;
+    pad_done = 0;
+    for( i = 0; i < ilen - 2 * hlen - 2; i++ )
+    {
+        pad_done |= p[i];
+        pad_len += ( pad_done == 0 );
+    }
+
+    p += pad_len;
+    bad |= *p++ ^ 0x01;
+
+    /*
+     * The only information "leaked" is whether the padding was correct or not
+     * (eg, no data is copied if it was not correct). This meets the
+     * recommendations in PKCS#1 v2.2: an opponent cannot distinguish between
+     * the different error conditions.
+     */
+    if( bad != 0 )
         return( POLARSSL_ERR_RSA_INVALID_PADDING );
 
     if (ilen - (p - buf) > output_max_len)
@@ -618,15 +686,16 @@ int rsa_rsaes_oaep_decrypt( rsa_context *ctx,
  * Implementation of the PKCS#1 v2.1 RSAES-PKCS1-V1_5-DECRYPT function
  */
 int rsa_rsaes_pkcs1_v15_decrypt( rsa_context *ctx,
+                                 int (*f_rng)(void *, unsigned char *, size_t),
+                                 void *p_rng,
                                  int mode, size_t *olen,
                                  const unsigned char *input,
                                  unsigned char *output,
                                  size_t output_max_len)
 {
-    int ret, correct = 1;
-    size_t ilen, pad_count = 0;
-    unsigned char *p, *q;
-    unsigned char bt;
+    int ret;
+    size_t ilen, pad_count = 0, i;
+    unsigned char *p, bad, pad_done = 0;
     unsigned char buf[POLARSSL_MPI_MAX_SIZE];
 
     if( ctx->padding != RSA_PKCS_V15 )
@@ -639,63 +708,52 @@ int rsa_rsaes_pkcs1_v15_decrypt( rsa_context *ctx,
 
     ret = ( mode == RSA_PUBLIC )
           ? rsa_public(  ctx, input, buf )
-          : rsa_private( ctx, input, buf );
+          : rsa_private( ctx, f_rng, p_rng, input, buf );
 
     if( ret != 0 )
         return( ret );
 
     p = buf;
+    bad = 0;
 
-    if( *p++ != 0 )
-        correct = 0;
+    /*
+     * Check and get padding len in "constant-time"
+     */
+    bad |= *p++; /* First byte must be 0 */
 
-    bt = *p++;
-    if( ( bt != RSA_CRYPT && mode == RSA_PRIVATE ) ||
-        ( bt != RSA_SIGN && mode == RSA_PUBLIC ) )
+    /* This test does not depend on secret data */
+    if( mode == RSA_PRIVATE )
     {
-        correct = 0;
-    }
+        bad |= *p++ ^ RSA_CRYPT;
 
-    if( bt == RSA_CRYPT )
-    {
-        while( *p != 0 && p < buf + ilen - 1 )
-            pad_count += ( *p++ != 0 );
+        /* Get padding len, but always read till end of buffer
+         * (minus one, for the 00 byte) */
+        for( i = 0; i < ilen - 3; i++ )
+        {
+            pad_done |= ( p[i] == 0 );
+            pad_count += ( pad_done == 0 );
+        }
 
-        correct &= ( *p == 0 && p < buf + ilen - 1 );
-
-        q = p;
-
-        // Also pass over all other bytes to reduce timing differences
-        //
-        while ( q < buf + ilen - 1 )
-            pad_count += ( *q++ != 0 );
-
-        // Prevent compiler optimization of pad_count
-        //
-        correct |= pad_count & 0x100000; /* Always 0 unless 1M bit keys */
-        p++;
+        p += pad_count;
+        bad |= *p++; /* Must be zero */
     }
     else
     {
-        while( *p == 0xFF && p < buf + ilen - 1 )
-            pad_count += ( *p++ == 0xFF );
+        bad |= *p++ ^ RSA_SIGN;
 
-        correct &= ( *p == 0 && p < buf + ilen - 1 );
+        /* Get padding len, but always read till end of buffer
+         * (minus one, for the 00 byte) */
+        for( i = 0; i < ilen - 3; i++ )
+        {
+            pad_done |= ( p[i] != 0xFF );
+            pad_count += ( pad_done == 0 );
+        }
 
-        q = p;
-
-        // Also pass over all other bytes to reduce timing differences
-        //
-        while ( q < buf + ilen - 1 )
-            pad_count += ( *q++ != 0 );
-
-        // Prevent compiler optimization of pad_count
-        //
-        correct |= pad_count & 0x100000; /* Always 0 unless 1M bit keys */
-        p++;
+        p += pad_count;
+        bad |= *p++; /* Must be zero */
     }
 
-    if( correct == 0 )
+    if( bad )
         return( POLARSSL_ERR_RSA_INVALID_PADDING );
 
     if (ilen - (p - buf) > output_max_len)
@@ -711,6 +769,8 @@ int rsa_rsaes_pkcs1_v15_decrypt( rsa_context *ctx,
  * Do an RSA operation, then remove the message padding
  */
 int rsa_pkcs1_decrypt( rsa_context *ctx,
+                       int (*f_rng)(void *, unsigned char *, size_t),
+                       void *p_rng,
                        int mode, size_t *olen,
                        const unsigned char *input,
                        unsigned char *output,
@@ -719,13 +779,13 @@ int rsa_pkcs1_decrypt( rsa_context *ctx,
     switch( ctx->padding )
     {
         case RSA_PKCS_V15:
-            return rsa_rsaes_pkcs1_v15_decrypt( ctx, mode, olen, input, output,
-                                                output_max_len );
+            return rsa_rsaes_pkcs1_v15_decrypt( ctx, f_rng, p_rng, mode, olen,
+                                                input, output, output_max_len );
 
 #if defined(POLARSSL_PKCS1_V21)
         case RSA_PKCS_V21:
-            return rsa_rsaes_oaep_decrypt( ctx, mode, NULL, 0, olen, input,
-                                           output, output_max_len );
+            return rsa_rsaes_oaep_decrypt( ctx, f_rng, p_rng, mode, NULL, 0,
+                                           olen, input, output, output_max_len );
 #endif
 
         default:
@@ -840,7 +900,6 @@ int rsa_rsassa_pss_sign( rsa_context *ctx,
 
     md_free_ctx( &md_ctx );
 
-    msb = mpi_msb( &ctx->N ) - 1;
     sig[0] &= 0xFF >> ( olen * 8 - msb );
 
     p += hlen;
@@ -848,7 +907,7 @@ int rsa_rsassa_pss_sign( rsa_context *ctx,
 
     return( ( mode == RSA_PUBLIC )
             ? rsa_public(  ctx, sig, sig )
-            : rsa_private( ctx, sig, sig ) );
+            : rsa_private( ctx, f_rng, p_rng, sig, sig ) );
 }
 #endif /* POLARSSL_PKCS1_V21 */
 
@@ -859,6 +918,8 @@ int rsa_rsassa_pss_sign( rsa_context *ctx,
  * Do an RSA operation to sign the message digest
  */
 int rsa_rsassa_pkcs1_v15_sign( rsa_context *ctx,
+                               int (*f_rng)(void *, unsigned char *, size_t),
+                               void *p_rng,
                                int mode,
                                int hash_id,
                                unsigned int hashlen,
@@ -971,7 +1032,7 @@ int rsa_rsassa_pkcs1_v15_sign( rsa_context *ctx,
 
     return( ( mode == RSA_PUBLIC )
             ? rsa_public(  ctx, sig, sig )
-            : rsa_private( ctx, sig, sig ) );
+            : rsa_private( ctx, f_rng, p_rng, sig, sig ) );
 }
 
 /*
@@ -989,7 +1050,7 @@ int rsa_pkcs1_sign( rsa_context *ctx,
     switch( ctx->padding )
     {
         case RSA_PKCS_V15:
-            return rsa_rsassa_pkcs1_v15_sign( ctx, mode, hash_id,
+            return rsa_rsassa_pkcs1_v15_sign( ctx, f_rng, p_rng, mode, hash_id,
                                               hashlen, hash, sig );
 
 #if defined(POLARSSL_PKCS1_V21)
@@ -1008,6 +1069,8 @@ int rsa_pkcs1_sign( rsa_context *ctx,
  * Implementation of the PKCS#1 v2.1 RSASSA-PSS-VERIFY function
  */
 int rsa_rsassa_pss_verify( rsa_context *ctx,
+                           int (*f_rng)(void *, unsigned char *, size_t),
+                           void *p_rng,
                            int mode,
                            int hash_id,
                            unsigned int hashlen,
@@ -1035,7 +1098,7 @@ int rsa_rsassa_pss_verify( rsa_context *ctx,
 
     ret = ( mode == RSA_PUBLIC )
           ? rsa_public(  ctx, sig, buf )
-          : rsa_private( ctx, sig, buf );
+          : rsa_private( ctx, f_rng, p_rng, sig, buf );
 
     if( ret != 0 )
         return( ret );
@@ -1139,6 +1202,8 @@ int rsa_rsassa_pss_verify( rsa_context *ctx,
  * Implementation of the PKCS#1 v2.1 RSASSA-PKCS1-v1_5-VERIFY function
  */
 int rsa_rsassa_pkcs1_v15_verify( rsa_context *ctx,
+                                 int (*f_rng)(void *, unsigned char *, size_t),
+                                 void *p_rng,
                                  int mode,
                                  int hash_id,
                                  unsigned int hashlen,
@@ -1160,7 +1225,7 @@ int rsa_rsassa_pkcs1_v15_verify( rsa_context *ctx,
 
     ret = ( mode == RSA_PUBLIC )
           ? rsa_public(  ctx, sig, buf )
-          : rsa_private( ctx, sig, buf );
+          : rsa_private( ctx, f_rng, p_rng, sig, buf );
 
     if( ret != 0 )
         return( ret );
@@ -1247,6 +1312,8 @@ int rsa_rsassa_pkcs1_v15_verify( rsa_context *ctx,
  * Do an RSA operation and check the message digest
  */
 int rsa_pkcs1_verify( rsa_context *ctx,
+                      int (*f_rng)(void *, unsigned char *, size_t),
+                      void *p_rng,
                       int mode,
                       int hash_id,
                       unsigned int hashlen,
@@ -1256,12 +1323,12 @@ int rsa_pkcs1_verify( rsa_context *ctx,
     switch( ctx->padding )
     {
         case RSA_PKCS_V15:
-            return rsa_rsassa_pkcs1_v15_verify( ctx, mode, hash_id,
-                                                hashlen, hash, sig );
+            return rsa_rsassa_pkcs1_v15_verify( ctx, f_rng, p_rng, mode,
+                                                hash_id, hashlen, hash, sig );
 
 #if defined(POLARSSL_PKCS1_V21)
         case RSA_PKCS_V21:
-            return rsa_rsassa_pss_verify( ctx, mode, hash_id,
+            return rsa_rsassa_pss_verify( ctx, f_rng, p_rng, mode, hash_id,
                                           hashlen, hash, sig );
 #endif
 
@@ -1341,6 +1408,7 @@ void rsa_free( rsa_context *ctx )
 
 static int myrand( void *rng_state, unsigned char *output, size_t len )
 {
+#if !defined(__OpenBSD__)
     size_t i;
 
     if( rng_state != NULL )
@@ -1348,7 +1416,13 @@ static int myrand( void *rng_state, unsigned char *output, size_t len )
 
     for( i = 0; i < len; ++i )
         output[i] = rand();
-    
+#else
+    if( rng_state != NULL )
+        rng_state = NULL;
+
+    arc4random_buf( output, len );
+#endif /* !OpenBSD */
+
     return( 0 );
 }
 
@@ -1357,6 +1431,7 @@ static int myrand( void *rng_state, unsigned char *output, size_t len )
  */
 int rsa_self_test( int verbose )
 {
+    int ret = 0;
     size_t len;
     rsa_context rsa;
     unsigned char rsa_plaintext[PT_LEN];
@@ -1369,14 +1444,14 @@ int rsa_self_test( int verbose )
     rsa_init( &rsa, RSA_PKCS_V15, 0 );
 
     rsa.len = KEY_LEN;
-    mpi_read_string( &rsa.N , 16, RSA_N  );
-    mpi_read_string( &rsa.E , 16, RSA_E  );
-    mpi_read_string( &rsa.D , 16, RSA_D  );
-    mpi_read_string( &rsa.P , 16, RSA_P  );
-    mpi_read_string( &rsa.Q , 16, RSA_Q  );
-    mpi_read_string( &rsa.DP, 16, RSA_DP );
-    mpi_read_string( &rsa.DQ, 16, RSA_DQ );
-    mpi_read_string( &rsa.QP, 16, RSA_QP );
+    MPI_CHK( mpi_read_string( &rsa.N , 16, RSA_N  ) );
+    MPI_CHK( mpi_read_string( &rsa.E , 16, RSA_E  ) );
+    MPI_CHK( mpi_read_string( &rsa.D , 16, RSA_D  ) );
+    MPI_CHK( mpi_read_string( &rsa.P , 16, RSA_P  ) );
+    MPI_CHK( mpi_read_string( &rsa.Q , 16, RSA_Q  ) );
+    MPI_CHK( mpi_read_string( &rsa.DP, 16, RSA_DP ) );
+    MPI_CHK( mpi_read_string( &rsa.DQ, 16, RSA_DQ ) );
+    MPI_CHK( mpi_read_string( &rsa.QP, 16, RSA_QP ) );
 
     if( verbose != 0 )
         printf( "  RSA key validation: " );
@@ -1407,7 +1482,7 @@ int rsa_self_test( int verbose )
     if( verbose != 0 )
         printf( "passed\n  PKCS#1 decryption : " );
 
-    if( rsa_pkcs1_decrypt( &rsa, RSA_PRIVATE, &len,
+    if( rsa_pkcs1_decrypt( &rsa, &myrand, NULL, RSA_PRIVATE, &len,
                            rsa_ciphertext, rsa_decrypted,
                            sizeof(rsa_decrypted) ) != 0 )
     {
@@ -1431,7 +1506,7 @@ int rsa_self_test( int verbose )
 
     sha1( rsa_plaintext, PT_LEN, sha1sum );
 
-    if( rsa_pkcs1_sign( &rsa, NULL, NULL, RSA_PRIVATE, SIG_RSA_SHA1, 20,
+    if( rsa_pkcs1_sign( &rsa, &myrand, NULL, RSA_PRIVATE, SIG_RSA_SHA1, 20,
                         sha1sum, rsa_ciphertext ) != 0 )
     {
         if( verbose != 0 )
@@ -1443,7 +1518,7 @@ int rsa_self_test( int verbose )
     if( verbose != 0 )
         printf( "passed\n  PKCS#1 sig. verify: " );
 
-    if( rsa_pkcs1_verify( &rsa, RSA_PUBLIC, SIG_RSA_SHA1, 20,
+    if( rsa_pkcs1_verify( &rsa, &myrand, NULL, RSA_PUBLIC, SIG_RSA_SHA1, 20,
                           sha1sum, rsa_ciphertext ) != 0 )
     {
         if( verbose != 0 )
@@ -1456,9 +1531,9 @@ int rsa_self_test( int verbose )
         printf( "passed\n\n" );
 #endif /* POLARSSL_SHA1_C */
 
+cleanup:
     rsa_free( &rsa );
-
-    return( 0 );
+    return( ret );
 }
 
 #endif

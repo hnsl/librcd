@@ -50,6 +50,12 @@ static int ssl_write_client_hello( ssl_context *ssl )
 
     SSL_DEBUG_MSG( 2, ( "=> write client hello" ) );
 
+    if( ssl->f_rng == NULL )
+    {
+        SSL_DEBUG_MSG( 1, ( "no RNG provided") );
+        return( POLARSSL_ERR_SSL_NO_RNG );
+    }
+
     if( ssl->renegotiation == SSL_INITIAL_HANDSHAKE )
     {
         ssl->major_ver = ssl->min_major_ver;
@@ -206,8 +212,11 @@ static int ssl_write_client_hello( ssl_context *ssl )
     SSL_DEBUG_MSG( 3, ( "client hello, total extension length: %d",
                    ext_len ) );
 
-    *p++ = (unsigned char)( ( ext_len >> 8 ) & 0xFF );
-    *p++ = (unsigned char)( ( ext_len      ) & 0xFF );
+    if( ext_len > 0 )
+    {
+        *p++ = (unsigned char)( ( ext_len >> 8 ) & 0xFF );
+        *p++ = (unsigned char)( ( ext_len      ) & 0xFF );
+    }
 
     if ( ssl->hostname != NULL )
     {
@@ -341,11 +350,13 @@ static int ssl_parse_renegotiation_info( ssl_context *ssl,
     }
     else
     {
+        /* Check verify-data in constant-time. The length OTOH is no secret */
         if( len    != 1 + ssl->verify_data_len * 2 ||
             buf[0] !=     ssl->verify_data_len * 2 ||
-            memcmp( buf + 1, ssl->own_verify_data,  ssl->verify_data_len ) != 0 ||
-            memcmp( buf + 1 + ssl->verify_data_len,
-                    ssl->peer_verify_data, ssl->verify_data_len ) != 0 )
+            safer_memcmp( buf + 1,
+                          ssl->own_verify_data, ssl->verify_data_len ) != 0 ||
+            safer_memcmp( buf + 1 + ssl->verify_data_len,
+                          ssl->peer_verify_data, ssl->verify_data_len ) != 0 )
         {
             SSL_DEBUG_MSG( 1, ( "non-matching renegotiated connection field" ) );
 
@@ -366,7 +377,7 @@ static int ssl_parse_server_hello( ssl_context *ssl )
 #endif
     int ret, i, comp;
     size_t n;
-    size_t ext_len = 0;
+    size_t ext_len;
     unsigned char *buf, *ext;
     int renegotiation_info_seen = 0;
     int handshake_failure = 0;
@@ -453,7 +464,7 @@ static int ssl_parse_server_hello( ssl_context *ssl )
      *   42+n . 43+n  extensions length
      *   44+n . 44+n+m extensions
      */
-    if( ssl->in_hslen > 42 + n )
+    if( ssl->in_hslen > 43 + n )
     {
         ext_len = ( ( buf[42 + n] <<  8 )
                   | ( buf[43 + n]       ) );
@@ -464,6 +475,15 @@ static int ssl_parse_server_hello( ssl_context *ssl )
             SSL_DEBUG_MSG( 1, ( "bad server hello message" ) );
             return( POLARSSL_ERR_SSL_BAD_HS_SERVER_HELLO );
         }
+    }
+    else if( ssl->in_hslen == 42 + n )
+    {
+        ext_len = 0;
+    }
+    else
+    {
+        SSL_DEBUG_MSG( 1, ( "bad server hello message" ) );
+        return( POLARSSL_ERR_SSL_BAD_HS_SERVER_HELLO );
     }
 
     i = ( buf[39 + n] << 8 ) | buf[40 + n];
@@ -875,7 +895,7 @@ static int ssl_parse_server_key_exchange( ssl_context *ssl )
     SSL_DEBUG_BUF( 3, "parameters hash", hash, hashlen );
 
     if( ( ret = rsa_pkcs1_verify( &ssl->session_negotiate->peer_cert->rsa,
-                                  RSA_PUBLIC,
+                                  NULL, NULL, RSA_PUBLIC,
                                   hash_id, hashlen, hash, p ) ) != 0 )
     {
         SSL_DEBUG_RET( 1, "rsa_pkcs1_verify", ret );
@@ -951,7 +971,7 @@ static int ssl_parse_certificate_request( ssl_context *ssl )
         return( POLARSSL_ERR_SSL_BAD_HS_CERTIFICATE_REQUEST );
     }
 
-    p = buf + 4;
+    p = buf + 5;
     while( cert_type_len > 0 )
     {
         if( *p == SSL_CERT_TYPE_RSA_SIGN )
@@ -1071,7 +1091,7 @@ static int ssl_write_client_key_exchange( ssl_context *ssl )
         i = 6;
 
         ret = dhm_make_public( &ssl->handshake->dhm_ctx,
-                                mpi_size( &ssl->handshake->dhm_ctx.P ),
+                               (int) mpi_size( &ssl->handshake->dhm_ctx.P ),
                                &ssl->out_msg[i], n,
                                 ssl->f_rng, ssl->p_rng );
         if( ret != 0 )

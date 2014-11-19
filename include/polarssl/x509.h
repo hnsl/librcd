@@ -62,6 +62,8 @@
 #define POLARSSL_ERR_X509_INVALID_INPUT                    -0x2A00  /**< Input invalid. */
 #define POLARSSL_ERR_X509_MALLOC_FAILED                    -0x2A80  /**< Allocation of memory failed. */
 #define POLARSSL_ERR_X509_FILE_IO_ERROR                    -0x2B00  /**< Read/write of file failed. */
+#define POLARSSL_ERR_X509_PASSWORD_REQUIRED                -0x2B80  /**< Private key password can't be empty. */
+#define POLARSSL_ERR_X509_PASSWORD_MISMATCH                -0x2C00  /**< Given private key password does not allow for correct decryption. */
 /* \} name */
 
 
@@ -78,6 +80,9 @@
 #define BADCERT_MISSING             0x40  /**< Certificate was missing. */
 #define BADCERT_SKIP_VERIFY         0x80  /**< Certificate verification was skipped. */
 #define BADCERT_OTHER             0x0100  /**< Other reason (can be used by verify callback) */
+#define BADCERT_FUTURE            0x0200  /**< The certificate validity starts in the future. */
+#define BADCRL_FUTURE             0x0400  /**< The CRL is from the future */
+
 /* \} name */
 /* \} addtogroup x509_module */
 
@@ -425,6 +430,18 @@ extern "C" {
 
 /** \ingroup x509_module */
 /**
+ * \brief          Parse a single DER formatted certificate and add it
+ *                 to the chained list.
+ *
+ * \param chain    points to the start of the chain
+ * \param buf      buffer holding the certificate DER data
+ * \param buflen   size of the buffer
+ *
+ * \return         0 if successful, or a specific X509 or PEM error code
+ */
+int x509parse_crt_der( x509_cert *chain, const unsigned char *buf, size_t buflen );
+
+/**
  * \brief          Parse one or more certificates and add them
  *                 to the chained list. Parses permissively. If some
  *                 certificates can be parsed, the result is the number
@@ -655,14 +672,25 @@ int x509_oid_get_numeric_string( char *buf, size_t size, x509_buf *oid );
 
 /**
  * \brief          Check a given x509_time against the system time and check
- *                 if it is valid.
+ *                 if it is not expired.
  *
  * \param time     x509_time to check
  *
- * \return         Return 0 if the x509_time is still valid,
+ * \return         0 if the x509_time is still valid,
  *                 or 1 otherwise.
  */
 int x509parse_time_expired( const x509_time *time );
+
+/**
+ * \brief          Check a given x509_time against the system time and check
+ *                 if it is not from the future.
+ *
+ * \param time     x509_time to check
+ *
+ * \return         0 if the x509_time is already valid,
+ *                 or 1 otherwise.
+ */
+int x509parse_time_future( const x509_time *time );
 
 /**
  * \name Functions to verify a certificate

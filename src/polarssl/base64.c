@@ -137,14 +137,31 @@ int base64_decode( unsigned char *dst, size_t *dlen,
     uint32_t j, x;
     unsigned char *p;
 
-    for( i = j = n = 0; i < slen; i++ )
+    /* First pass: check for validity and get output length */
+    for( i = n = j = 0; i < slen; i++ )
     {
+        /* Skip spaces before checking for EOL */
+        x = 0;
+        while( i < slen && src[i] == ' ' )
+        {
+            ++i;
+            ++x;
+        }
+
+        /* Spaces at end of buffer are OK */
+        if( i == slen )
+            break;
+
         if( ( slen - i ) >= 2 &&
             src[i] == '\r' && src[i + 1] == '\n' )
             continue;
 
         if( src[i] == '\n' )
             continue;
+
+        /* Space inside a line is an error */
+        if( x != 0 )
+            return( POLARSSL_ERR_BASE64_INVALID_CHARACTER );
 
         if( src[i] == '=' && ++j > 2 )
             return( POLARSSL_ERR_BASE64_INVALID_CHARACTER );
@@ -162,6 +179,7 @@ int base64_decode( unsigned char *dst, size_t *dlen,
         return( 0 );
 
     n = ((n * 6) + 7) >> 3;
+    n -= j;
 
     if( *dlen < n )
     {
@@ -218,16 +236,17 @@ static const unsigned char base64_test_enc[] =
 int base64_self_test( int verbose )
 {
     size_t len;
-    unsigned char *src, buffer[128];
+    const unsigned char *src;
+    unsigned char buffer[128];
 
     if( verbose != 0 )
         printf( "  Base64 encoding test: " );
 
     len = sizeof( buffer );
-    src = (unsigned char *) base64_test_dec;
+    src = base64_test_dec;
 
     if( base64_encode( buffer, &len, src, 64 ) != 0 ||
-         memcmp( base64_test_enc, buffer, 88 ) != 0 ) 
+         memcmp( base64_test_enc, buffer, 88 ) != 0 )
     {
         if( verbose != 0 )
             printf( "failed\n" );
@@ -239,7 +258,7 @@ int base64_self_test( int verbose )
         printf( "passed\n  Base64 decoding test: " );
 
     len = sizeof( buffer );
-    src = (unsigned char *) base64_test_enc;
+    src = base64_test_enc;
 
     if( base64_decode( buffer, &len, src, 88 ) != 0 ||
          memcmp( base64_test_dec, buffer, 64 ) != 0 )

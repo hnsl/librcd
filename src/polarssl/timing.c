@@ -89,7 +89,7 @@ unsigned long hardclock( void )
 unsigned long hardclock( void )
 {
     unsigned long lo, hi;
-    asm( "rdtsc" : "=a" (lo), "=d" (hi) );
+    asm( "rdtsc" : "=a" (lo), "=d" (hi) ); 
     return( lo | (hi << 32) );
 }
 #endif
@@ -179,7 +179,7 @@ unsigned long hardclock( void )
 unsigned long hardclock( void )
 {
     LARGE_INTEGER offset;
-
+    
 	QueryPerformanceCounter( &offset );
 
 	return (unsigned long)( offset.QuadPart );
@@ -233,17 +233,17 @@ unsigned long get_timer( struct hr_time *val, int reset )
 }
 
 DWORD WINAPI TimerProc( LPVOID uElapse )
-{
+{   
     Sleep( (DWORD) uElapse );
-    alarmed = 1;
+    alarmed = 1; 
     return( TRUE );
 }
 
 void set_alarm( int seconds )
-{
+{   
     DWORD ThreadId;
 
-    alarmed = 0;
+    alarmed = 0; 
     CloseHandle( CreateThread( NULL, 0, TimerProc,
         (LPVOID) ( seconds * 1000 ), 0, &ThreadId ) );
 }
@@ -263,20 +263,20 @@ unsigned long get_timer( struct hr_time *val, int reset )
 
     gettimeofday( &offset, NULL );
 
-    delta = ( offset.tv_sec  - t->start.tv_sec  ) * 1000
-          + ( offset.tv_usec - t->start.tv_usec ) / 1000;
-
     if( reset )
     {
         t->start.tv_sec  = offset.tv_sec;
         t->start.tv_usec = offset.tv_usec;
+        return( 0 );
     }
+
+    delta = ( offset.tv_sec  - t->start.tv_sec  ) * 1000
+          + ( offset.tv_usec - t->start.tv_usec ) / 1000;
 
     return( delta );
 }
 
 #if 0 /* REMOVED FROM LIBRCD START */
-
 #if defined(INTEGRITY)
 void m_sleep( int milliseconds )
 {
@@ -286,7 +286,7 @@ void m_sleep( int milliseconds )
 #else
 
 static void sighandler( int signum )
-{
+{   
     alarmed = 1;
     signal( signum, sighandler );
 }
@@ -308,7 +308,6 @@ void m_sleep( int milliseconds )
     select( 0, NULL, NULL, NULL, &tv );
 }
 #endif /* INTEGRITY */
-
 #endif /* REMOVED FROM LIBRCD END */
 
 #endif

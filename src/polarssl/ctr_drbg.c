@@ -48,6 +48,14 @@ int ctr_drbg_init_entropy_len(
                    void *p_entropy,
                    const unsigned char *custom,
                    size_t len,
+                   size_t entropy_len );
+
+int ctr_drbg_init_entropy_len(
+                   ctr_drbg_context *ctx,
+                   int (*f_entropy)(void *, unsigned char *, size_t),
+                   void *p_entropy,
+                   const unsigned char *custom,
+                   size_t len,
                    size_t entropy_len )
 {
     int ret;
@@ -98,14 +106,14 @@ void ctr_drbg_set_reseed_interval( ctr_drbg_context *ctx, int interval )
     ctx->reseed_interval = interval;
 }
     
-int block_cipher_df( unsigned char *output,
-                     const unsigned char *data, size_t data_len )
+static int block_cipher_df( unsigned char *output,
+                            const unsigned char *data, size_t data_len )
 {
     unsigned char buf[CTR_DRBG_MAX_SEED_INPUT + CTR_DRBG_BLOCKSIZE + 16];
     unsigned char tmp[CTR_DRBG_SEEDLEN];
     unsigned char key[CTR_DRBG_KEYSIZE];
     unsigned char chain[CTR_DRBG_BLOCKSIZE];
-    unsigned char *p = buf, *iv;
+    unsigned char *p, *iv;
     aes_context aes_ctx;
 
     int i, j, buf_len, use_len;
@@ -180,8 +188,8 @@ int block_cipher_df( unsigned char *output,
     return( 0 );
 }
 
-int ctr_drbg_update_internal( ctr_drbg_context *ctx,
-                              const unsigned char data[CTR_DRBG_SEEDLEN] )
+static int ctr_drbg_update_internal( ctr_drbg_context *ctx,
+                                    const unsigned char data[CTR_DRBG_SEEDLEN] )
 {
     unsigned char tmp[CTR_DRBG_SEEDLEN];
     unsigned char *p = tmp;
@@ -356,7 +364,10 @@ int ctr_drbg_write_seed_file( ctr_drbg_context *ctx, const char *path )
         return( POLARSSL_ERR_CTR_DRBG_FILE_IO_ERROR );
 
     if( ( ret = ctr_drbg_random( ctx, buf, CTR_DRBG_MAX_INPUT ) ) != 0 )
+    {
+        fclose( f );
         return( ret );
+    }
 
     if( fwrite( buf, 1, CTR_DRBG_MAX_INPUT, f ) != CTR_DRBG_MAX_INPUT )
     {
@@ -382,7 +393,10 @@ int ctr_drbg_update_seed_file( ctr_drbg_context *ctx, const char *path )
     fseek( f, 0, SEEK_SET );
 
     if( n > CTR_DRBG_MAX_INPUT )
+    {
+        fclose( f );
         return( POLARSSL_ERR_CTR_DRBG_INPUT_TOO_BIG );
+    }
 
     if( fread( buf, 1, n, f ) != n )
     {
@@ -442,8 +456,9 @@ unsigned char result_nopr[16] =
     { 0xa0, 0x54, 0x30, 0x3d, 0x8a, 0x7e, 0xa9, 0x88,
       0x9d, 0x90, 0x3e, 0x07, 0x7c, 0x6f, 0x21, 0x8f };
 
-int test_offset;
-int ctr_drbg_self_test_entropy( void *data, unsigned char *buf, size_t len )
+static size_t test_offset;
+static int ctr_drbg_self_test_entropy( void *data, unsigned char *buf,
+                                       size_t len )
 {
     unsigned char *p = data;
     memcpy( buf, p + test_offset, len );

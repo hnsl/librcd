@@ -1,7 +1,7 @@
 /*
  *  RFC 1115/1319 compliant MD2 implementation
  *
- *  Copyright (C) 2006-2010, Brainspark B.V.
+ *  Copyright (C) 2006-2013, Brainspark B.V.
  *
  *  This file is part of PolarSSL (http://www.polarssl.org)
  *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
@@ -38,6 +38,13 @@
 #if defined(POLARSSL_FS_IO) || defined(POLARSSL_SELF_TEST)
 /*NO-SYS #include <stdio.h> */
 #endif
+
+/* Implementation that should never be optimized out by the compiler */
+static void polarssl_zeroize( void *v, size_t n ) {
+    volatile unsigned char *p = v; while( n-- ) *p++ = 0;
+}
+
+#if !defined(POLARSSL_MD2_ALT)
 
 static const unsigned char PI_SUBST[256] =
 {
@@ -163,6 +170,8 @@ void md2_finish( md2_context *ctx, unsigned char output[16] )
     memcpy( output, ctx->state, 16 );
 }
 
+#endif /* !POLARSSL_MD2_ALT */
+
 /*
  * output = MD2( input buffer )
  */
@@ -174,7 +183,7 @@ void md2( const unsigned char *input, size_t ilen, unsigned char output[16] )
     md2_update( &ctx, input, ilen );
     md2_finish( &ctx, output );
 
-    memset( &ctx, 0, sizeof( md2_context ) );
+    polarssl_zeroize( &ctx, sizeof( md2_context ) );
 }
 
 #if defined(POLARSSL_FS_IO)
@@ -198,7 +207,7 @@ int md2_file( const char *path, unsigned char output[16] )
 
     md2_finish( &ctx, output );
 
-    memset( &ctx, 0, sizeof( md2_context ) );
+    polarssl_zeroize( &ctx, sizeof( md2_context ) );
 
     if( ferror( f ) != 0 )
     {
@@ -238,7 +247,7 @@ void md2_hmac_starts( md2_context *ctx, const unsigned char *key, size_t keylen 
     md2_starts( ctx );
     md2_update( ctx, ctx->ipad, 16 );
 
-    memset( sum, 0, sizeof( sum ) );
+    polarssl_zeroize( sum, sizeof( sum ) );
 }
 
 /*
@@ -262,7 +271,7 @@ void md2_hmac_finish( md2_context *ctx, unsigned char output[16] )
     md2_update( ctx, tmpbuf, 16 );
     md2_finish( ctx, output );
 
-    memset( tmpbuf, 0, sizeof( tmpbuf ) );
+    polarssl_zeroize( tmpbuf, sizeof( tmpbuf ) );
 }
 
 /*
@@ -287,7 +296,7 @@ void md2_hmac( const unsigned char *key, size_t keylen,
     md2_hmac_update( &ctx, input, ilen );
     md2_hmac_finish( &ctx, output );
 
-    memset( &ctx, 0, sizeof( md2_context ) );
+    polarssl_zeroize( &ctx, sizeof( md2_context ) );
 }
 
 #if defined(POLARSSL_SELF_TEST)

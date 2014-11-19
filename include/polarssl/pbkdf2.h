@@ -2,6 +2,7 @@
  * \file pbkdf2.h
  *
  * \brief Password-Based Key Derivation Function 2 (from PKCS#5)
+ *        DEPRECATED: use pkcs5.h instead.
  *
  * \author Mathias Olsson <mathias@kompetensum.com>
  *
@@ -48,6 +49,7 @@ extern "C" {
 
 /**
  * \brief          PKCS#5 PBKDF2 using HMAC
+ *                 DEPRECATED: Use pkcs5_pbkdf2_hmac() instead!
  *
  * \param ctx      Generic HMAC context
  * \param password Password to use when generating key
@@ -65,9 +67,9 @@ int pbkdf2_hmac( md_context_t *ctx, const unsigned char *password,
                  unsigned int iteration_count,
                  uint32_t key_length, unsigned char *output );
 
-
 /**
  * \brief          Checkup routine
+ *                 DEPRECATED: Use pkcs5_self_test() instead!
  *
  * \return         0 if successful, or 1 if the test failed
  */

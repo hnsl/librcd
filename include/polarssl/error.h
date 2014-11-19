@@ -27,6 +27,8 @@
 #ifndef POLARSSL_ERROR_H
 #define POLARSSL_ERROR_H
 
+/*NO-SYS #include <string.h> */
+
 /**
  * Error code layout.
  *
@@ -60,6 +62,7 @@
  * CTR_DBRG  3  0x0034-0x003A
  * ENTROPY   3  0x003C-0x0040
  * NET      11  0x0042-0x0056
+ * ENTROPY   1  0x0058-0x0058
  * ASN1      7  0x0060-0x006C
  * MD2       1  0x0070-0x0070
  * MD4       1  0x0072-0x0072
@@ -67,17 +70,18 @@
  * SHA1      1  0x0076-0x0076
  * SHA2      1  0x0078-0x0078
  * SHA4      1  0x007A-0x007A
- * PBKDF2    1  0x007C-0x007C
  *
  * High-level module nr (3 bits - 0x1...-0x8...)
  * Name     ID  Nr of Errors
- * PEM      1   8
- * X509     2   21
+ * PEM      1   9
+ * PKCS#12  1   4 (Started from top)
+ * X509     2   23
  * DHM      3   6
+ * PKCS5    3   4 (Started from top)
  * RSA      4   9
  * MD       5   4
  * CIPHER   6   5
- * SSL      6   2 (Started from top)
+ * SSL      6   3 (Started from top)
  * SSL      7   31
  *
  * Module dependent error code (5 bits 0x.08.-0x.F8.)
