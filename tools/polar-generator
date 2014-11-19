@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+
+####################################################################
+#
+#  Polarssl source code generator
+#
+#  Copyright © 2014, Jumpstarter AB. This file is part of the librcd project.
+#  This Source Code Form is subject to the terms of the Mozilla Public
+#  License, v. 2.0. If a copy of the MPL was not distributed with this
+#  file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#  See the COPYING file distributed with this project for more information.
+#
+#  SYNOPSIS:
+#     cd polarssl-git-repo/
+#     polar-generator (c|h) > libpolarssl.(c|h)
+#
+#  Currently based on polarssl version:
+#  fc3697ce2b0fb32a622e33c3e352afd184387075 (Fri Oct 24 10:42:25 2014 +0200)
+#  Tag: polarssl-1.2.12
+#
+####################################################################
+
+import os
+import re
+import subprocess
+import sys
+
+def get_config_h_extra():
+    config_h_extra = """
+/* LIBRCD COMPATIBILITY START */
+#include "rcd.h"
+#include "linux.h"
+
+#pragma clang diagnostic ignored "-Wpointer-sign"
+
+#define asm __asm__
+
+// Undef colliding musl.h definitions.
+#undef I
+/* LIBRCD COMPATIBILITY END */
+"""
+    return config_h_extra
+
+def main(mode):
+    hard_h_src_files = [
+        'include/polarssl/config.h', # rcd.h linux.h
+        'include/polarssl/bignum.h', # config.h
+        'include/polarssl/rsa.h', # bignum
+        'include/polarssl/aes.h', # no include
+        'include/polarssl/arc4.h', # no include
+        'include/polarssl/asn1.h', # config.h bignum.h
+        'include/polarssl/asn1write.h', # asn1.h
+        'include/polarssl/base64.h', # no include
+        'include/polarssl/blowfish.h', # no include
+        'include/polarssl/bn_mul.h', # bignum
+        'include/polarssl/camellia.h', # no include
+        'include/polarssl/certs.h', # no include
+        'include/polarssl/cipher.h', # no include
+        'include/polarssl/cipher_wrap.h', # config.h cipher.h
+        'include/polarssl/ctr_drbg.h', # aes.h
+        'include/polarssl/des.h', #no
+        'include/polarssl/dhm.h', # bignum.h
+        'include/polarssl/entropy_poll.h', # config.h
+        'include/polarssl/error.h', #
+        'include/polarssl/gcm.h', # aes.h
+        'include/polarssl/havege.h', #
+        'include/polarssl/md2.h', #
+        'include/polarssl/md4.h', #
+        'include/polarssl/md5.h', #
+        'include/polarssl/md.h', #
+        'include/polarssl/md_wrap.h', # md.h config.h
+        'include/polarssl/net.h', # 
+        'include/polarssl/padlock.h', # aes.h
+        'include/polarssl/pbkdf2.h', # md.h
+        'include/polarssl/pem.h', #
+        'include/polarssl/pkcs11.h', # config.h x509.h
+        'include/polarssl/pkcs12.h', # md.h cipher.h asn1.h
+        'include/polarssl/pkcs5.h', # md.h asn1.h
+        'include/polarssl/sha1.h', # config.h
+        'include/polarssl/sha2.h', # config.h
+        'include/polarssl/sha4.h', # config.h
+        'include/polarssl/entropy.h', # config.h sha4.h havege.h
+        'include/polarssl/timing.h', #
+        'include/polarssl/version.h', # config.h
+        'include/polarssl/x509.h', # asn1.h rsa.h dhm.h
+        'include/polarssl/x509write.h', # rsa.h
+        'include/polarssl/xtea.h', # config.h
+        'include/polarssl/ssl.h', # net.h rsa.h md5.h sha1.h sha2.h sha4.h x509.h config.h
+        'include/polarssl/debug.h', # config.h ssl.h
+        'include/polarssl/ssl_cache.h', # ssl.h
+        'include/polarssl/openssl.h', # aes.h md5.h rsa.h sha1.h
+    ]
+
+    hard_c_src_files = [
+        'library/aes.c',
+        'library/arc4.c',
+        'library/asn1parse.c',
+        'library/asn1write.c',
+        'library/base64.c',
+        'library/bignum.c',
+        'library/blowfish.c',
+        'library/camellia.c',
+        'library/certs.c',
+        'library/cipher.c',
+        'library/cipher_wrap.c',
+        'library/ctr_drbg.c',
+        'library/debug.c',
+        'library/des.c',
+        'library/dhm.c',
+        'library/entropy.c',
+        'library/entropy_poll.c',
+        'library/error.c',
+        'library/gcm.c',
+        'library/havege.c',
+        'library/md2.c',
+        'library/md4.c',
+        'library/md5.c',
+        'library/md.c',
+        'library/md_wrap.c',
+        'library/net.c',
+        'library/padlock.c',
+        'library/pbkdf2.c',
+        'library/pem.c',
+        'library/pkcs11.c',
+        'library/pkcs12.c',
+        'library/pkcs5.c',
+        'library/rsa.c',
+        'library/sha1.c',
+        'library/sha2.c',
+        'library/sha4.c',
+        'library/ssl_cache.c',
+        'library/ssl_cli.c',
+        'library/ssl_srv.c',
+        'library/ssl_tls.c',
+        'library/timing.c',
+        'library/version.c',
+        'library/x509parse.c',
+        'library/x509write.c',
+        'library/xtea.c'
+    ]
+    
+    def generate_file(src_file_list, dest_path, mode):        
+        for src_file in src_file_list:
+            filename = os.path.basename(src_file)
+            if not filename.endswith("." + mode):
+                continue
+            with open(src_file, 'r') as f:
+                file_content = f.readlines()
+                if filename == "config.h":
+                    inject_pos = file_content.index('#define POLARSSL_CONFIG_H\n') + 1
+                    new_file_content = "".join(file_content[:inject_pos]) + get_config_h_extra() + "".join(file_content[inject_pos:])
+                elif filename == "rsa.h":
+                    # this will be a problem if they add structs
+                    new_file_content = re.sub(r"(typedef struct)", r"\1 _rsa_context", "".join(file_content))
+                elif filename == "timing.c":
+                    inject_if_pos = file_content.index("#if defined(INTEGRITY)\n")
+                    file_content = file_content[:inject_if_pos] + ["#if 0 /* REMOVED FROM LIBRCD START */\n"] + file_content[inject_if_pos:]
+                    inject_endif_pos = file_content.index("#endif /* INTEGRITY */\n") + 1
+                    new_file_content = "".join(file_content[:inject_endif_pos]) + "#endif /* REMOVED FROM LIBRCD END */\n" + "".join(file_content[inject_endif_pos:])
+                    pass
+                else:
+                    new_file_content = "".join(file_content)
+                new_file_content = re.sub(r"(#include <.*>)", r"/*NO-SYS \1 */", new_file_content)
+                print("writing: " + dest_path + "/" + filename)
+                with open(dest_path + "/" + filename, "w") as df:
+                    df.write(new_file_content)
+
+    if mode == "h":
+        #return generate(hard_h_src_files, pre_process_h, mode)
+        dest_path = os.path.expanduser("~/jumpstarter/librcd/include/polarssl")
+        subprocess.check_call(["mkdir", "-p", dest_path])
+        generate_file(hard_h_src_files, dest_path, mode)
+        
+    elif mode == "c":
+        #return generate(hard_c_src_files, pre_process_c, mode)
+        dest_path = os.path.expanduser("~/jumpstarter/librcd/src/polarssl")
+        subprocess.check_call(["mkdir", "-p", dest_path])
+        generate_file(hard_c_src_files, dest_path, mode)
+    else:
+        raise "Incorrect usage, use 'c' or 'h'. i.e: $ polar-generator (c|h) > output.(c|h)"
+
+
+if __name__ == "__main__":
+    main(sys.argv[1])
