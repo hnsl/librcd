@@ -41,7 +41,9 @@ def get_config_h_extra():
 """
     return config_h_extra
 
-def main(mode):
+def main(mode, librcd_path):
+    if not os.path.isdir(librcd_path):
+        raise Exception("please provide the librcd path as the second command line argument")
     hard_h_src_files = [
         'include/polarssl/config.h', # rcd.h linux.h
         'include/polarssl/bignum.h', # config.h
@@ -166,14 +168,12 @@ def main(mode):
                     df.write(new_file_content)
 
     if mode == "h":
-        #return generate(hard_h_src_files, pre_process_h, mode)
-        dest_path = os.path.expanduser("~/jumpstarter/librcd/include/polarssl")
+        dest_path = os.path.join(librcd_path, "include/polarssl")
         subprocess.check_call(["mkdir", "-p", dest_path])
         generate_file(hard_h_src_files, dest_path, mode)
         
     elif mode == "c":
-        #return generate(hard_c_src_files, pre_process_c, mode)
-        dest_path = os.path.expanduser("~/jumpstarter/librcd/src/polarssl")
+        dest_path = os.path.join(librcd_path, "src/polarssl")
         subprocess.check_call(["mkdir", "-p", dest_path])
         generate_file(hard_c_src_files, dest_path, mode)
     else:
@@ -181,4 +181,4 @@ def main(mode):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], os.path.expanduser(sys.argv[2]))
