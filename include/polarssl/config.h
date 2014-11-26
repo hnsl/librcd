@@ -104,8 +104,8 @@
  *
  * Uncomment if the CPU supports SSE2 (IA-32 specific).
  *
-#define POLARSSL_HAVE_SSE2
  */
+#define POLARSSL_HAVE_SSE2
 
 /**
  * \def POLARSSL_HAVE_READDIR_R
@@ -163,8 +163,8 @@
  *
  * Uncomment this macro to store the AES tables in ROM.
  *
-#define POLARSSL_AES_ROM_TABLES
  */
+#define POLARSSL_AES_ROM_TABLES
 
 /**
  * \def POLARSSL_CIPHER_MODE_CFB
@@ -654,8 +654,8 @@
  * Requires: POLARSSL_TIMING_C
  *
  * Uncomment to enable the HAVEGE random generator.
-#define POLARSSL_HAVEGE_C
  */
+#define POLARSSL_HAVEGE_C
 
 /**
  * \def POLARSSL_MD_C
