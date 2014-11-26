@@ -506,6 +506,11 @@ extern int rcd_pp_marker__fiber_main_declare;
 #define switch_heap(heap_name) \
     LET(uint8_t _rcd_switch_heap_cl __attribute__((cleanup(__lwt_fiber_stack_pop_switch_heap))) = (__lwt_fiber_stack_push_switch_heap(heap_name), 0))
 
+/// rcd-macro: Creates a new heap and switches to it.
+#define switch_new_heap(heap_name) \
+    LET(lwt_heap_t* heap_name = lwt_alloc_heap()) \
+        switch_heap(heap_name)
+
 /// rcd-macro: Equivalent to sub_heap_txn(heap_name) switch_heap(heap_name)
 #define switch_txn(heap_name) sub_heap_txn(heap_name) switch_heap(heap_name)
 
