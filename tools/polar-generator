@@ -12,7 +12,7 @@
 #
 #  SYNOPSIS:
 #     cd polarssl-git-repo/
-#     polar-generator (c|h) /path/to/librcd
+#     polar-generator /path/to/librcd
 #
 #  Currently based on polarssl version:
 #  fc3697ce2b0fb32a622e33c3e352afd184387075 (Fri Oct 24 10:42:25 2014 +0200)
@@ -41,7 +41,7 @@ def get_config_h_extra():
 """
     return config_h_extra
 
-def main(mode, librcd_path):
+def main(librcd_path):
     if not os.path.isdir(librcd_path):
         raise Exception("please provide the librcd path as the second command line argument")
     hard_h_src_files = [
@@ -141,11 +141,9 @@ def main(mode, librcd_path):
         'library/xtea.c'
     ]
     
-    def generate_file(src_file_list, dest_path, mode):        
+    def generate_file(src_file_list, dest_path):
         for src_file in src_file_list:
             filename = os.path.basename(src_file)
-            if not filename.endswith("." + mode):
-                continue
             with open(src_file, 'r') as f:
                 file_content = f.readlines()
                 if filename == "config.h":
@@ -169,18 +167,12 @@ def main(mode, librcd_path):
                 with open(dest_path + "/" + filename, "w") as df:
                     df.write(new_file_content)
 
-    if mode == "h":
-        dest_path = os.path.join(librcd_path, "include/polarssl")
-        subprocess.check_call(["mkdir", "-p", dest_path])
-        generate_file(hard_h_src_files, dest_path, mode)
-        
-    elif mode == "c":
-        dest_path = os.path.join(librcd_path, "src/polarssl")
-        subprocess.check_call(["mkdir", "-p", dest_path])
-        generate_file(hard_c_src_files, dest_path, mode)
-    else:
-        raise "Incorrect usage, use 'c' or 'h'. i.e: $ polar-generator (c|h) > output.(c|h)"
-
+    include_path = os.path.join(librcd_path, "include/polarssl")
+    subprocess.check_call(["mkdir", "-p", include_path])
+    generate_file(hard_h_src_files, include_path)
+    src_path = os.path.join(librcd_path, "src/polarssl")
+    subprocess.check_call(["mkdir", "-p", src_path])
+    generate_file(hard_c_src_files, src_path)
 
 if __name__ == "__main__":
-    main(sys.argv[1], os.path.expanduser(sys.argv[2]))
+    main(os.path.expanduser(sys.argv[1]))
