@@ -151,6 +151,8 @@ def main(mode, librcd_path):
                 if filename == "config.h":
                     inject_pos = file_content.index('#define POLARSSL_CONFIG_H\n') + 1
                     new_file_content = "".join(file_content[:inject_pos]) + get_config_h_extra() + "".join(file_content[inject_pos:])
+                    for feature in ('POLARSSL_HAVE_SSE2', 'POLARSSL_AES_ROM_TABLES', 'POLARSSL_HAVEGE_C'):
+                        new_file_content = re.sub(r"(#define {})\n \*\/".format(feature), r" */\n\1", new_file_content)
                 elif filename == "rsa.h":
                     # this will be a problem if they add structs
                     new_file_content = re.sub(r"(typedef struct)", r"\1 _rsa_context", "".join(file_content))
