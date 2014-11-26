@@ -439,14 +439,24 @@ extern int rcd_pp_marker__fiber_main_declare;
 #define sub_heap \
     LET(uint8_t __rcd_sh_cl __attribute__((cleanup(__lwt_fiber_stack_pop_sub_heap))) = (__lwt_fiber_stack_push_sub_heap(), 0))
 
-/// rcd-macro: Let an allocation escape the sub heap, importing it into the parent heap so it survives.
+/// rcd-macro: Let an allocation escape the sub heap, importing it into the
+/// parent heap so it survives.
 #define escape(alloc0) ({ \
     typeof(alloc0) __alloc0_ptr = alloc0; \
     lwt_alloc_escape(__alloc0_ptr); \
     __alloc0_ptr; \
 })
 
-/// rcd-macro: Let one or more allocations escape the sub heap, importing them into the parent heap so they survive.
+/// rcd-macro: Let a complex struct with a direct "heap" member escape the sub
+/// heap, importing it into the parent heap so it survives.
+#define escape_complex(alloc0) ({ \
+    typeof(alloc0) __alloc0_ptr = alloc0; \
+    lwt_alloc_escape(__alloc0_ptr->heap); \
+    __alloc0_ptr; \
+})
+
+/// rcd-macro: Let one or more allocations escape the sub heap, importing them
+/// into the parent heap so they survive.
 #define escape_list(...) ({ \
     void* __allocs[] = {__VA_ARGS__}; \
     size_t __allocs_n = LENGTHOF(__allocs); \
@@ -454,14 +464,24 @@ extern int rcd_pp_marker__fiber_main_declare;
         lwt_alloc_escape(__allocs[__rcd_e_i]); \
 })
 
-/// rcd-macro: Imports allocations to the current sub heap from the remote heap we are joined with.
+/// rcd-macro: Imports an allocation to the current sub heap from the remote
+/// heap we are joined with.
 #define import(alloc0) ({ \
     typeof(alloc0) __alloc0_ptr = alloc0; \
     lwt_alloc_import(__alloc0_ptr); \
     __alloc0_ptr; \
 })
 
-/// rcd-macro: Let one or more allocations be imported to the current sub heap from the remote heap we are joined with.
+/// rcd-macro: Imports a complex struct allocation with a direct "heap" member
+/// to the current sub heap from the remote heap we are joined with.
+#define import_complex(alloc0) ({ \
+    typeof(alloc0) __alloc0_ptr = alloc0; \
+    lwt_alloc_escape(__alloc0_ptr->heap); \
+    __alloc0_ptr; \
+})
+
+/// rcd-macro: Let one or more allocations be imported to the current sub
+/// heap from the remote heap we are joined with.
 #define import_list(...) ({ \
     void* __allocs[] = {__VA_ARGS__}; \
     size_t __allocs_n = LENGTHOF(__allocs); \
