@@ -35,7 +35,7 @@
 #include "rcd.h"
 #include "linux.h"
 
-#pragma clang diagnostic ignored "-Wpointer-sign"
+#define _SOCKLEN_T_DECLARED
 
 #define asm __asm__
 
