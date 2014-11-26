@@ -12,7 +12,7 @@
 #
 #  SYNOPSIS:
 #     cd polarssl-git-repo/
-#     polar-generator (c|h) > libpolarssl.(c|h)
+#     polar-generator (c|h) /path/to/librcd
 #
 #  Currently based on polarssl version:
 #  fc3697ce2b0fb32a622e33c3e352afd184387075 (Fri Oct 24 10:42:25 2014 +0200)
