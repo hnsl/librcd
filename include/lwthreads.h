@@ -19,6 +19,22 @@
 /// This prevents the init function from ever being executed.
 #define LWT_ONCE_INIT_TRIPPED (lwt_once_t) {(UINT128_MAX - 1)}
 
+/// Declares a non-static function with the specified name that returns a fiber
+/// id for a global static fiber and initializes it if that has not been done.
+#define LWT_ONCE_FIBER_GET_FN(name, fiber_main_spawn_call) \
+static void GLUE(_init_fiber_, name)(void* arg_ptr) { \
+    rcd_fid_t* fid_ptr = arg_ptr; \
+    fmitosis { \
+        *fid_ptr = spawn_static_fiber(fiber_main_spawn_call); \
+    } \
+} \
+rcd_fid_t name() { \
+    static lwt_once_t once = LWT_ONCE_INIT; \
+    static rcd_fid_t global_fid; \
+    lwt_once(&once, GLUE(_init_fiber_, name), &global_fid); \
+    return global_fid; \
+}
+
 /// Created with RCD macros, do not use.
 typedef struct lwt_fiber_options {
     fstr_t name;
