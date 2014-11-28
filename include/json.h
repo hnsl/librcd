@@ -17,6 +17,9 @@
 #define jarr(x) json_array_v(x)
 #define jobj(x) json_object_v(x)
 
+#define jarr_new(...) jarr(new_list(json_value_t, __VA_ARGS__))
+#define jobj_new(...) jobj(new_dict(json_value_t, __VA_ARGS__))
+
 /// Enter a scope with 'this' assigned to a particular JSON value. This can be
 /// helpful in making creation of JSON structures feel more natural.
 #define json_for(obj) \
