@@ -636,6 +636,6 @@ Some people will likely ask why I created this instead of "just using Go, Rust, 
 
 ### You can help
 
-There is a lot of things I want to improve in librcd if I had the resources. You can help! [Simply go to the issues page and pick something interesting](https://github.com/jumpstarter-io/librcd/issues). Don't be afraid to send me a pull request if you want something changed or updated. You can also spread the word to people who might find librcd interesting.
+There is a lot of things I want to improve in librcd if I had the resources. You can help! [Simply go to the issues page and pick something interesting](https://github.com/jumpstarter-io/librcd/issues). Don't be afraid to send me a pull request if you want something changed or updated. You can also help by telling your friends about librcd.
 
 Thanks for reading!
