@@ -833,7 +833,7 @@ void rio_tcp_set_keepalive(rio_t* rio, rio_tcp_ka_t cfg);
 /// On successfully established connection the function returns true.
 /// If connection was not successfully established the function returns
 /// false. If out_so_error is not 0 it returns the error status from the
-/// underlying socket SO_ERROR option on failure. It has no well defined
+/// underlying socket SO_ERROR option on failure. There is no well defined
 /// meaning to call this function after reading or writing to a tcp stream or
 /// after the function has already returned a result for a tcp stream.
 bool rio_tcp_conn_wait(rio_t* rio, int32_t* out_so_error);
