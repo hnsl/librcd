@@ -428,6 +428,25 @@ fstr_mem_t* json_stringify_pretty(json_value_t value) { sub_heap {
     return escape(fstr_implode(parts, ""));
 }}
 
+bool json_cmp(json_value_t a, json_value_t b) {
+    if (a.type != b.type)
+        return false;
+    switch (a.type) {{
+    } case JSON_BOOL: {
+        return a.bool_value == b.bool_value;
+    } case JSON_NUMBER: {
+        return a.number_value == b.number_value;
+    } case JSON_STRING: {
+        return fstr_equal(a.string_value, b.string_value);
+    } case JSON_NULL: {
+        return true;
+    } case JSON_ARRAY: {
+        return false;
+    } case JSON_OBJECT: {
+        return false;
+    }}
+}
+
 fstr_mem_t* json_flatten(json_value_t value) { sub_heap {
     switch (value.type) {{
     } case JSON_BOOL: {

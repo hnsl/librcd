@@ -162,6 +162,10 @@ fstr_mem_t* json_stringify(json_value_t value);
 /// Serializes a JSON tree structure in a human-readable manner.
 fstr_mem_t* json_stringify_pretty(json_value_t value);
 
+/// Compares two json values and returns true if they are of the same type
+/// and exactly equal. It is undefined if two arrays or dicts are equal or not.
+bool json_cmp(json_value_t a, json_value_t b);
+
 /// Flattens a JSON value to a string. This destroys the type information
 /// but makes the data easier to work with in cases where the type information
 /// is irrelevant.
