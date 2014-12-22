@@ -71,7 +71,7 @@
 /// Packs a variable of arbitrary type into an fstring by taking its address
 /// and size. Useful for serialization.
 #define FSTR_PACK(value) \
-    ((fstr_t) {sizeof(value), (void*) &value})
+    ((fstr_t) {.str = (void*) &value, .len = sizeof(value)})
 
 /// Unpacks and returns a variable of a given type from the front of a buffer,
 /// then advances the buffer's head by 'sizeof(type)'. Throws exception_io if
@@ -102,8 +102,8 @@ typedef struct fstr_mem {
 
 /// The fundamental string type, representing a slice of memory.
 typedef struct fstr {
-    size_t len;
     uint8_t* str;
+    size_t len;
 } fstr_t;
 
 /// Fixed string circular fifo buffer.

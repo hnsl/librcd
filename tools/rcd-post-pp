@@ -28,7 +28,7 @@ function fix_c_strings($line) {
             return $matches[0];
         preg_match('/\s*$/', $matches[0], $matches2);
         $trailing_ws = $matches2[0];
-        return (strlen($match) > 2 ? "((fstr_t) {.len = sizeof($match) - 1, .str = (uint8_t*) $match})" : "((fstr_t) {0})") . $trailing_ws;
+        return (strlen($match) > 2 ? "((fstr_t) {.str = (uint8_t*) $match, .len = sizeof($match) - 1})" : "((fstr_t) {0})") . $trailing_ws;
     }, $line);
 }
 
@@ -76,7 +76,7 @@ exit(call_user_func(function() {
                     return $matches[0];
                 $found_fstr_declarations = true;
                 $str = str_replace('"', "\x01", $matches[1]);
-                return "((fstr_t) {.len = sizeof($str) - 1, .str = (uint8_t*) $str})";
+                return "((fstr_t) {.str = (uint8_t*) $str, .len = sizeof($str) - 1})";
             };
             $line = preg_replace_callback('/\bfstr\s*\((\s*("(([^"\\\\]*|\\\\.)+)"\s*)+)\)/', $fstr_replace_callback_fn, $line);
             $line = preg_replace_callback('/\bfstr\s*\(([^\(\)]+)\)/', $fstr_replace_callback_fn, $line);
