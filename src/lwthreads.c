@@ -499,21 +499,13 @@ static void lwt_fatal_exception_handler(rcd_exception_t* exception);
 
 static int32_t lwt_sigtkill_thread(int32_t tid, int32_t signal, union sigval value) {
     int32_t pid = getpid();
-    /* <FIXME>: Uncomment and use this better syntax instead when it no longer causes LLVM TO CRASH. */
-        /* siginfo_t uinfo = {
-            .si_signo = signal,
-            .si_code = SI_QUEUE,
-            .si_pid = pid,
-            .si_uid = getuid(),
-            .si_value = value,
-        }; */
-        siginfo_t uinfo = {0};
-        uinfo.si_signo = signal;
-        uinfo.si_code = SI_QUEUE;
-        uinfo.__si_fields.__rt.si_pid = pid;
-        uinfo.__si_fields.__rt.si_uid = getuid();
-        uinfo.__si_fields.__rt.si_sigval = value;
-    /* </FIXME> */
+    siginfo_t uinfo = {
+        .si_signo = signal,
+        .si_code = SI_QUEUE,
+        .__si_fields.__rt.si_pid = pid,
+        .__si_fields.__rt.si_uid = getuid(),
+        .__si_fields.__rt.si_sigval = value,
+    };
     return rt_tgsigqueueinfo(pid, tid, signal, &uinfo);
 }
 
