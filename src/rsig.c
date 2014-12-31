@@ -27,6 +27,7 @@
 #include "rsig-internal.h"
 #include "atomic.h"
 #include "reflect.h"
+#include "vm.h"
 
 #include "linux.h"
 
@@ -39,6 +40,24 @@ static sigset_t rsig_default_mask;
 
 const size_t rtsig_sigcancel_exit_offset = offsetof(siginfo_t, __si_fields.__rt.si_sigval.sival_int);
 
+struct segv_rh {
+    void* addr;
+    size_t len;
+    segv_rhandler_t segv_rh;
+    void* arg_ptr;
+    rbtree_node_t node;
+};
+
+/// Memory structure for indexing segv region handlers.
+struct {
+    rbtree_t index;
+    rwspinlock_t rwlock;
+} segv_rh_mem = {0};
+
+/// Set to true when first segv region handler is registered.
+/// This suppresses the immediate alarm print out in the low level sigsegv handler.
+bool rsig_has_segv_rh = false;
+
 /// Built in handler for real time cancellation handling.
 void rsig_sigcancel_handler();
 
@@ -46,6 +65,8 @@ void rsig_sigcancel_handler();
 /// paves the way for the high-level handler to be safely called even though
 /// it has a segmented stack prologue.
 void rsig_sigsegv_low_handler();
+
+RBTREE_CMP_FN_DECL(cmp_segv_rh_node, segv_rh_t, node, addr);
 
 void rsig_thread_signal_mask_reset() {
     int r_rt_sigprocmask = rt_sigprocmask(SIG_SETMASK, &rsig_default_mask, 0);
@@ -81,6 +102,8 @@ static void rsig_rt_sigaction(int signum, const struct k_sigaction *act, struct 
 }
 
 void rsig_init() {
+    // Initialize the segv rhandler tree.
+    rbtree_init(&segv_rh_mem.index, cmp_segv_rh_node);
     // Initialize the full signal configuration.
     rsig_init_sys_signal_cfg(&rsig_full_scfg);
     rsig_init_user_signal_cfg(&rsig_full_scfg);
@@ -115,11 +138,56 @@ void rsig_init() {
     }
 }
 
+segv_rh_t* rsig_segv_rhandler_set(segv_rhandler_t segv_rh, void* addr, size_t len, void* arg_ptr) {
+    segv_rh_t* srh = vm_mmap_reserve(sizeof(segv_rh_t), 0);
+    srh->addr = addr;
+    srh->len = len;
+    srh->segv_rh = segv_rh;
+    srh->arg_ptr = arg_ptr;
+    rbtree_node_t* node;
+    atomic_spinlock_wlock(&segv_rh_mem.rwlock); {
+        node = rbtree_insert(&srh->node, &segv_rh_mem.index);
+    } atomic_spinlock_uwlock(&segv_rh_mem.rwlock);
+    if (node != 0)
+        throw("segv region handler address collision", exception_fatal);
+    rsig_has_segv_rh = true;
+    return srh;
+}
+
+void rsig_segv_rhandler_unset(segv_rh_t* srh) {
+    atomic_spinlock_wlock(&segv_rh_mem.rwlock); {
+        rbtree_remove(&srh->node, &segv_rh_mem.index);
+    } atomic_spinlock_uwlock(&segv_rh_mem.rwlock);
+    vm_mmap_unreserve(srh, sizeof(segv_rh_t));
+}
+
+void rsig_segv_rhandler_resize(segv_rh_t* srh, size_t len) {
+    srh->len = len;
+}
+
 /// "High level" handler for segmentation failures.
 /// We cannot use any features here that touches any locks, depends on atomic lwt execution or a well defined fiber state.
 /// This prevents us from using any high level features, like memory allocation, so we will only use the stack and make syscalls.
 /// We can still trust the stack since we should be running on a separate signal stack if this is called for a fiber.
 void rsig_sigsegv_high_handler(int sig, siginfo_t* si, struct ucontext* uc) {
+    // Redirect segmentation failures with registered region handlers.
+    void* segv_addr = si->__si_fields.__sigfault.si_addr;
+    if (rsig_has_segv_rh) {
+        segv_rhandler_t segv_rh = 0;
+        void* arg_ptr;
+        atomic_spinlock_rlock(&segv_rh_mem.rwlock); {
+            segv_rh_t* srh = RBTREE_LOOKUP_KEY_LTE(segv_rh_t, node, &segv_rh_mem.index, segv_addr);
+            if (srh != 0) {
+                assert(srh->addr <= segv_addr);
+                if (segv_addr - srh->addr < srh->len) {
+                    segv_rh = srh->segv_rh;
+                    arg_ptr = srh->arg_ptr;
+                }
+            }
+        } atomic_spinlock_urlock(&segv_rh_mem.rwlock);
+        if (segv_rh != 0)
+            return segv_rh(segv_addr, arg_ptr);
+    }
     // Only allow first segmentation error through to avoid printout mess.
     static int8_t lock = 0;
     atomic_spinlock_lock(&lock);
@@ -131,7 +199,7 @@ void rsig_sigsegv_high_handler(int sig, siginfo_t* si, struct ucontext* uc) {
     // Print error message header by archaic concatenation.
     void* rip = (void*) uc->uc_mcontext.gregs[REG_RIP];
     fstr_t rip_loc_s = rfl_addr_to_location_inp(loc_buf, rip);
-    fstr_t invalid_addr_s = fstr_serial_uint(num_buf, (size_t) si->__si_fields.__sigfault.si_addr, 16);
+    fstr_t invalid_addr_s = fstr_serial_uint(num_buf, (size_t) segv_addr, 16);
     fstr_t err_buf_tail = line_buf;
     fstr_cpy_over(err_buf_tail, "attempted to access the invalid (or protected) address [0x", &err_buf_tail, 0);
     fstr_cpy_over(err_buf_tail, invalid_addr_s, &err_buf_tail, 0);

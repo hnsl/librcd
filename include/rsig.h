@@ -24,7 +24,7 @@ typedef struct rsig_full_signal_cfg {
 /// Resets the per-thread signal mask to the default.
 void rsig_thread_signal_mask_reset();
 
-/// This function is overridden in librcd programs that require their own
+/// This function is overriden in librcd programs that require their own
 /// specific signal configuration. The default signal configuration is passed
 /// in signal_cfgs.
 /// Custom signal handlers should be avoided as they are unsafe.

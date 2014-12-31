@@ -7,7 +7,17 @@
 #ifndef SIGNAL_INTERNAL_H
 #define	SIGNAL_INTERNAL_H
 
+typedef struct segv_rh segv_rh_t;
+
+typedef void (*segv_rhandler_t)(void* addr, void* arg_ptr);
+
 void rsig_thread_signal_mask_reset();
+
+segv_rh_t* rsig_segv_rhandler_set(segv_rhandler_t segv_rh, void* addr, size_t len, void* arg_ptr);
+
+void rsig_segv_rhandler_unset(segv_rh_t* segv_rhandler_h);
+
+void rsig_segv_rhandler_resize(segv_rh_t* srh, size_t len);
 
 void rsig_init();
 

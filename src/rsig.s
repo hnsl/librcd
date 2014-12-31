@@ -7,6 +7,7 @@
 .text
 .global rtsig_sigcancel_exit_offset
 .global rsig_sigsegv_high_handler
+.global rsig_has_segv_rh
 
 /// function called by signal handler when receiving real-time signal 33 which we define to mean "cancel thread"
 /// this is the declaration in c:
@@ -37,6 +38,10 @@ rsig_sigsegv_low_handler:
     push %rdi
     push %rsi
     push %rdx
+    // skip printout if rsig_has_segv_rh is true
+    movb rsig_has_segv_rh, %al
+    test %al, %al
+    jnz 1f
     // calling write() with %eax = SYS_write, %rdi = fd, %rsi = buf, %rdx = count
     movl $1, %eax
     movl $2, %edi
@@ -44,6 +49,7 @@ rsig_sigsegv_low_handler:
     movl $sigsegv_msg_len, %edx
     syscall
     // set end of stack to the special value [0] to disable it, if it was already enabled
+1:  mov %fs:0x8, %r14
     xor %r11, %r11
     mov %r11, %fs:0x8
     // restore arguments
@@ -54,8 +60,10 @@ rsig_sigsegv_low_handler:
     mov %rsp, %r15
     andq $-16, %rsp
     call rsig_sigsegv_high_handler
+    // restore stack and end of stack
     mov %r15, %rsp
-    // return so the program can crash the normal way it would when receiving this signal
+    mov %r14, %fs:0x8
+    // return so the program can continue or crash the normal way
     ret
 
 .data
