@@ -811,13 +811,12 @@ void lwt_setup_archaic_physical_thread() {
     phys_thread->current_fiber = &phys_thread->system_fiber;
 }
 
-/// Real block threads have an inherited heap and uses no thread static or local memory.
-void lwt_setup_real_block_thread(vm_heap_t* vm_heap) {
+void lwt_setup_basic_thread(vm_heap_t* vm_heap, fstr_t sys_fiber_name) {
     lwt_physical_thread_t* phys_thread = LWT_PHYS_THREAD;
     assert(phys_thread->linux_tid == gettid());
     phys_thread->system_rwspinlock = 0;
     phys_thread->system_fiber = (lwt_fiber_t) {0};
-    phys_thread->system_fiber.main_name = "[librcd real block fiber]";
+    phys_thread->system_fiber.main_name = sys_fiber_name;
     phys_thread->current_fiber = &phys_thread->system_fiber;
     phys_thread->thread_static_heap.vm_heap = 0;
     phys_thread->system_fiber.current_heap = vm_heap;
@@ -1416,9 +1415,27 @@ int32_t lwt_start_new_thread(void (*func)(void* arg_ptr), void* stack, int flags
     return (int32_t) __syscall_ret((unsigned long) _start_new_thread(func, stack, flags, arg_ptr, io_phys_thread));
 }
 
-static int32_t lwt_get_thread_clone_flags() {
+int32_t lwt_get_thread_clone_flags() {
     // Set of flags used by clone when cloning new threads.
     return (CLONE_FILES | CLONE_FS | CLONE_PARENT | CLONE_THREAD | CLONE_VM | CLONE_SYSVSEM | CLONE_SIGHAND | CLONE_SETTLS | CLONE_PARENT_SETTID | CLONE_CHILD_CLEARTID);
+}
+
+void lwt_thread_cancel_sync(int32_t tid) {
+    // After sending the async cancel signal the thread is just a few
+    // instructions away from terminating. This means that we should never do
+    // more than a few loops in the worst case.
+    for (int32_t signal = LWT_ASYNC_CANCEL_SIGNAL;; signal = 0) {
+        int32_t rt_tgsigqueueinfo_r = lwt_sigtkill_thread(tid, signal, (union sigval) {0});
+        if (rt_tgsigqueueinfo_r == -1) {
+            int32_t errno_v = errno;
+            if (errno_v == ESRCH)
+                break;
+            else if (errno_v == EAGAIN)
+                continue;
+            RCD_SYSCALL_EXCEPTION(rt_tgsigqueueinfo, exception_fatal);
+        }
+        sched_yield();
+    }
 }
 
 static lwt_physical_thread_t* lwt_start_physical_thread(lwt_start_cb_t start_cb) {
@@ -1451,7 +1468,7 @@ typedef struct lwt_real_block_args {
 
 static void lwt_real_block_main(void* arg_ptr) {
     lwt_real_block_args_t* real_block_args = arg_ptr;
-    lwt_setup_real_block_thread(real_block_args->heap->vm_heap);
+    lwt_setup_basic_thread(real_block_args->heap->vm_heap, "[librcd real block fiber]");
     rsig_thread_signal_mask_reset();
     // Call the real block main function.
     real_block_args->main_fn(real_block_args->arg_ptr);
@@ -1482,21 +1499,7 @@ static void lwt_block_on_real_thread(void (*main_fn)(void*), void* arg_ptr) {
     try {
         rio_eventfd_wait(event_h);
     } finally {
-        // The thread is about to exit, spin until it does to avoid race. It should just be a few instructions.
-        // We can't kill it with SIGKILL if we where canceled as it would kill our entire thread group,
-        // instead we use LWT_ASYNC_CANCEL_SIGNAL which kills individual threads by invoking lwt_sigcancel_handler().
-        for (int32_t signal = LWT_ASYNC_CANCEL_SIGNAL;; signal = 0) {
-            int32_t rt_tgsigqueueinfo_r = lwt_sigtkill_thread(waitpid_main_tid, signal, (union sigval) {0});
-            if (rt_tgsigqueueinfo_r == -1) {
-                int32_t errno_v = errno;
-                if (errno_v == ESRCH)
-                    break;
-                else if (errno_v == EAGAIN)
-                    continue;
-                RCD_SYSCALL_EXCEPTION(rt_tgsigqueueinfo, exception_fatal);
-            }
-            sched_yield();
-        }
+        lwt_thread_cancel_sync(waitpid_main_tid);
     }
 }
 
