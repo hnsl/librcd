@@ -10,6 +10,8 @@
 #ifndef LWTHREADS_INTERNAL_H
 #define	LWTHREADS_INTERNAL_H
 
+#include "vm-internal.h"
+
 #define LWT_STACK_TOP ({volatile char stack_top; (void*) &stack_top;})
 
 /// The first reserved real time signal in Linux.
@@ -57,11 +59,23 @@ void __releasestack_free_stack_space();
 
 void lwt_setup_archaic_physical_thread();
 
+/// Basic threads have an inherited heap and uses no thread static or local memory.
+void lwt_setup_basic_thread(vm_heap_t* vm_heap, fstr_t sys_fiber_name);
+
 struct lwt_physical_thread;
 
 int32_t lwt_start_new_thread(void (*func)(void* arg_ptr), void* stack, int flags, void* arg_ptr, struct lwt_physical_thread** out_phys_thread);
 
 fstr_t lwt_get_backtrace_archaic(fstr_t buf);
+
+int32_t lwt_get_thread_clone_flags();
+
+/// Attempts to terminate a thread with the LWT_ASYNC_CANCEL_SIGNAL
+/// and synchronously waits for it to exit. If the thread is already terminated
+/// the function will return immediately. This is "joining" in POSIX pthread
+/// terminology. This function is non-interruptible and explicitly yields
+/// the kernel thread.
+void lwt_thread_cancel_sync(int32_t tid);
 
 extern const size_t lwt_physical_thread_size;
 
