@@ -29,14 +29,44 @@ typedef struct acid acid_h;
 /// before closing the acid handle.
 void acid_close(acid_h* ah);
 
+/// Opens an acid handle. The handle is low-level process global and is not
+/// allocated on the heap. The mapping will be forced on the specified address
+/// or the call will fail. The call is atomic, it either returns a valid acid
+/// handle or it throws an exception without any side effects. On successful
+/// open a sync thread is started for the acid handle. If new_length is
+/// specified as non-zero the data file will be resized to the specified length
+/// rounded up to the nearest page size. This is the only safe way to shrink
+/// an acid data file, by opening it with a lower new_length. If the data or
+/// journal file does not exist it will be created. The data file is truncated
+/// to PAGE_SIZE if its smaller as that is the smallest allow data file.
+/// If the acid data handle was not gracefully closed the last session the
+/// journal will be automatically commited and a complete fsync is executed
+/// before the call returns. If the journal is corrupt the data is removed.
+/// This is opaque and not visible to the caller.
 acid_h* acid_open(fstr_t data_path, fstr_t journal_path, void* base_addr, size_t new_length);
 
+/// Expands the acid data file while it's open. It is completely safe to
+/// use the data map in parallel while calling this function.
 void acid_expand(acid_h* ah, size_t new_length);
 
+/// Returns the complete memory range of the acid map as a fixed string.
 fstr_t acid_memory(acid_h* ah);
 
+/// Triggers a new commit of the journal unless one is already pending and
+/// waits until all previous changes are synced to journal before proceeding.
+/// This functon is a cancellation point and will abort wait and throw
+/// cancellation/join race.
 void acid_fsync(acid_h* ah);
 
-bool acid_commit_hint(acid_h* ah);
+/// Triggers a new commit of the journal unless one is already pending and
+/// waits until all dirty pages before the call has been snapshotted and is
+/// ready to be commited to journal. This call only waits for snapshot (CPU),
+/// never on fsync (disk). If the sync thread is busy flusing to disk the
+/// function returns false without having any effect. If the function returns
+/// true it is guaranteed that any previous changes is snapshotted and queued
+/// to be asynchronously commited to disk.
+/// This functon is a cancellation point and will abort wait and throw
+/// cancellation/join race.
+bool acid_snapshot(acid_h* ah);
 
 #endif	/* ACID_H */
