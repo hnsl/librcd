@@ -42,7 +42,8 @@ void acid_close(acid_h* ah);
 /// If the acid data handle was not gracefully closed the last session the
 /// journal will be automatically commited and a complete fsync is executed
 /// before the call returns. If the journal is corrupt the data is removed.
-/// This is opaque and not visible to the caller.
+/// This is opaque and not visible to the caller. Both the data and journal
+/// file is locked on open. If locking fails the function throws an exception.
 acid_h* acid_open(fstr_t data_path, fstr_t journal_path, void* base_addr, size_t new_length);
 
 /// Expands the acid data file while it's open. It is completely safe to
