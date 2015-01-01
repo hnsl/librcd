@@ -883,6 +883,7 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env);
 CASSERT(VA_NARGS() == 0);
 
 // *** Application level bundled useful libraries. ***
+#include "acid.h"
 #include "ifc.h"
 #include "polar.h"
 #include "rest.h"
