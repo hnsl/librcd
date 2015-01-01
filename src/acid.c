@@ -54,9 +54,14 @@ struct acid {
         sync_op_t op;
         /// Is set to 1 on exit complete.
         int32_t exit_futex;
-        /// Fiber that is created when requesting journal to be synced.
-        /// It is cancelled and zeroed when journal sync is complete.
-        rcd_fid_t wait_fid;
+        /// True if sync thread is in sync phase.
+        bool in_sync_phase;
+        /// Fiber that is created when changing op to commit
+        /// and cancelled when journal fsync is complete.
+        rcd_fid_t commit_wait_fid;
+        /// Fiber that is created when changing op to commit
+        /// and cancelled when snapshot is complete.
+        rcd_fid_t snapshot_wait_fid;
     } ctrl;
     /// File descriptor for data file.
     int32_t fd_data;
@@ -309,35 +314,48 @@ static bool journ_verify(void* journ_map, size_t total_jsize, size_t data_size) 
 }
 
 static void acid_sync_commit(acid_h* ah) {
-    rcd_fid_t commit_wait_fid;
-    // Write all dirty data to next journal revision.
+    rcd_fid_t commit_wait_fid, snapshot_wait_fid;
+    // Take snapshot and mark all dirty pages as new pages that should be
+    // included in the next commit/journal revision.
+    // We don't win any throughput in the long run by allowing this snapshot
+    // to be taken concurrently while committing the journal to the data file
+    // as we would only get less dirty pages to be included in the next commit.
     atomic_spinlock_lock(&ah->ilock); {
         // TODO: Optimize nothing to sync case.
         /*if (ah->dpage_index.root == 0)*/
 
         // Protect all pages, preventing changes caused by the MMU.
+        // This is a red-black tree operation that could take some time.
         int32_t mprotect_r = mprotect(ah->base_addr, ah->data_length, PROT_READ);
         if (mprotect_r == -1)
             RCD_SYSCALL_EXCEPTION(mprotect, exception_fatal);
+        // At this point we have effectively taken a snapshot.
         // Index all dirty pages as new pages and reset the dirty page index.
         ah->npage_index = ah->dpage_index;
         ah->n_npage_index = ah->n_dpage_index;
         rbtree_init(&ah->dpage_index, cmp_acid_page);
         ah->n_dpage_index = 0;
-        // Before releasing the ilock we zero the wait fid. We want mutations
-        // that happen after releasing the ilock to wait for the next commit
-        // in their succeding fsync() and not this one as this commit does not
-        // contain those mutations. Not setting the wait_fid to 0 here would
-        // break fsync() guarantees.
+        // We now enter the "in sync" phase that lasts until both journal and
+        // data sync is complete. Any fsync that begins after this point
+        // (when ilock is released) must wait for a new wait fiber as we cannot
+        // guarantee that all changes before that fsync is really included in
+        // this commit. We therefore move the commit_wait_fid over to the
+        // local stack so we hide it and can cancel it later.
         atomic_spinlock_lock(&ah->ctrl.lock); {
+            // Reset commit operation so new fsyncs trigger a new commit.
             if (ah->ctrl.op == sync_op_commit)
                 ah->ctrl.op = sync_op_none;
-            // Record the commit wait fid. This could be zero which is valid
-            // if we have been signaled to commit without waiting.
-            commit_wait_fid = ah->ctrl.wait_fid;
-            ah->ctrl.wait_fid = 0;
+            // Trigger in sync phase.
+            ah->ctrl.in_sync_phase = true;
+            // Consume (possibly zero) commit wait fids.
+            commit_wait_fid = ah->ctrl.commit_wait_fid;
+            ah->ctrl.commit_wait_fid = 0;
+            snapshot_wait_fid = ah->ctrl.snapshot_wait_fid;
+            ah->ctrl.snapshot_wait_fid = 0;
         } atomic_spinlock_unlock(&ah->ctrl.lock);
     } atomic_spinlock_unlock(&ah->ilock);
+    // Snapshot taken, wake up waiters.
+    lwt_cancel_fiber_id(snapshot_wait_fid);
     // Read new page index.
     rbtree_t npage_index = ah->npage_index;
     size_t n_npage_index = ah->n_npage_index;
@@ -406,7 +424,7 @@ static void acid_sync_commit(acid_h* ah) {
         rbtree_init(&ah->npage_index, cmp_acid_page);
         ah->n_npage_index = 0;
     } atomic_spinlock_unlock(&ah->ilock);
-    // Wake all fibers waiting for sync.
+    // Journal synchronized, wake up waiters.
     lwt_cancel_fiber_id(commit_wait_fid);
     // Asynchronously commit the journal to the data file.
     assert(journ_verify(journ_map, total_jsize, ah->data_length));
@@ -425,6 +443,9 @@ static void acid_sync_commit(acid_h* ah) {
     strict_fsync(ah->fd_data);
     // Truncate the journal to throw away all pages and only preserve the journal header.
     strict_ftruncate(ah->fd_journal, PAGE_SIZE);
+    // In-sync phase ends here. It is now safe to wait for snapshot without
+    // waiting for disk sync.
+    ah->ctrl.in_sync_phase = false;
 }
 
 static void acid_sync_thread(void* arg_ptr) {
@@ -619,12 +640,12 @@ void acid_fsync(acid_h* ah) {
         } case sync_op_quit: {
             throw("undefined behavior: using while closing acid handle", exception_fatal);
         }}
-        wait_fid = ah->ctrl.wait_fid;
+        wait_fid = ah->ctrl.commit_wait_fid;
         if (wait_fid == 0) {
             fmitosis {
                 wait_fid = spawn_static_fiber(acid_wait_fiber(""));
             }
-            ah->ctrl.wait_fid = wait_fid;
+            ah->ctrl.commit_wait_fid = wait_fid;
         }
     } atomic_spinlock_unlock(&ah->ctrl.lock);
     // Wake sync thread.
@@ -636,26 +657,37 @@ void acid_fsync(acid_h* ah) {
     ifc_wait(wait_fid);
 }
 
-bool acid_commit_hint(acid_h* ah) {
+bool acid_snapshot(acid_h* ah) {
+    rcd_fid_t wait_fid;
     bool futex_wake = false;
     atomic_spinlock_lock(&ah->ctrl.lock); {
-        switch (ah->ctrl.op) {{
-        } case sync_op_none: {
+        if (ah->ctrl.op == sync_op_quit)
+            throw("undefined behavior: using while closing acid handle", exception_fatal);
+        // We are not intrested in starting a commit if sync thread is busy fsyncing.
+        if (ah->ctrl.in_sync_phase) {
+            atomic_spinlock_unlock(&ah->ctrl.lock);
+            return false;
+        }
+        // Order commit if not already ordered.
+        if (ah->ctrl.op == sync_op_none) {
             ah->ctrl.op = sync_op_commit;
             futex_wake = true;
-            break;
-        } case sync_op_commit: {
-            break;
-        } case sync_op_quit: {
-            throw("undefined behavior: using while closing acid handle", exception_fatal);
-        }}
+        }
+        // Start wait for snapshot fiber.
+        wait_fid = ah->ctrl.snapshot_wait_fid;
+        if (wait_fid == 0) {
+            fmitosis {
+                wait_fid = spawn_static_fiber(acid_wait_fiber(""));
+            }
+            ah->ctrl.snapshot_wait_fid = wait_fid;
+        }
     } atomic_spinlock_unlock(&ah->ctrl.lock);
     // Wake sync thread.
     if (futex_wake) {
         ah->ctrl.op_futex = 1;
         strict_futex(&ah->ctrl.op_futex, FUTEX_WAKE, INT32_MAX, 0, 0, 0);
-        return true;
-    } else {
-        return false;
     }
+    // Wait for snapshot.
+    ifc_wait(wait_fid);
+    return true;
 }
