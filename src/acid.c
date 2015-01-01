@@ -314,6 +314,7 @@ static bool journ_verify(void* journ_map, size_t total_jsize, size_t data_size) 
 }
 
 static void acid_sync_commit(acid_h* ah) {
+    bool has_changes;
     rcd_fid_t commit_wait_fid, snapshot_wait_fid;
     // Take snapshot and mark all dirty pages as new pages that should be
     // included in the next commit/journal revision.
@@ -321,20 +322,20 @@ static void acid_sync_commit(acid_h* ah) {
     // to be taken concurrently while committing the journal to the data file
     // as we would only get less dirty pages to be included in the next commit.
     atomic_spinlock_lock(&ah->ilock); {
-        // TODO: Optimize nothing to sync case.
-        /*if (ah->dpage_index.root == 0)*/
-
-        // Protect all pages, preventing changes caused by the MMU.
-        // This is a red-black tree operation that could take some time.
-        int32_t mprotect_r = mprotect(ah->base_addr, ah->data_length, PROT_READ);
-        if (mprotect_r == -1)
-            RCD_SYSCALL_EXCEPTION(mprotect, exception_fatal);
-        // At this point we have effectively taken a snapshot.
-        // Index all dirty pages as new pages and reset the dirty page index.
-        ah->npage_index = ah->dpage_index;
-        ah->n_npage_index = ah->n_dpage_index;
-        rbtree_init(&ah->dpage_index, cmp_acid_page);
-        ah->n_dpage_index = 0;
+        has_changes = (ah->dpage_index.root != 0);
+        if (has_changes) {
+            // Protect all pages, preventing changes caused by the MMU.
+            // This is a red-black tree operation that could take some time.
+            int32_t mprotect_r = mprotect(ah->base_addr, ah->data_length, PROT_READ);
+            if (mprotect_r == -1)
+                RCD_SYSCALL_EXCEPTION(mprotect, exception_fatal);
+            // At this point we have effectively taken a snapshot.
+            // Index all dirty pages as new pages and reset the dirty page index.
+            ah->npage_index = ah->dpage_index;
+            ah->n_npage_index = ah->n_dpage_index;
+            rbtree_init(&ah->dpage_index, cmp_acid_page);
+            ah->n_dpage_index = 0;
+        }
         // We now enter the "in sync" phase that lasts until both journal and
         // data sync is complete. Any fsync that begins after this point
         // (when ilock is released) must wait for a new wait fiber as we cannot
@@ -346,7 +347,7 @@ static void acid_sync_commit(acid_h* ah) {
             if (ah->ctrl.op == sync_op_commit)
                 ah->ctrl.op = sync_op_none;
             // Trigger in sync phase.
-            ah->ctrl.in_sync_phase = true;
+            ah->ctrl.in_sync_phase = has_changes;
             // Consume (possibly zero) commit wait fids.
             commit_wait_fid = ah->ctrl.commit_wait_fid;
             ah->ctrl.commit_wait_fid = 0;
@@ -356,6 +357,11 @@ static void acid_sync_commit(acid_h* ah) {
     } atomic_spinlock_unlock(&ah->ilock);
     // Snapshot taken, wake up waiters.
     lwt_cancel_fiber_id(snapshot_wait_fid);
+    // When we have no changes, just wake up pending fsync fiber and return.
+    if (!has_changes) {
+        lwt_cancel_fiber_id(commit_wait_fid);
+        return;
+    }
     // Read new page index.
     rbtree_t npage_index = ah->npage_index;
     size_t n_npage_index = ah->n_npage_index;
