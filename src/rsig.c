@@ -58,6 +58,9 @@ struct {
 /// This suppresses the immediate alarm print out in the low level sigsegv handler.
 bool rsig_has_segv_rh = false;
 
+/// Signal restorer trampoline for custom signal handlers.
+void rsig_restore_rt();
+
 /// Built in handler for real time cancellation handling.
 void rsig_sigcancel_handler();
 
@@ -132,6 +135,7 @@ void rsig_init() {
         } else {
             sa.handler = sig_cfg.handler_fn;
             sa.flags |= SA_SIGINFO | SA_RESTORER;
+            sa.restorer = rsig_restore_rt;
         }
         // Initialize signal action now and expect it to be unchanged for the rest of the lifetime of the process.
         rsig_rt_sigaction(sig, &sa, 0);

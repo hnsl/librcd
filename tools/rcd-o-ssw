@@ -57,6 +57,9 @@ no_seg_stack_wrapped_symbols["__stacklet_mmap_unreserve"]=1
 no_seg_stack_wrapped_symbols["__morestack_adjust_overflow_arg_area"]=1
 no_seg_stack_wrapped_symbols["__rcd_escape_try"]=1
 no_seg_stack_wrapped_symbols["_start"]=1
+no_seg_stack_wrapped_symbols["rsig_restore_rt"]=1
+no_seg_stack_wrapped_symbols["rsig_sigcancel_handler"]=1
+no_seg_stack_wrapped_symbols["rsig_sigsegv_low_handler"]=1
 
 echo -e ".global __morestack_raw_asm\n\n" > $TFILE_SSW_S
 

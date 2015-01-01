@@ -9,6 +9,13 @@
 .global rsig_sigsegv_high_handler
 .global rsig_has_segv_rh
 
+/// signal restorer trampoline
+.global rsig_restore_rt
+rsig_restore_rt:
+    mov $15, %eax
+    syscall
+    hlt
+
 /// function called by signal handler when receiving real-time signal 33 which we define to mean "cancel thread"
 /// this is the declaration in c:
 /// static void rsig_sigcancel_handler(int sig, siginfo_t* si, struct ucontext* uc) {
