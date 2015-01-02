@@ -36,8 +36,6 @@ typedef struct acid_page {
     /// When 0 the page has been copied to this address while waiting for
     /// the kernel to buffer a copy of it in the journal i/o write queue.
     void* new_page_cow;
-    /// Offset in journal. Number of pages from start.
-    uint64_t joffs;
     /// Lock for this page.
     int8_t plock;
     rbtree_node_t node;
@@ -92,13 +90,13 @@ struct acid {
 };
 
 typedef struct __attribute__((__packed__)) jrnl_idx {
+    /// SHA-1 hash of journal state, not including the hash itself.
+    uint8_t sha1_hash[20];
     /// Magic number. Used for simple pre-check if journal has been written
     /// without bothering spending any valuable time on hashing.
     uint64_t magic;
     /// Commit number. How many times the journal has been flushed.
     uint64_t commit_rev;
-    /// SHA-1 hash of journal state with zeroed hash.
-    uint8_t sha1_hash[20];
     /// Last address range of mapping.
     uint64_t data_addr;
     /// Offset of the first data page in journal from start of file in whole
@@ -170,6 +168,7 @@ static void strict_munmap(void* addr, size_t length) {
 }
 
 static void strict_mprotect(void* addr, size_t length, int prot) {
+    //x-dbg/ DBGFN("strict_mprotect(", addr, ", ", length, ", ", prot, ")");
     int32_t mprotect_r = mprotect(addr, length, prot);
     if (mprotect_r == -1)
         RCD_SYSCALL_EXCEPTION(mprotect, exception_fatal);
@@ -177,8 +176,12 @@ static void strict_mprotect(void* addr, size_t length, int prot) {
 
 static void strict_futex(int* uaddr, int op, int val, const struct timespec* timeout, int* uaddr2, int val3) {
     int32_t futex_r = futex(uaddr, op, val, timeout, uaddr2, val3);
-    if (futex_r == -1)
+    if (futex_r == -1) {
+        // Check expected test-and-wait race.
+        if (op == FUTEX_WAIT && errno == EWOULDBLOCK)
+            return;
         RCD_SYSCALL_EXCEPTION(futex, exception_fatal);
+    }
 }
 
 static void acid_page_iter_sanity_check(rbtree_node_t** node, size_t* i, size_t n_tree) {
@@ -195,17 +198,17 @@ static inline acid_page_t* acid_page_first(rbtree_t* tree, rbtree_node_t** node,
     *node = rbtree_first(tree);
     *i = 0;
     acid_page_iter_sanity_check(node, i, n_tree);
-    return RBTREE_NODE2ELEM(acid_page_t, node, node);
+    return RBTREE_NODE2ELEM(acid_page_t, node, *node);
 }
 
 static inline acid_page_t* acid_page_iter(rbtree_node_t** node, size_t* i, size_t n_tree) {
     *node = rbtree_next(*node);
     *i = *i + 1;
     acid_page_iter_sanity_check(node, i, n_tree);
-    return RBTREE_NODE2ELEM(acid_page_t, node, node);
+    return RBTREE_NODE2ELEM(acid_page_t, node, *node);
 }
 
-#define foreach_acid_page(tree, n_tree) \
+#define foreach_acid_page(tree, n_tree, page) \
     LET(rbtree_node_t* node) \
     LET(size_t i) \
     for (acid_page_t* page = acid_page_first(tree, &node, &i, n_tree); page != 0; page = acid_page_iter(&node, &i, n_tree))
@@ -259,12 +262,12 @@ void acid_close(acid_h* ah) {
 }
 
 /// Commits all pages in journal to the data file without syncing.
-static void journ_commit(int32_t fd_journal, void* journ_ptr) {
+static void journ_commit(int32_t fd_data, void* journ_ptr) {
     jrnl_idx_t* jidx = journ_ptr;
     void* joffs = journ_ptr + jidx->page0_offs * PAGE_SIZE;
     for (size_t i = 0; i < jidx->n_pages; i++, joffs += PAGE_SIZE) {
         uint64_t page_id = jidx->page_idx[i];
-        strict_pwrite(fd_journal, joffs, PAGE_SIZE, page_id * PAGE_SIZE);
+        strict_pwrite(fd_data, joffs, PAGE_SIZE, page_id * PAGE_SIZE);
     }
 }
 
@@ -300,14 +303,11 @@ static bool journ_verify(void* journ_map, size_t total_jsize, size_t data_size) 
     sha1_context hash_ctx;
     sha1_starts(&hash_ctx);
     sha1_update(&hash_ctx, journ_map + jidx->page0_offs * PAGE_SIZE, jidx->n_pages * PAGE_SIZE);
-    // Move expect hash to stack because it must be zeroed when hashing.
-    uint8_t expect_hash[20];
-    memcpy(expect_hash, jidx->sha1_hash, 20);
-    memset(jidx->sha1_hash, 0, 20);
-    sha1_update(&hash_ctx, journ_map, raw_jidx_size);
+    // Hash the journal, excluding the hash.
+    sha1_update(&hash_ctx, journ_map + sizeof(jidx->sha1_hash), raw_jidx_size - sizeof(jidx->sha1_hash));
     uint8_t actual_hash[20];
     sha1_finish(&hash_ctx, actual_hash);
-    if (memcmp(actual_hash, expect_hash, 20) != 0)
+    if (memcmp(actual_hash, jidx->sha1_hash, 20) != 0)
         return false;
     // Journal is a-ok.
     return true;
@@ -388,7 +388,7 @@ static void acid_sync_commit(acid_h* ah) {
     // We put them in a vector so we can quickly free
     size_t npage_vec_size = sizeof(acid_page_t*) * n_npage_index;
     acid_page_t** npage_vec = vm_mmap_reserve(npage_vec_size, 0);
-    foreach_acid_page(&npage_index, n_npage_index) {
+    foreach_acid_page(&npage_index, n_npage_index, page) {
         // Index page in vector.
         npage_vec[i] = page;
         // Index page id in journal index.
@@ -409,16 +409,18 @@ static void acid_sync_commit(acid_h* ah) {
                     goto page_cowd;
                 }
                 // Inner protected write of pure page.
-                sha1_update(&hash_ctx, page->new_page_cow, PAGE_SIZE);
-                strict_pwrite(ah->fd_journal, ah->base_addr + page->page_id * PAGE_SIZE, PAGE_SIZE, joffs);
+                void* page_addr = ah->base_addr + page->page_id * PAGE_SIZE;
+                sha1_update(&hash_ctx, page_addr, PAGE_SIZE);
+                strict_pwrite(ah->fd_journal, page_addr, PAGE_SIZE, joffs);
                 page->jbuffered = true;
             } atomic_spinlock_unlock(&page->plock);
         }
     }
-    // Write journal index.
-    sha1_update(&hash_ctx, jidx_pages, raw_jidx_size);
+    // Write journal index and deallocate it.
+    sha1_update(&hash_ctx, jidx_pages + sizeof(jidx->sha1_hash), raw_jidx_size - sizeof(jidx->sha1_hash));
     sha1_finish(&hash_ctx, jidx->sha1_hash);
     strict_pwrite(ah->fd_journal, jidx_pages, raw_jidx_size, 0);
+    vm_mmap_unreserve(jidx_pages, jidx_size);
     // Memory map the journal.
     void* journ_map = strict_mmap(0, total_jsize, PROT_READ, MAP_SHARED, ah->fd_journal, 0);
     // Sync the journal.
@@ -434,7 +436,7 @@ static void acid_sync_commit(acid_h* ah) {
     lwt_cancel_fiber_id(commit_wait_fid);
     // Asynchronously commit the journal to the data file.
     assert(journ_verify(journ_map, total_jsize, ah->data_length));
-    journ_commit(ah->fd_journal, journ_map);
+    journ_commit(ah->fd_data, journ_map);
     // Unmap the journal.
     strict_munmap(journ_map, total_jsize);
     // Free the npage index.
@@ -457,7 +459,6 @@ static void acid_sync_commit(acid_h* ah) {
 static void acid_sync_thread(void* arg_ptr) {
     acid_h* ah = arg_ptr;
     lwt_setup_basic_thread(ah->sync_heap, "acid_sync_thread");
-    rsig_thread_signal_mask_reset();
     for (;;) {
         // Consume sync operation.
         sync_op_t op;
@@ -491,6 +492,7 @@ static size_t addr_page_id(acid_h* ah, void* addr) {
 
 static void acid_rsig_segv(void* addr, void* arg_ptr) {
     acid_h* ah = arg_ptr;
+    //x-dbg/ DBGFN(addr);
     // Got segmentation failure when writing to page in range, unlock page and add it as dirty.
     size_t page_id = addr_page_id(ah, addr);
     void* page_addr = (void*) ((uintptr_t) addr & ~0xfff);
@@ -498,12 +500,14 @@ static void acid_rsig_segv(void* addr, void* arg_ptr) {
     // test first since we expect to almost always need to mutate the index.
     atomic_spinlock_lock(&ah->ilock); {
         // Look up page in new page index and execute cow copy if required before we allow page to mutate.
-        acid_page_t* npage = RBTREE_LOOKUP_KEY(acid_page_t, node, &ah->dpage_index, page_id);
+        acid_page_t* npage = RBTREE_LOOKUP_KEY(acid_page_t, node, &ah->npage_index, page_id);
         if (npage != 0) {
-            if (!npage->jbuffered && npage->new_page_cow == 0) {
-                npage->new_page_cow = vm_mmap_reserve(PAGE_SIZE, 0);
-                memcpy(npage->new_page_cow, page_addr, PAGE_SIZE);
-            }
+            atomic_spinlock_lock(&npage->plock); {
+                if (!npage->jbuffered && npage->new_page_cow == 0) {
+                    npage->new_page_cow = vm_mmap_reserve(PAGE_SIZE, 0);
+                    memcpy(npage->new_page_cow, page_addr, PAGE_SIZE);
+                }
+            } atomic_spinlock_unlock(&npage->plock);
         }
         // Look up page in dirty page index.
         acid_page_t* dpage = RBTREE_LOOKUP_KEY(acid_page_t, node, &ah->dpage_index, page_id);
@@ -511,8 +515,12 @@ static void acid_rsig_segv(void* addr, void* arg_ptr) {
             // Page not already indexed, index it as dirty.
             dpage = alloc_acid_page();
             dpage->page_id = page_id;
+            dpage->jbuffered = false;
+            dpage->new_page_cow = 0;
+            dpage->plock = 0;
             if (rbtree_insert(&dpage->node, &ah->dpage_index) != 0)
                 throw("dirty page index is corrupt", exception_fatal);
+            ah->n_dpage_index++;
             // Allow page to be freely mutated via the MMU.
             strict_mprotect(page_addr, PAGE_SIZE, PROT_READ | PROT_WRITE);
         } else {
@@ -568,7 +576,7 @@ acid_h* acid_open(fstr_t data_path, fstr_t journal_path, void* base_addr, size_t
         // Check if the journal contains uncommited changes.
         if (journ_verify(journ_map, total_jsize, ah->data_length)) {
             // Has uncommited changes from sudden shutdown. Apply them now.
-            journ_commit(ah->fd_journal, journ_map);
+            journ_commit(ah->fd_data, journ_map);
             // Wait for data file to sync.
             strict_fsync(ah->fd_data);
         }
@@ -580,6 +588,8 @@ acid_h* acid_open(fstr_t data_path, fstr_t journal_path, void* base_addr, size_t
         // We can now safely execute a requested data resize.
         if (new_length != 0 && ah->data_length != new_length) {
             strict_ftruncate(ah->fd_data, new_length);
+            strict_fsync(ah->fd_data);
+            ah->data_length = new_length;
         }
         // Map memory.
         ah->base_addr = strict_mmap(base_addr, ah->data_length, PROT_READ, MAP_PRIVATE, ah->fd_data, 0);
@@ -590,7 +600,8 @@ acid_h* acid_open(fstr_t data_path, fstr_t journal_path, void* base_addr, size_t
         int32_t clone_flags = lwt_get_thread_clone_flags();
         ah->sync_stack = vm_mmap_reserve(VM_SYNC_THREAD_STACK_SIZE, 0);
         ah->sync_heap = vm_heap_create(0);
-        int32_t clone_r = lwt_start_new_thread(acid_sync_thread, ah->sync_stack, clone_flags, ah, &ah->sync_physt);
+        void* stack_entry_point = (void*) vm_align_floor((uintptr_t) ah->sync_stack + VM_SYNC_THREAD_STACK_SIZE, VM_ALLOC_ALIGN);
+        int32_t clone_r = lwt_start_new_thread(acid_sync_thread, stack_entry_point, clone_flags, ah, &ah->sync_physt);
         if (clone_r == -1)
             RCD_SYSCALL_EXCEPTION(clone, exception_io);
         ah->sync_pid = clone_r;
@@ -605,7 +616,7 @@ void acid_expand(acid_h* ah, size_t new_length) {
     // Round new_length up to nearest page.
     new_length = ((new_length + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
     // We are done if expanding to a length that is not greater.
-    if (ah->data_length <= new_length)
+    if (ah->data_length >= new_length)
         return;
     // Do expand. We lock index during critical operations.
     atomic_spinlock_lock(&ah->ilock); {
