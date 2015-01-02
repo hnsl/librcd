@@ -61,6 +61,7 @@ void rcd_self_test_vsnprintf();
 void rcd_self_test_vfscanf();
 void rcd_self_test_pthread();
 void rcd_self_test_tls();
+void rcd_self_test_acid();
 
 void ipc_test_post_execve();
 
@@ -100,6 +101,8 @@ void rcd_advanced_self_test(list(fstr_t)* main_args, list(fstr_t)* main_env) {
     rcd_self_test_pthread();
     rio_debug("[rcd_advanced_self_test]: testing tls\n");
     rcd_self_test_tls();
+    rio_debug("[rcd_advanced_self_test]: testing acid\n");
+    rcd_self_test_acid();
     // All test completed.
     sub_heap_e(rio_debug("rcd self-test: all tests was successful\n"));
     lwt_exit(0);
