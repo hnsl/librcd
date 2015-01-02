@@ -1,7 +1,7 @@
 # librcd
 *A library for Rapid {C|Concurrency|Correct} Development*
 
-Librcd is a new C standard library and POSIX replacement for x86_64 Linux. It comes with some custom syntax, and makes threading, strings, error handling, memory allocation and IO easy. Here's an small example:
+Librcd is a new C standard library and POSIX replacement for x86_64 Linux. It comes with some custom syntax, and makes threading, strings, error handling, memory allocation and IO easy. Here's a small example:
 
 ```c
 #include "rcd.h"
@@ -33,7 +33,7 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env) {
 ```
 XXX replace with something smaller and more interesting. Maybe strings + memory allocation + exceptions?
 
-Librcd is **highly non-portable**, and meant to be used mainly for server development, in a controlled environment. Only x86_64 Linux is supported, and this is unlikely to change in the near future (#2). Due to license conflicts, binaries compiled with librcd cannot currently be legally distributed (#1).
+Librcd is **highly non-portable**, and meant to be used mainly for server development, in a controlled environment. Only x86_64 Linux is supported, and this is unlikely to change in the near future ([issue #2](https://github.com/jumpstarter-io/librcd/issues/2)). Due to license conflicts, binaries compiled with librcd cannot currently be legally distributed ([issue #1](https://github.com/jumpstarter-io/librcd/issues/1)).
 
 XXX toolchain, segmented stacks.
 
