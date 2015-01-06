@@ -1011,36 +1011,36 @@ vm_heap_t* vm_heap_release(vm_heap_t* heap, size_t n_returned_allocs, void* retu
 
 #if defined(VM_DEBUG_LEAK)
 typedef struct acx_acc {
-    /// Bytes resident by this allocation context.
-    size_t res_byte;
+    /// Bytes virtually allocated by this allocation context.
+    size_t virt_byte;
     /// Allocation context.
     vm_alloc_ctx_t* acx;
 } acx_acc_t;
 
 static int32_t cmp_acx_acc(const void* a, const void* b) {
     const acx_acc_t *acx_a = a, *acx_b = b;
-    return acx_b->res_byte > acx_a->res_byte? 1: (acx_b->res_byte < acx_a->res_byte? -1: 0);
+    return acx_b->virt_byte > acx_a->virt_byte? 1: (acx_b->virt_byte < acx_a->virt_byte? -1: 0);
 }
 
 void vm_debug_print_leak_info(int32_t fd, size_t top_n) {
     // Read acx count outside lock.
     size_t acx_count = acx_hmap.hm.count;
     // Allocate vector for acx accounting.
-    size_t acx_acv_len = sizeof(acx_acc_t) * acx_count;
-    acx_acc_t* acx_acv = vm_mmap_reserve(acx_acv_len, 0);
-    // Go through the leak contexts and move them to the acx_acv.
+    size_t acx_vec_len = sizeof(acx_acc_t) * acx_count;
+    acx_acc_t* acx_vec = vm_mmap_virterve(acx_vec_len, 0);
+    // Go through the leak contexts and move them to the acx_vec.
     vm_alloc_ctx_t* acx = acx_list;
     for (size_t i = 0; i < acx_count; i++) {
-        acx_acv[i].acx = acx;
+        acx_vec[i].acx = acx;
         acx = acx->next;
     }
-    // Do resident accounting on live statistics.
+    // Do accounting on live statistics.
     for (size_t i = 0; i < acx_count; i++) {
-        vm_alloc_ctx_t* acx = acx_acv[i].acx;
-        acx_acv[i].res_byte = (acx->n_allocs - acx->n_frees) * acx->alloc_size;
+        vm_alloc_ctx_t* acx = acx_vec[i].acx;
+        acx_vec[i].virt_byte = (acx->n_allocs - acx->n_frees) * acx->alloc_size;
     }
-    // Sort the allocation contexts after resident.
-    sort(acx_acv, acx_count, sizeof(acx_acc_t), cmp_acx_acc, 0);
+    // Sort the allocation contexts after virt alloc.
+    sort(acx_vec, acx_count, sizeof(acx_acc_t), cmp_acx_acc, 0);
     // Print the top_n.
     fstr_t nbuf;
     FSTR_STACK_DECL(nbuf, 0x20);
@@ -1048,11 +1048,11 @@ void vm_debug_print_leak_info(int32_t fd, size_t top_n) {
         fstr_t buf;
         FSTR_STACK_DECL(buf, PAGE_SIZE * 2);
         fstr_t btail = buf;
-        vm_alloc_ctx_t* acx = acx_acv[i].acx;
+        vm_alloc_ctx_t* acx = acx_vec[i].acx;
         fstr_cpy_over(btail, "** VM ALLOC CTX #", &btail, 0);
         fstr_cpy_over(btail, fstr_serial_uint(nbuf, i, 10), &btail, 0);
         fstr_cpy_over(btail, ", RES: [", &btail, 0);
-        fstr_cpy_over(btail, fstr_serial_uint(nbuf, acx_acv[i].res_byte, 10), &btail, 0);
+        fstr_cpy_over(btail, fstr_serial_uint(nbuf, acx_vec[i].virt_byte, 10), &btail, 0);
         fstr_cpy_over(btail, " b] , ALLOC_SIZE: [", &btail, 0);
         fstr_cpy_over(btail, fstr_serial_uint(nbuf, acx->alloc_size, 10), &btail, 0);
         fstr_cpy_over(btail, " b], N_ALLOCS: [", &btail, 0);
@@ -1068,7 +1068,7 @@ void vm_debug_print_leak_info(int32_t fd, size_t top_n) {
         rio_direct_write(fd, out, 0);
     }
     // Deallocate the vector.
-    vm_mmap_unreserve(acx_acv, acx_acv_len);
+    vm_mmap_unreserve(acx_vec, acx_vec_len);
 }
 #else
 void vm_debug_print_leak_info(int32_t fd, size_t top_n) {
