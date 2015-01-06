@@ -20,9 +20,12 @@
  * allocation so slow and non-scalable that it is almost useless. Places
  * all allocations on their own page and never recycles virtual memory.
  * Require VM_DEBUG_GUARD_ZONE. Negates the effects of the above config.
+ *
+ * VM_DEBUG_LEAK: Tracks contexts that memory is allocated in.
  */
 
 #include "rcd.h"
+#include "hmap.h"
 #include "atomic.h"
 #include "vm-internal.h"
 #include "linux.h"
@@ -142,6 +145,38 @@ struct vm_heap {
     vm_heap_alloc_hdr_t* alloc_headers;
 };
 
+#if defined(VM_DEBUG_LEAK)
+typedef struct vm_alloc_ctx {
+    // The hash id is a function of bt_ctx and alloc_size.
+    uint64_t raw_hash_id;
+    fstr_t bt_ctx;
+    size_t alloc_size;
+    uint64_t n_allocs;
+    uint64_t n_frees;
+    struct vm_alloc_ctx* prev;
+    struct vm_alloc_ctx* next;
+} vm_alloc_ctx_t;
+
+static inline uint64_t acx_nohash(void* key, uint64_t salt) {
+    uint64_t* hash_ptr = key;
+    return *hash_ptr;
+}
+
+HMAP_DEFINE_ABSTRACT_TYPE(acx, uint64_t, acx_nohash, 0, vm_alloc_ctx_t*, false, HMAP_DFL_N_PEAK_EST, HMAP_DFL_MAX_FILL_R, false);
+
+/// Hash map of all allocation contexts.
+static hmap_acx_t acx_hmap;
+
+/// True if acx_hmap has been initialized.
+static bool acx_hmap_is_init = false;
+
+/// Linked list of all allocation contexts.
+static vm_alloc_ctx_t* acx_list = 0;
+
+//// Lock for acx data structures.
+static int8_t acx_lock = 0;
+#endif
+
 vm_state_t vm_state = {
     .pool_mmap_end_2e = VM_POOL_MMAP_INIT_SIZE_2E,
 };
@@ -201,7 +236,10 @@ static uint8_t vm_page_size_lines_2e() {
 
 static void vm_panic() {
     VM_STDERR_WRITE_LINE("!!! LIBRCD/VM PANIC !!!\n");
-    lwt_write_backtrace_archaic(STDERR_FILENO);
+    fstr_t buffer;
+    FSTR_STACK_DECL(buffer, PAGE_SIZE);
+    fstr_t bt = lwt_get_backtrace_archaic(buffer);
+    write(STDERR_FILENO, bt.str, bt.len);
     abort();
 }
 
@@ -486,6 +524,11 @@ void* vm_mmap_reserve(size_t min_size, size_t* size_out) {
     size_t user_size = min_size;
     if (user_size >= PAGE_SIZE)
         min_size += PAGE_SIZE * 2;
+#elif defined(VM_DEBUG_LEAK)
+    size_t user_size = min_size;
+    user_size = vm_align_ceil(user_size, VM_ALLOC_ALIGN);
+    size_t actx_size = vm_align_ceil(sizeof(vm_alloc_ctx_t*), VM_ALLOC_ALIGN);
+    min_size = user_size + actx_size;
 #elif defined(DEBUG)
     size_t user_size = min_size;
 #endif
@@ -521,6 +564,61 @@ void* vm_mmap_reserve(size_t min_size, size_t* size_out) {
         if (size_out != 0)
             *size_out = aligned_user_size;
     }
+#elif defined(VM_DEBUG_LEAK)
+    // Resolve acx, possibly allocating a new.
+    vm_alloc_ctx_t** acx_ptr = ptr;
+    int32_t my_tid = lwt_get_thread_pid();
+    static int32_t lock_tid = -1;
+    if (lock_tid != my_tid) {
+        vm_alloc_ctx_t* acx;
+        atomic_spinlock_lock(&acx_lock); {
+            // Detect recursion.
+            lock_tid = my_tid;
+            // Init acx hmap if not done so.
+            if (!acx_hmap_is_init) {
+                hmap_acx_init(&acx_hmap);
+                acx_hmap_is_init = true;
+            }
+            // Get hash id of allocation.
+            fstr_t bt_ctx_buf;
+            FSTR_STACK_DECL(bt_ctx_buf, PAGE_SIZE);
+            fstr_t bt_ctx = lwt_get_backtrace_archaic(bt_ctx_buf);
+            uint64_t raw_hash_id = 0;
+            raw_hash_id = hmap_murmurhash_64a(bt_ctx.str, bt_ctx.len, raw_hash_id);
+            raw_hash_id = hmap_murmurhash_64a(&user_size, sizeof(user_size), raw_hash_id);
+            // Lookup hash id.
+            hmap_acx_lookup_t lu = hmap_acx_lookup(&acx_hmap, raw_hash_id, true);
+            if (hmap_acx_found(lu)) {
+                acx = hmap_acx_value(lu);
+                // Just increment total allocs.
+                acx->n_allocs++;
+            } else {
+                acx = vm_mmap_reserve(sizeof(vm_alloc_ctx_t), 0);
+                acx->raw_hash_id = raw_hash_id;
+                // Heap allocate the bt_ctx.
+                acx->bt_ctx.len = bt_ctx.len;
+                acx->bt_ctx.str = vm_mmap_reserve(bt_ctx.len, 0);
+                fstr_cpy_over(acx->bt_ctx, bt_ctx, 0, 0);
+                acx->alloc_size = user_size;
+                acx->n_allocs = 1;
+                acx->n_frees = 0;
+                // Insert the acx.
+                DL_APPEND(acx_list, acx);
+                hmap_acx_insert(&acx_hmap, lu, raw_hash_id, acx);
+            }
+            // Undetect recursion.
+            lock_tid = -1;
+        } atomic_spinlock_unlock(&acx_lock);
+        // Reference the acx.
+        *acx_ptr = acx;
+    } else {
+        // Recursive allocation, don't track.
+        *acx_ptr = 0;
+    }
+    // Adjust pointer and size out to hide acx ptr.
+    ptr += actx_size;
+    if (size_out != 0)
+        *size_out = *size_out - actx_size;
 #endif
 #if defined(DEBUG) && !defined(VM_DEBUG_PAGE_AND_NOREUSE_ALLOCS)
     if (user_size < PAGE_SIZE) {
@@ -564,6 +662,21 @@ void vm_mmap_unreserve(void* ptr, size_t size) {
         vm_debug_mprotect(ptr + vm_page_align_ceil(user_size), PAGE_SIZE, PROT_READ | PROT_WRITE);
         ptr -= PAGE_SIZE;
         vm_debug_mprotect(ptr, PAGE_SIZE, PROT_READ | PROT_WRITE);
+    }
+#elif defined(VM_DEBUG_LEAK)
+    size_t user_size = size;
+    user_size = vm_align_ceil(user_size, VM_ALLOC_ALIGN);
+    size_t actx_size = vm_align_ceil(sizeof(vm_alloc_ctx_t*), VM_ALLOC_ALIGN);
+    user_size += actx_size;
+    ptr -= actx_size;
+    size = user_size;
+    // Update acx statistics.
+    vm_alloc_ctx_t* acx = *((void**) ptr);
+    while (acx != 0) {
+        uint64_t oldval = acx->n_frees;
+        uint64_t newval = oldval + 1;
+        if (atomic_cas_uint64(&acx->n_frees, oldval, newval))
+            break;
     }
 #elif defined(DEBUG)
     size_t user_size = size;
@@ -895,3 +1008,71 @@ vm_heap_t* vm_heap_release(vm_heap_t* heap, size_t n_returned_allocs, void* retu
     // Return the inner parent heap.
     return parent_heap;
 }
+
+#if defined(VM_DEBUG_LEAK)
+typedef struct acx_acc {
+    /// Bytes resident by this allocation context.
+    size_t res_byte;
+    /// Allocation context.
+    vm_alloc_ctx_t* acx;
+} acx_acc_t;
+
+static int32_t cmp_acx_acc(const void* a, const void* b) {
+    const acx_acc_t *acx_a = a, *acx_b = b;
+    return acx_b->res_byte > acx_a->res_byte? 1: (acx_b->res_byte < acx_a->res_byte? -1: 0);
+}
+
+void vm_debug_print_leak_info(int32_t fd, size_t top_n) {
+    // Read acx count outside lock.
+    size_t acx_count = acx_hmap.hm.count;
+    // Allocate vector for acx accounting.
+    size_t acx_acv_len = sizeof(acx_acc_t) * acx_count;
+    acx_acc_t* acx_acv = vm_mmap_reserve(acx_acv_len, 0);
+    // Go through the leak contexts and move them to the acx_acv.
+    vm_alloc_ctx_t* acx = acx_list;
+    for (size_t i = 0; i < acx_count; i++) {
+        acx_acv[i].acx = acx;
+        acx = acx->next;
+    }
+    // Do resident accounting on live statistics.
+    for (size_t i = 0; i < acx_count; i++) {
+        vm_alloc_ctx_t* acx = acx_acv[i].acx;
+        acx_acv[i].res_byte = (acx->n_allocs - acx->n_frees) * acx->alloc_size;
+    }
+    // Sort the allocation contexts after resident.
+    sort(acx_acv, acx_count, sizeof(acx_acc_t), cmp_acx_acc, 0);
+    // Print the top_n.
+    fstr_t nbuf;
+    FSTR_STACK_DECL(nbuf, 0x20);
+    for (ssize_t i = MIN(top_n, acx_count); i >= 0; i--) {
+        fstr_t buf;
+        FSTR_STACK_DECL(buf, PAGE_SIZE * 2);
+        fstr_t btail = buf;
+        vm_alloc_ctx_t* acx = acx_acv[i].acx;
+        fstr_cpy_over(btail, "** VM ALLOC CTX #", &btail, 0);
+        fstr_cpy_over(btail, fstr_serial_uint(nbuf, i, 10), &btail, 0);
+        fstr_cpy_over(btail, ", RES: [", &btail, 0);
+        fstr_cpy_over(btail, fstr_serial_uint(nbuf, acx_acv[i].res_byte, 10), &btail, 0);
+        fstr_cpy_over(btail, " b] , ALLOC_SIZE: [", &btail, 0);
+        fstr_cpy_over(btail, fstr_serial_uint(nbuf, acx->alloc_size, 10), &btail, 0);
+        fstr_cpy_over(btail, " b], N_ALLOCS: [", &btail, 0);
+        fstr_cpy_over(btail, fstr_serial_uint(nbuf, acx->n_allocs, 10), &btail, 0);
+        fstr_cpy_over(btail, "], N_FREES: ", &btail, 0);
+        fstr_cpy_over(btail, fstr_serial_uint(nbuf, acx->n_frees, 10), &btail, 0);
+        fstr_cpy_over(btail, "], ID: [", &btail, 0);
+        fstr_cpy_over(btail, fstr_serial_uint(nbuf, acx->raw_hash_id, 16), &btail, 0);
+        fstr_cpy_over(btail, "]\n", &btail, 0);
+        fstr_cpy_over(btail, acx->bt_ctx, &btail, 0);
+        fstr_cpy_over(btail, "\n====================================================\n", &btail, 0);
+        fstr_t out = fstr_detail(buf, btail);
+        rio_direct_write(fd, out, 0);
+    }
+    // Deallocate the vector.
+    vm_mmap_unreserve(acx_acv, acx_acv_len);
+}
+#else
+void vm_debug_print_leak_info(int32_t fd, size_t top_n) {
+    fstr_t out = "vm was not built with VM_DEBUG_LEAK";
+    write(fd, out.str, out.len);
+}
+#endif

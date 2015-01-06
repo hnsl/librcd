@@ -61,7 +61,7 @@ struct lwt_physical_thread;
 
 int32_t lwt_start_new_thread(void (*func)(void* arg_ptr), void* stack, int flags, void* arg_ptr, struct lwt_physical_thread** out_phys_thread);
 
-void lwt_write_backtrace_archaic(int32_t fd);
+fstr_t lwt_get_backtrace_archaic(fstr_t buf);
 
 extern const size_t lwt_physical_thread_size;
 

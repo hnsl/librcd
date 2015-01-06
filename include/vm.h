@@ -79,6 +79,10 @@ void* vm_static_alloc(void** free_list_top, int8_t* sync_lock, size_t element_si
 /// vm_static_alloc().
 void vm_static_free(void** free_list_top, int8_t* sync_lock, void* element);
 
+/// Prints debug memory leak information.
+/// An error message is printed if vm was not built with VM_DEBUG_LEAK.
+void vm_debug_print_leak_info(int32_t fd, size_t top_n);
+
 /// A destructor callback. The destructors must be prepared to run in the context of:
 /// - Exception unwinding.
 /// - Freeing memory.

@@ -70,6 +70,9 @@ void __assert_fail(fstr_t expr, fstr_t file, int line, fstr_t function);
 /// Translates a pointer to thread local static memory.
 void* lwt_get_thread_static_ptr(const void* ptr);
 
+/// Returns linux pid of current thread.
+int32_t lwt_get_thread_pid();
+
 /// Cancels a fiber. Has no effect if the fiber is already canceled or doesn't exist.
 void lwt_cancel_fiber_id(rcd_fid_t fiber_id);
 

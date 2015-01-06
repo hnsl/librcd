@@ -853,6 +853,11 @@ void* lwt_get_thread_static_ptr(const void* ptr) {
     return phys_thread->thread_static_memory + ((void*) ptr - (void*) &__start_librcd_thread_static_memory);
 }
 
+int32_t lwt_get_thread_pid() {
+    lwt_physical_thread_t* phys_thread = LWT_PHYS_THREAD;
+    return phys_thread->pid;
+}
+
 /// Fiber finalization that is run by fiber when it shuts down.
 /// To avoid a permanent return pointer in all root stacklets the control flow of the fiber is manipulated directly to run it.
 noret static void lwt_fiber_finalize() {
@@ -2663,7 +2668,7 @@ static list(void*)* lwt_get_backtrace() {
     return lwt_get_backtrace_for_frame_ptr(0, 2);
 }
 
-static void write_bt_line_archaic(int32_t fd, void* backtrace_addr, size_t n) {
+static void get_bt_line_archaic(fstr_t* btail, void* backtrace_addr, size_t n) {
     fstr_t prefix = "#";
     fstr_t colon_oh_x = ": 0x";
     fstr_t space = " ";
@@ -2672,24 +2677,24 @@ static void write_bt_line_archaic(int32_t fd, void* backtrace_addr, size_t n) {
     fstr_t suffix = "\n";
     fstr_t number_buffer;
     FSTR_STACK_DECL(number_buffer, 2 * sizeof(void*));
-    write(fd, prefix.str, prefix.len);
+    fstr_cpy_over(*btail, prefix, btail, 0);
     fstr_t num = fstr_serial_uint(number_buffer, n, 10);
-    write(fd, num.str, num.len);
-    write(fd, colon_oh_x.str, colon_oh_x.len);
+    fstr_cpy_over(*btail, num, btail, 0);
+    fstr_cpy_over(*btail, colon_oh_x, btail, 0);
     fstr_t backtrace_addr_hex = fstr_serial_uint(number_buffer, (uint64_t) backtrace_addr, 16);
-    write(fd, backtrace_addr_hex.str, backtrace_addr_hex.len);
-    write(fd, space.str, space.len);
+    fstr_cpy_over(*btail, backtrace_addr_hex, btail, 0);
+    fstr_cpy_over(*btail, space, btail, 0);
     backtrace_addr--;
     fstr_t func;
     if (!rfl_addr_to_func(backtrace_addr, &func))
         func = "?";
-    write(fd, func.str, func.len);
-    write(fd, in_space.str, in_space.len);
+    fstr_cpy_over(*btail, func, btail, 0);
+    fstr_cpy_over(*btail, in_space, btail, 0);
     fstr_t file;
     if (!rfl_addr_to_func(backtrace_addr, &file))
         file = "?";
-    write(fd, file.str, file.len);
-    write(fd, colon.str, colon.len);
+    fstr_cpy_over(*btail, file, btail, 0);
+    fstr_cpy_over(*btail, colon, btail, 0);
     uint32_t line;
     fstr_t line_str;
     if (rfl_addr_to_line(backtrace_addr, &line)) {
@@ -2697,16 +2702,17 @@ static void write_bt_line_archaic(int32_t fd, void* backtrace_addr, size_t n) {
     } else {
         line_str = "?";
     }
-    write(fd, line_str.str, line_str.len);
-    write(fd, suffix.str, suffix.len);
+    fstr_cpy_over(*btail, line_str, btail, 0);
+    fstr_cpy_over(*btail, suffix, btail, 0);
 }
 
-/// Like lwt_get_backtrace() but prints the backtrace directly to a file
-/// descriptor instead without doing any heap allocations so it's suitable
-/// to call from any context.
-void lwt_write_backtrace_archaic(int32_t fd) {
+/// Like lwt_get_backtrace() but prints the backtrace directly to a buffer
+/// instead without doing any heap allocations so it's suitable to call from
+/// any context.
+fstr_t lwt_get_backtrace_archaic(fstr_t buf) {
     fstr_t header = "archaic librcd backtrace:\n";
-    write(fd, header.str, header.len);
+    fstr_t btail = buf;
+    fstr_cpy_over(btail, header, &btail, 0);
     for (size_t ctx = 0; ctx < 2; ctx++) {
         void* current_stack_ptr;
         if (ctx == 0) {
@@ -2721,9 +2727,9 @@ void lwt_write_backtrace_archaic(int32_t fd) {
             current_stack_ptr = (void*) pt->stack_pinj_jmp_buf.rbp;
             // Write backtrace separator:
             fstr_t bt_sep = "--\n";
-            write(fd, bt_sep.str, bt_sep.len);
+            fstr_cpy_over(btail, bt_sep, &btail, 0);
             // Write the rip line.
-            write_bt_line_archaic(fd, (void*) pt->stack_pinj_jmp_buf.rip, 0);
+            get_bt_line_archaic(&btail, (void*) pt->stack_pinj_jmp_buf.rip, 0);
         }
         for (size_t i = ctx; current_stack_ptr != 0; i++) {
             // Check if current stack pointer is out of range (end of call stack).
@@ -2732,11 +2738,12 @@ void lwt_write_backtrace_archaic(int32_t fd) {
             if (backtrace_addr == 0)
                 break;
             // Write backtrace line.
-            write_bt_line_archaic(fd, backtrace_addr, i);
+            get_bt_line_archaic(&btail, backtrace_addr, i);
             // Iterate to next stack pointer.
             current_stack_ptr = stack_items[0];
         }
     }
+    return fstr_detail(buf, btail);
 }
 
 static rcd_exception_t* lwt_direct_copy_exception(rcd_exception_t* exception, lwt_heap_t* exception_heap) {
