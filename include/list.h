@@ -155,11 +155,14 @@ typedef struct rcd_abstract_dict {
 
 #define __dict_get(set, type, fstr_key) ({ \
     fstr_t __cmp_key = fstr_key; \
-    char __cmp_mem[sizeof(rcd_abstract_dict_element_t) + __cmp_key.len]; \
-    rcd_abstract_dict_element_t* __cmp_elem = (void*) __cmp_mem; \
-    __cmp_elem->key.len = __cmp_key.len; \
-    memcpy(__cmp_elem->key.str, __cmp_key.str, __cmp_key.len); \
-    rbtree_node_t* __node_ptr = rbtree_lookup(&__cmp_elem->node, &_abstract_dict->tree); \
+    rbtree_node_t* __node_ptr; \
+    sub_heap { \
+        void* __cmp_mem = lwt_alloc_new(sizeof(rcd_abstract_dict_element_t) + __cmp_key.len); \
+        rcd_abstract_dict_element_t* __cmp_elem = __cmp_mem; \
+        __cmp_elem->key.len = __cmp_key.len; \
+        memcpy(__cmp_elem->key.str, __cmp_key.str, __cmp_key.len); \
+        __node_ptr = rbtree_lookup(&__cmp_elem->node, &_abstract_dict->tree); \
+    } \
     RBTREE_NODE2ELEM(rcd_abstract_dict_element_t, node, __node_ptr); \
 })
 
