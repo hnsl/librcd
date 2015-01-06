@@ -2691,7 +2691,7 @@ static void get_bt_line_archaic(fstr_t* btail, void* backtrace_addr, size_t n) {
     fstr_cpy_over(*btail, func, btail, 0);
     fstr_cpy_over(*btail, in_space, btail, 0);
     fstr_t file;
-    if (!rfl_addr_to_func(backtrace_addr, &file))
+    if (!rfl_addr_to_file(backtrace_addr, &file))
         file = "?";
     fstr_cpy_over(*btail, file, btail, 0);
     fstr_cpy_over(*btail, colon, btail, 0);
