@@ -258,7 +258,6 @@ static void vm_debug_mprotect(void* ptr, size_t len, int32_t flags) {
         VM_CORE_ERROR("librcd/vm_debug_mprotect: mprotect failed");
 }
 
-__attribute__((hot))
 static void vm_free_list_push(void* start_ptr, uint8_t lines_2e, bool already_locked_free_vm_list) {
     assert(start_ptr != 0);
     if (lines_2e > VM_MAX_SIZE_2E || lines_2e == 0)
@@ -319,7 +318,6 @@ static void vm_free_list_push(void* start_ptr, uint8_t lines_2e, bool already_lo
     }
 }
 
-__attribute__((hot))
 static void vm_free_mmap_index(vm_mmap_index_t* mmap_index) {
     // We cannot free mmap indexes which are not separate.
     if (mmap_index->start_ptr == (void*) mmap_index)
@@ -331,7 +329,6 @@ static void vm_free_mmap_index(vm_mmap_index_t* mmap_index) {
     } atomic_spinlock_unlock(&vm_state.free_map_ranges_lock);
 }
 
-__attribute__((hot))
 static void* vm_free_list_pop(uint8_t lines_2e) {
     if (lines_2e > VM_MAX_SIZE_2E || lines_2e == 0)
         VM_CORE_ERROR("librcd/vm_free_list_pop: got invalid chunk size");
@@ -501,7 +498,6 @@ void vm_janitor_thread(void* arg_ptr) {
     }
 }
 
-__attribute__((hot))
 void* vm_mmap_reserve(size_t min_size, size_t* size_out) {
     if (min_size == 0)
         return 0;
@@ -629,7 +625,6 @@ void* vm_mmap_reserve(size_t min_size, size_t* size_out) {
     return ptr;
 }
 
-__attribute__((hot))
 void vm_mmap_unreserve(void* ptr, size_t size) {
     if (size == 0)
         return;
@@ -788,7 +783,6 @@ static vm_csheap_t vm_csheap_clear() {
     return (vm_csheap_t) {0};
 }
 
-__attribute__((hot))
 void* vm_heap_alloc_destructable(vm_heap_t* heap, size_t min_size, size_t* size_out, vm_destructor_t destructor_fn) {
     assert(heap != 0);
     if (min_size == 0)
@@ -824,7 +818,6 @@ void* vm_heap_alloc_destructable(vm_heap_t* heap, size_t min_size, size_t* size_
     return ((void*) alloc_header) + header_size;
 }
 
-__attribute__((hot))
 void* vm_heap_alloc(vm_heap_t* heap, size_t min_size, size_t* size_out) {
     return vm_heap_alloc_destructable(heap, min_size, size_out, 0);
 }
@@ -945,7 +938,6 @@ static inline bool vm_heap_get_in_use(vm_heap_t* heap) {
     return (((uintptr_t) heap->parent) & 0x1) != 0;
 }
 
-__attribute__((hot))
 static inline void vm_heap_toggle_in_use(vm_heap_t* heap, bool enable) {
     bool is_in_use = vm_heap_get_in_use(heap);
     if (enable) {
@@ -959,7 +951,6 @@ static inline void vm_heap_toggle_in_use(vm_heap_t* heap, bool enable) {
     }
 }
 
-__attribute__((hot))
 vm_heap_t* vm_heap_create(vm_heap_t* parent_heap) {
     if (parent_heap != 0)
         vm_heap_toggle_in_use(parent_heap, true);
@@ -969,7 +960,6 @@ vm_heap_t* vm_heap_create(vm_heap_t* parent_heap) {
     return heap;
 }
 
-__attribute__((hot))
 vm_heap_t* vm_heap_release(vm_heap_t* heap, size_t n_returned_allocs, void* returned_allocs[]) {
     // If the parent_heap 1 lsb is set vm_heap_toggle_in_use() will fail anyway.
     vm_heap_t* parent_heap = heap->parent;
