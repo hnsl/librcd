@@ -1816,7 +1816,7 @@ __attribute__((deprecated)) pid_t fork();
 /// its definition makes deprecated assumptions about the process that are not true in librcd, so it would not be possible to write an implementation.
 __attribute__((deprecated)) pid_t vfork();
 int execve(const char* filename, char* const argv[], char* const envp[]);
-void _exit(int status);
+noret void _exit(int status);
 int wait4(pid_t pid, int* status, int options, struct rusage* rusage);
 int kill(pid_t pid, int sig);
 int uname(struct utsname* buf);
