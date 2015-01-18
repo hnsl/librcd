@@ -5,9 +5,8 @@
 /* See the COPYING file distributed with this project for more information. */
 
 #include "rcd.h"
+#include "musl.h"
 #include "linux.h"
-
-long syscall(long n, ...);
 
 ssize_t read(int fd, void* buf, size_t count) {
     return (ssize_t) syscall(SYS_read, fd, buf, count);
@@ -235,7 +234,7 @@ int execve(const char* filename, char* const argv[], char* const envp[]) {
     return (int) syscall(SYS_execve, filename, argv, envp);
 }
 
-void _exit(int status) {
+noret void _exit(int status) {
     syscall(SYS_exit, status);
     __asm("hlt");
     unreachable();

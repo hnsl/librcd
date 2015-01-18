@@ -213,6 +213,9 @@ exit(call_user_func(function() {
         "src/fenv/fesetexceptflag.c",
         "src/fenv/fesetround.c",
         "src/fenv/feupdateenv.c",
+        "src/internal/syscall.h", // We want to allow anyone including musl to be capable of generating fast inline
+                                  // syscalls. The standard syscall() function is a vararg function and extremely
+                                  // expensive in terms of stack usage.
         "src/locale/catclose.c",
         "src/locale/catgets.c",
         "src/locale/catopen.c",

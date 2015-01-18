@@ -65,8 +65,6 @@ struct rio_epoll {
 
 const int32_t std_stream_numbers[] = {STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
 
-long syscall(long n, ...);
-
 int32_t rio_get_fd_read(rio_t* rio) {
     return (rio->type == rio_type_pipe)? rio->xfer.pipe.fd_read: (rio->type != rio_type_abstract && rio->xfer.duplex.is_readable? rio->xfer.duplex.fd: -1);
 }
