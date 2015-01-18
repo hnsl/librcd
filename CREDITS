@@ -10,7 +10,7 @@
 
 N: Caj Larsson
 E: caj@jumpstarter.io
-D: rio & fstr contributions
+D: rio time, various rio & fstr contributions
 
 N: Simon Lindholm
 E: simon@jumpstarter.io
@@ -18,7 +18,7 @@ D: eio, generics, improved musl gen, various fixes
 
 N: Daniel Lundqvist
 E: thorwald@jumpstarter.io
-D: 1st version of rio
+D: polarssl generator, 1st version of rio
 
 N: Jan Stefan Oswald Bror Johann Wilhelm Judas Nyman
 E: stefan@jumpstarter.io
