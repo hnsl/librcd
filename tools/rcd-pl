@@ -202,9 +202,6 @@ def main(argv):
             addr_file_map = trim_addr_map(addr_file_map, 'file')
             addr_func_map = trim_addr_map(addr_func_map, 'func')
             # Create binary fast sorted lookup table structures and link them together.
-            addr_line_map_n = len(addr_line_map)
-            addr_file_map_n = len(addr_file_map)
-            addr_func_map_n = len(addr_func_map)
             strings_blob = {'refs': {}, 'io': BytesIO(), 'addr': addr_index_ptr_base + rfl_addr_index_t.sizeof()}
             for ent in addr_file_map:
                 ent['file'] = strings_blob_ref(strings_blob, ent['file'])
