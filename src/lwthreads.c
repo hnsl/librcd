@@ -395,19 +395,6 @@ HMAP_DEFINE_TYPE(fid, rcd_fid_t, lwt_fiber_t*, false, 1000, 0.5, false);
 // Hash map types declarations that map a fd to a lwt_blocking_fd_t*.
 HMAP_DEFINE_TYPE(bfd, int32_t, lwt_blocking_fd_t*, false, 1000, 0.5, false);
 
-/// Defined by the auto linker. First address in the librcd_app_constructors section.
-extern const void* __start_librcd_app_constructors;
-/// Defined by the auto linker. 1 + last address in the librcd_app_constructors section.
-extern const void* __stop_librcd_app_constructors;
-/// Defined by the auto linker. First address in the librcd_thread_constructors section.
-extern const void* __start_librcd_thread_constructors;
-/// Defined by the auto linker. 1 + last address in the librcd_thread_constructors section.
-extern const void* __stop_librcd_thread_constructors;
-/// Defined by the auto linker. First address in the librcd_thread_static_memory section.
-extern const void* __start_librcd_thread_static_memory;
-/// Defined by the auto linker. 1 + last address in the librcd_thread_static_memory section.
-extern const void* __stop_librcd_thread_static_memory;
-
 // Physical LWT threads.
 lwt_executor_thread_t* lwt_executor_threads = 0;
 size_t lwt_executor_thread_count = 0;
@@ -842,6 +829,8 @@ static void lwt_setup_physical_thread() {
     phys_thread->current_fiber = &phys_thread->system_fiber;
     phys_thread->thread_static_heap.vm_heap = vm_heap_create(0);
     phys_thread->system_fiber.current_heap = phys_thread->thread_static_heap.vm_heap;
+    // Defined by the auto linker. Bounds of the librcd_thread_static_memory section.
+    extern const void *__start_librcd_thread_static_memory, *__stop_librcd_thread_static_memory;
     // Initialize thread static memory.
     size_t thread_static_memory_size = (void*) &__stop_librcd_thread_static_memory - (void*) &__start_librcd_thread_static_memory;
     phys_thread->thread_static_memory = vm_heap_alloc(phys_thread->thread_static_heap.vm_heap, thread_static_memory_size, 0);
@@ -849,6 +838,7 @@ static void lwt_setup_physical_thread() {
 }
 
 void* lwt_get_thread_static_ptr(const void* ptr) {
+    extern const void *__start_librcd_thread_static_memory;
     lwt_physical_thread_t* phys_thread = LWT_PHYS_THREAD;
     return phys_thread->thread_static_memory + ((void*) ptr - (void*) &__start_librcd_thread_static_memory);
 }
