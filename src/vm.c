@@ -67,7 +67,7 @@
 /// other high level rcd features depends on the vm. So we use this macro instead.
 #define VM_CORE_ERROR(stderr_line) { \
     VM_STDERR_WRITE_LINE(stderr_line); \
-    vm_panic(); \
+    lwt_panic(); \
 }
 
 /// An aligned chunk of memory. The bottom VM_ALLOC_ALIGN_BITS must be zero.
@@ -234,21 +234,12 @@ static uint8_t vm_page_size_lines_2e() {
     return vm_bytes_to_lines_2e(PAGE_SIZE, false);
 }
 
-static void vm_panic() {
-    VM_STDERR_WRITE_LINE("!!! LIBRCD/VM PANIC !!!\n");
-    fstr_t buffer;
-    FSTR_STACK_DECL(buffer, PAGE_SIZE);
-    fstr_t bt = lwt_get_backtrace_archaic(buffer);
-    write(STDERR_FILENO, bt.str, bt.len);
-    abort();
-}
-
 static void vm_mmap_failure(size_t len) {
     int32_t err = errno;
     const char* errno_cstr = strerror(err);
     fstr_t errno_str = (errno_cstr != 0? fstr_fix_cstr(errno_cstr): "");
     DPRINT_RAW("librcd/vm: mmap(", DBG_INT(len), ") failed: [", DBG_INT(err), "] [", errno_str, "]");
-    vm_panic();
+    lwt_panic();
 }
 
 /// Used to change memory protection to provoke segmentation failures when writing past segment bounds.

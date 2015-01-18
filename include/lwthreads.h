@@ -246,6 +246,13 @@ fstr_t lwt_get_exception_type_str(rcd_exception_type_t exception_type);
 /// Dumps the exception as a human readable string.
 fstr_mem_t* lwt_get_exception_dump(rcd_exception_t* exception);
 
+/// Prints panic message, backtrace and aborts program in the most hysteric
+/// way possible that maximizes the chances of catching the users attention.
+/// Extremely cheap to call and can be used from the most primitive context
+/// imaginable. The panic logic is handled by the system. When called on a
+/// fiber the function will context switch to the system first.
+noret void lwt_panic();
+
 /// Returns fiber id for the current fiber.
 rcd_fid_t lwt_get_fiber_id();
 

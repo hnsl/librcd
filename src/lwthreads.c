@@ -27,6 +27,7 @@
 #define LWT_LONGJMP_MMAP_RESERVE 9
 #define LWT_LONGJMP_MMAP_UNRESERVE 10
 #define LWT_LONGJMP_VA_START 11
+#define LWT_LONGJMP_PANIC 12
 
 #define LWT_INIT_PHYSICAL_MUTEX 1
 #define LWT_INIT_PHYSICAL_COND 0
@@ -1358,6 +1359,9 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
             //DBG("thread ", DBG_INT(phys_thread->ptid),  ": releasing heap [", DBG_PTR(fiber->current_heap), "] of fiber [", DBG_PTR(fiber), "]");
             // Free the actual fiber struct.
             lwt_fiber_free(fiber);
+            break;
+        } case LWT_LONGJMP_PANIC: {
+            lwt_panic();
             break;
         } case LWT_LONGJMP_SWITCH: {
         } case LWT_LONGJMP_YIELD: {
@@ -3127,6 +3131,24 @@ static void lwt_fatal_exception_handler(rcd_exception_t* exception) {
     write(STDERR_FILENO, message.str, message.len);
     abort();
     unreachable();
+}
+
+noret void lwt_panic() {
+    // Context switch to to system context before panicing to allow
+    // expensive calls that don't count towards stacklet usage.
+    lwt_physical_thread_t* phys_thread = LWT_PHYS_THREAD;
+    if (phys_thread->end_of_stack != 0)
+        longjmp(phys_thread->physical_jmp_buf, LWT_LONGJMP_PANIC);
+    // Lock to throttle more than one panic and allow global buf.
+    // Might as well exit the entire thread if this lock cannot be taken.
+    static int8_t lock = 0;
+    while (!atomic_spinlock_trylock(&lock))
+        _exit(1);
+    rio_debug("!!! LIBRCD PANIC !!!\n");
+    static uint8_t buf[PAGE_SIZE * 2];
+    fstr_t bt = lwt_get_backtrace_archaic(FSTR_PACK(buf));
+    rio_debug(bt);
+    abort();
 }
 
 rcd_fid_t lwt_get_fiber_id() {
