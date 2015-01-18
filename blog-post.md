@@ -3,6 +3,8 @@ I'd like to announce the open sourcing of librcd, a library that I have develope
 [Github](https://github.com/jumpstarter-io/librcd), 
 [install instructions](https://github.com/jumpstarter-io/librcd/wiki/Installing).
 
+Please consider this blog post my personal opinion. I'm not a computer scientist and I'm sure that I'm completely wrong in many respects. Some statements are ironic and is not intended to be interpreted literally.
+
 The primary goals of librcd are:
 
 - Rapid Development. (Low cost.)
@@ -637,5 +639,3 @@ Some people will likely ask why I created this instead of "just using Go, Rust, 
 ### You can help
 
 There is a lot of things I want to improve in librcd if I had the resources. You can help! [Simply go to the issues page and pick something interesting](https://github.com/jumpstarter-io/librcd/issues). Don't be afraid to send me a pull request if you want something changed or updated.
-
-Thanks for reading!
