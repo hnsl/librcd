@@ -1019,7 +1019,7 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
             size_t min_size = (size_t) phys_thread->stack_pinj_jmp_buf.rdi;
             size_t* size_out = (size_t*) phys_thread->stack_pinj_jmp_buf.rsi;
             // Reserve memory and return the pointer.
-            phys_thread->stack_pinj_jmp_buf.rax = (uint64_t) vm_mmap_reserve(min_size, size_out);
+            phys_thread->stack_pinj_jmp_buf.rax = (uint64_t) vm_mmap_reserve_sys(min_size, size_out);
             // Return to the caller.
             goto pop_rip_and_return_via_stack_pinj_jmp_buf;
         } case LWT_LONGJMP_MMAP_UNRESERVE: {
@@ -1027,7 +1027,7 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
             void* ptr = (void*) phys_thread->stack_pinj_jmp_buf.rdi;
             size_t size = (size_t) phys_thread->stack_pinj_jmp_buf.rsi;
             // Free memory.
-            vm_mmap_unreserve(ptr, size);
+            vm_mmap_unreserve_sys(ptr, size);
             // Return to the caller.
             goto pop_rip_and_return_via_stack_pinj_jmp_buf;
         } case LWT_LONGJMP_VA_START: {
@@ -1068,7 +1068,7 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
                 // This is not the first dynamic stack allocation in the frame.
                 assert(fiber->stack_alloc_stack != 0);
                 total_length = lwt_stack_alloc_t_size + alloc_size;
-                void* stack_alloc_ptr = vm_mmap_reserve(total_length, 0);
+                void* stack_alloc_ptr = vm_mmap_reserve_sys(total_length, 0);
                 stack_alloc = stack_alloc_ptr;
                 stack_alloc->redirected_frame_ptr = 0;
                 phys_thread->stack_pinj_jmp_buf.rax = (uint64_t) (stack_alloc_ptr + lwt_stack_alloc_t_size);
@@ -1077,7 +1077,7 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
                 // Allocate 2 extra qwords for a virtual frame and redirect return pointer to __releasestack_free_stack_space.
                 // Redirect frame pointer to the virtual frame on the first stack allocation.
                 total_length = lwt_stack_alloc_t_size + 0x10 + alloc_size;
-                void* stack_alloc_ptr = vm_mmap_reserve(total_length, 0);
+                void* stack_alloc_ptr = vm_mmap_reserve_sys(total_length, 0);
                 stack_alloc = stack_alloc_ptr;
                 stack_alloc->redirected_frame_ptr = rbp_1;
                 stack_alloc->mem[0] = rbp_1[0];
@@ -1108,7 +1108,7 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
             // The frame sequence group is terminated by a stack allocation that store the virtual rbp.
             lwt_stack_alloc_t *stack_alloc, *next_stack_alloc;
             LL_FOREACH_SAFE(fiber->stack_alloc_stack, stack_alloc, next_stack_alloc) {
-                vm_mmap_unreserve(stack_alloc, stack_alloc->len);
+                vm_mmap_unreserve_sys(stack_alloc, stack_alloc->len);
                 // We don't actually read the free'd memory here - only check it's addressing.
                 if (&stack_alloc->mem[0] == virtual_rbp)
                     break;
@@ -1147,7 +1147,7 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
             min_alloc_size += 8;
 #endif
             size_t final_alloc_size;
-            lwt_stacklet_t* younger_stacklet = vm_mmap_reserve(min_alloc_size, &final_alloc_size);
+            lwt_stacklet_t* younger_stacklet = vm_mmap_reserve_sys(min_alloc_size, &final_alloc_size);
 #ifdef DEBUG
             // When debugging, always allocate new stacklets for every call.
             final_alloc_size = ((min_alloc_size + 0xfUL) & ~0xfUL);
@@ -1242,7 +1242,7 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
                 phys_thread->stack_pinj_jmp_buf.rip = older_rsp[1];
                 phys_thread->stack_pinj_jmp_buf.rsp = (uint64_t) &older_rsp[2];
                 // Free the younger stacklet.
-                vm_mmap_unreserve(younger_stacklet, younger_stacklet->len);
+                vm_mmap_unreserve_sys(younger_stacklet, younger_stacklet->len);
             } else {
                 // The fiber main function returned, the fiber is shutting down.
                 // The instance name will be free'd and become invalid memory if it's allocated in the root of the heap,
@@ -1280,7 +1280,7 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
                     salloc->redirected_frame_ptr[0] = salloc->mem[0];
                     salloc->redirected_frame_ptr[1] = salloc->mem[1];
                 }
-                vm_mmap_unreserve(salloc, salloc->len);
+                vm_mmap_unreserve_sys(salloc, salloc->len);
                 fiber->stack_alloc_stack = next_salloc;
             }
             // We free stacklets until we reach the stack allocated jump buffer.
@@ -1299,7 +1299,7 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
                     break;
                 }
                 // Free this stacklet.
-                vm_mmap_unreserve(stacklet, stacklet->len);
+                vm_mmap_unreserve_sys(stacklet, stacklet->len);
                 stacklet = prev_stacklet;
             }
             // Restore end of stack to whatever it was in the catch context and long jump back to it via the try_jmp_buf.
@@ -1312,12 +1312,12 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
             // Tearing down the whole fiber, free the last stacklets.
             lwt_stacklet_t *stacklet, *next_stacklet;
             LL_FOREACH_SAFE(fiber->current_stacklet, stacklet, next_stacklet) {
-                vm_mmap_unreserve(stacklet, stacklet->len);
+                vm_mmap_unreserve_sys(stacklet, stacklet->len);
             }
             // Free the last dynamic stack allocations.
             lwt_stack_alloc_t *stack_alloc, *next_stack_alloc;
             LL_FOREACH_SAFE(fiber->stack_alloc_stack, stack_alloc, next_stack_alloc) {
-                vm_mmap_unreserve(stack_alloc, stack_alloc->len);
+                vm_mmap_unreserve_sys(stack_alloc, stack_alloc->len);
             }
             //phys-scheduler/ DBG_RAW("thread ", DBG_INT(phys_thread->pid),  ": fiber [", DBG_INT(fiber->ctrl.id), "] signaled teardown, tearing down");
             // Remove the fiber from the global index.

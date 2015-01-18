@@ -489,18 +489,8 @@ void vm_janitor_thread(void* arg_ptr) {
     }
 }
 
-void* vm_mmap_reserve(size_t min_size, size_t* size_out) {
-    if (min_size == 0)
-        return 0;
-#if defined(DEBUG)
-    // Check that allocation isn't larger than the total x86_64 address space.
-    if (min_size > 281474976710656)
-        throw("vm sanity check: invalid allocation size", exception_fatal);
-#endif
-    if (LWT_READ_STACK_LIMIT != 0) {
-        // We can't use the vm in userspace as it would cause deadlocks.
-        return __stacklet_mmap_reserve(min_size, size_out);
-    }
+void* vm_mmap_reserve_sys(size_t min_size, size_t* size_out) {
+    assert(LWT_READ_STACK_LIMIT == 0);
 #if defined(VM_DEBUG_PAGE_AND_NOREUSE_ALLOCS)
     size_t user_size = min_size;
     user_size = vm_align_ceil(user_size, VM_ALLOC_ALIGN);
@@ -616,13 +606,24 @@ void* vm_mmap_reserve(size_t min_size, size_t* size_out) {
     return ptr;
 }
 
-void vm_mmap_unreserve(void* ptr, size_t size) {
-    if (size == 0)
-        return;
+void* vm_mmap_reserve(size_t min_size, size_t* size_out) {
+    if (min_size == 0)
+        return 0;
+#if defined(DEBUG)
+    // Check that allocation isn't larger than the total x86_64 address space.
+    if (min_size > 281474976710656)
+        throw("vm sanity check: invalid allocation size", exception_fatal);
+#endif
+    // We can't use the vm in userspace as it would cause deadlocks.
     if (LWT_READ_STACK_LIMIT != 0) {
-        // We can't use the vm in userspace as it would cause deadlocks.
-        return __stacklet_mmap_unreserve(ptr, size);
+        return __stacklet_mmap_reserve(min_size, size_out);
+    } else {
+        return vm_mmap_reserve_sys(min_size, size_out);
     }
+}
+
+void vm_mmap_unreserve_sys(void* ptr, size_t size) {
+    assert(LWT_READ_STACK_LIMIT == 0);
 #if defined(VM_DEBUG_PAGE_AND_NOREUSE_ALLOCS)
     size_t user_size = size;
     user_size = vm_align_ceil(user_size, VM_ALLOC_ALIGN);
@@ -701,6 +702,17 @@ void vm_mmap_unreserve(void* ptr, size_t size) {
         uint64_t new_total = old_total - final_size;
         if (atomic_cas_uint64(&vm_total_allocated_bytes, old_total, new_total))
             break;
+    }
+}
+
+void vm_mmap_unreserve(void* ptr, size_t size) {
+    if (size == 0)
+        return;
+    // We can't use the vm in userspace as it would cause deadlocks.
+    if (LWT_READ_STACK_LIMIT != 0) {
+        return __stacklet_mmap_unreserve(ptr, size);
+    } else {
+        return vm_mmap_unreserve_sys(ptr, size);
     }
 }
 

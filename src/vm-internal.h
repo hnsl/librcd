@@ -14,6 +14,9 @@
 
 typedef struct vm_heap vm_heap_t;
 
+void* vm_mmap_reserve_sys(size_t min_size, size_t* size_out);
+void vm_mmap_unreserve_sys(void* ptr, size_t size);
+
 void vm_wait_for_janitor();
 void vm_janitor_notify_ptid(int32_t ptid);
 void vm_janitor_thread(void* arg_ptr);
