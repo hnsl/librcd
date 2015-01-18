@@ -211,13 +211,26 @@ def main(argv):
                 strings_blob['io'].write('\x00')
             addr_line_blob = BytesIO()
             for ent in addr_line_map:
-                rfl_addr_line_mapping_t.build_stream(Container(addr = ent['addr'], len = ent['len'], line = ent['line']), addr_line_blob)
+                rfl_addr_line_mapping_t.build_stream(Container(
+                    addr = ent['addr'],
+                    len = ent['len'],
+                    line = ent['line'],
+                ), addr_line_blob)
             addr_file_blob = BytesIO()
             for ent in addr_file_map:
-                rfl_addr_fstr_mapping_t.build_stream(Container(addr = ent['addr'], len = ent['len'], fstr_len = ent['file']['len'], fstr_ptr = ent['file']['ptr']), addr_file_blob)
+                rfl_addr_fstr_mapping_t.build_stream(Container(
+                    addr = ent['addr'],
+                    len = ent['len'],
+                    fstr_len = ent['file']['len'],
+                    fstr_ptr = ent['file']['ptr'],
+                ), addr_file_blob)
             addr_func_blob = BytesIO()
             for ent in addr_func_map:
-                rfl_addr_fstr_mapping_t.build_stream(Container(addr = ent['addr'], len = ent['len'], fstr_len = ent['func']['len'], fstr_ptr = ent['func']['ptr']), addr_func_blob)
+                rfl_addr_fstr_mapping_t.build_stream(Container(
+                    addr = ent['addr'],
+                    len = ent['len'], fstr_len = ent['func']['len'],
+                    fstr_ptr = ent['func']['ptr'],
+                ), addr_func_blob)
             addr_line_map_ptr = strings_blob['addr'] + strings_blob['io'].tell()
             addr_file_map_ptr = addr_line_map_ptr + addr_line_blob.tell()
             addr_func_map_ptr = addr_file_map_ptr + addr_file_blob.tell()
