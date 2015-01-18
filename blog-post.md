@@ -391,7 +391,7 @@ The call to `rio_read_to_separator` does I/O and possibly defers in case the rea
 
 ### Concurrency is not parallelism
 
-Librcd is not primarily designed for parallelism although it's capable of that. [It's written for concurrency, a completely different problem](http://blog.golang.org/concurrency-is-not-parallelism). Specifically it's written to support actor based concurrency.
+Librcd is not designed for parallelism although it happens to capable of that on multi-core systems. [It's written for concurrency, a completely different problem](http://blog.golang.org/concurrency-is-not-parallelism). Specifically it's written to support actor based concurrency.
 
 When I began programming in C I used pthreads with locks but soon found myself in "lock hell" when writing more advanced software. The combination of locks and interacting dynamic contexts is something that can easily kill a project when it runs into an unsurmountable cliff of complexity. I had already looked into Erlang and finally escaped lock hell by using lock free actor based concurrency instead. I found that it often forced me to reason about my problems before coding in a good way that lock based programming never did. It allowed me to start writing code where the correctness was something you could reason with. Lock based programming rather lulls you into a false sense of security where code appears to work while having dangerous races or deadlocks that can strike at the worst moment and be hard to impossible to debug. I have never spent more than a few hours to understand a concurrency issue in librcd while I could easily throw away several days on just reading code to figure out what was wrong with my pthread program.
 
