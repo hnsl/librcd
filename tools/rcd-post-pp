@@ -261,10 +261,11 @@ exit(call_user_func(function() {
                             $line .= implode(";", $main_args) . ";";
                             $line .= "};";
                             $line .= "void _$fn_name(void* arg_ptr);";
+                            $line .= "uint64_t __librcd_fse__$fn_name __attribute__((section(\"__librcd_fse__$fn_name\"))) = 0;";
                             $line .= "rcd_fid_t __librcd_fiber_mitosis__$fn_name($arg_list) {";
                             $line .= "struct __librcd_fiber_main_state__$fn_name* fiber_args = lwt_alloc_new(sizeof(struct __librcd_fiber_main_state__$fn_name));";
                             $line .= "*fiber_args = (struct __librcd_fiber_main_state__$fn_name) {" . implode(",", array_keys($main_args)) . "};";
-                            $line .= "static struct lwt_fiber_options fiber_options = {.name = \"$fn_name\"};";
+                            $line .= "lwt_fiber_options_t fiber_options = {.name = \"$fn_name\", .est_stack_size = __librcd_fse__$fn_name};";
                             $line .= "return __lwt_fiber_stack_pop_mitosis(_$fn_name, fiber_args, fiber_name, &fiber_options);";
                             $line .= "}";
                             $line .= "$sf_t __librcd_fiber_sf_mitosis__$fn_name($arg_list) {";

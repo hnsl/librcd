@@ -300,6 +300,9 @@ typedef struct lwt_fiber {
     int32_t local_errno;
     /// Name of fiber main. (e.g. generic function name of main function)
     fstr_t main_name;
+    /// Estimated maximum stack size that is worth pre-allocating for performance.
+    /// This is determined in post-link time by analyzing the complete call graph of the program.
+    size_t est_stack_size;
     /// Name of fiber instance. (e.g. ID of related object)
     fstr_t instance_name;
     /// Stack of dynamic stack allocations.
@@ -1131,6 +1134,9 @@ static void lwt_physical_executor_thread(void* arg_ptr) {
 #endif
             // The required stack size is stored in r10 (except the msb), round up and 8 byte align it.
             size_t required_stack_size = (((phys_thread->stack_pinj_jmp_buf.r10 & ~0x8000000000000000) + 0x7UL) & ~0x7UL);
+            // When allocating the first stacklet we use the estimated stack size for the entire fiber.
+            if (older_stacklet == 0)
+                required_stack_size = MAX(required_stack_size, fiber->est_stack_size);
             // The system needs to pad the stack with 5 extra qwords: initial call (injected return pointer), last call, morestack call, morestack pushed rbp and setjmp/longjmp call.
             size_t system_stack_pad_size = 5 * 0x8;
             // Let the top area be the argument area plus 2 extra qwords where the old rip and rbp is stored.
@@ -2059,6 +2065,7 @@ rcd_fid_t __lwt_fiber_stack_pop_mitosis(void (*start_fn)(void *), void* arg_ptr,
     lwt_fiber_t* new_fiber = edata.mitosis->new_fiber;
     rcd_fid_t new_fiber_id = new_fiber->ctrl.id;
     new_fiber->main_name = fiber_options->name;
+    new_fiber->est_stack_size = fiber_options->est_stack_size;
     new_fiber->instance_name = fiber_name;
     // While the fiber is not started we steal this fields to store the start_fn and arg_ptr.
     new_fiber->event_stack = (void*) start_fn;

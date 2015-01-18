@@ -24,18 +24,29 @@ if [ -n "$COLUMNS" ]; then
     DISPLAY_OPTS="$DISPLAY_OPTS -fmessage-length=$COLUMNS"
 fi
 
+TOFILE="/tmp/$(basename $INPUT_FILE).$$.o"
+
 if [[ $INPUT_FORMAT == "assembler" ]]; then
-    TFILE="/tmp/$(basename $INPUT_FILE).$$.o"
-    as $INCLUDE_ARGS --fatal-warnings -g -o $TFILE $INPUT_FILE
-    rcd-o-ssw $TFILE $TFILE
-    cat $TFILE
-    unlink $TFILE
+    as $INCLUDE_ARGS --fatal-warnings -g -o $TOFILE $INPUT_FILE
+    rcd-o-ssw $TOFILE $TOFILE
 else
+    IOFILE="$TOFILE.io"
+    LOFILE="$TOFILE.lo"
+
     clang -nostdlib -std=gnu11 -mno-red-zone -fno-omit-frame-pointer -Xclang $DISPLAY_OPTS -o - -emit-llvm -S -c $@ \
     \
     < /dev/stdin | \
     \
-    llc --disable-fp-elim -segmented-stacks -librcd-stack-segmentation $LLC_ARGS - | \
+    llc --disable-fp-elim -segmented-stacks -librcd-stack-segmentation-fd=3 $LLC_ARGS - 3>$LOFILE | \
     \
-    clang -nostdlib -Xclang $DISPLAY_OPTS -x assembler -o - -c -
+    clang -nostdlib -Xclang $DISPLAY_OPTS -x assembler -o $IOFILE -c -
+
+    # Append frame info to new special section.
+    objcopy --add-section __librcd_frame_info=$LOFILE $IOFILE $TOFILE
+
+    unlink $IOFILE
+    unlink $LOFILE
 fi
+
+cat $TOFILE
+unlink $TOFILE

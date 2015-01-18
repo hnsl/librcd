@@ -24,6 +24,7 @@ import os
 import shutil
 import uuid
 import subprocess
+import StringIO
 
 '''
 # Overriding elftools.common.utils.struct_parse to one that saves the stream offset so we can seek back to that position later if we want to overwrite the struct.
@@ -122,6 +123,71 @@ def strings_blob_ref(strings_blob, str):
         strings_blob['io'].write(str)
     return {'len': len(str), 'ptr': strings_blob['refs'][str]}
 
+# Returns true if the specified frame is a generic core function that is protected
+# from being callable from fibers in userspace (i.e. with mega thread stack active).
+# The depth of these functions can safely be disregarded when estimating max stack usage.
+def is_prot_core_librcd_frame(frame_id):
+    return (frame_id == 'vm_mmap_reserve'
+        or frame_id == 'vm_mmap_unreserve'
+        or frame_id == 'lwt_panic')
+
+# Returns true if the specified frame is an stack ignored core function.
+def is_stack_ignored_core_frame(frame_id):
+    return (
+        # It's pointless to optimize frames that will only ever be called once.
+           frame_id == '__assert_fail'
+        or frame_id == 'abort'
+        # Exceptions require lots of memory allocations to throw and is rarely
+        # called in practice making the relative performance gained from
+        # pre-allocation very low. The are also overwhelmingly used in leaf
+        # contexts making their deep stack impact very high. We're better of
+        # ignoring them in our deep stack estimation.
+        or frame_id == 'lwt_throw_exception'
+        or frame_id == 'lwt_throw_new_exception'
+        or frame_id == 'lwt_throw_cancel_exception'
+        or frame_id == 'lwt_throw_join_race_exception'
+        or frame_id == 'lwt_throw_no_such_fiber_exception'
+        or frame_id == '_rcd_syscall_exception')
+
+def resolve_deep_frame_size(frame_graph, frame_id):
+    if frame_id not in frame_graph:
+        # Non-indexed frame, likely raw assembly function or other external symbol. (e.g. longjmp)
+        # Although tecnically non-deterministic this is common and non-intresting since raw contexts use the mega stack.
+        # We therefore ignore this case and say that this frame deterministically uses zero bytes.
+        return 0, False
+    if is_stack_ignored_core_frame(frame_id):
+        # We choose to ignore some functions when estimating max stack usage
+        # because the expected performance gained from pre-allocating their
+        # stack is far from being worth of the required memory overhead.
+        return 0, False
+    frame = frame_graph[frame_id]
+    deep_size = frame['deep_size']
+    if deep_size is None:
+        # Recursive call graph, assume no recursion and abort.
+        # This indicates a non-deterministic deep stack size.
+        return 0, True
+    ndrm = frame['ndrm']
+    if deep_size != False:
+        # Size already resolved.
+        return deep_size, ndrm
+    # Set deep_size to None to detect recursion and go through callouts.
+    frame['deep_size'] = None
+    size = frame['size']
+    sub_size = 0
+    # Protected core frames have no depth we need to consider.
+    if not is_prot_core_librcd_frame(frame_id):
+        # Start recursive scan of deep size.
+        for dst_frame_id in frame['callouts']:
+            co_size, co_ndrm = resolve_deep_frame_size(frame_graph, dst_frame_id)
+            frame['callouts'][dst_frame_id] = (co_size, co_ndrm)
+            sub_size = max(sub_size, co_size)
+            ndrm = (ndrm or co_ndrm)
+    # Scan complete. Deep stack size estimation available.
+    deep_size = size + sub_size
+    frame['deep_size'] = deep_size
+    frame['ndrm'] = ndrm
+    return deep_size, ndrm
+
 def main(argv):
     # Go through argv and look for -o for output and break it out.
     elf_out = None
@@ -197,10 +263,43 @@ def main(argv):
                             addr_func_map.append({'addr': lowpc, 'len': length, 'func': func})
                         except KeyError:
                             pass
+            # Read and resolve frame call graph so we can scan deep frame size.
+            frame_info = elffile.get_section_by_name('__librcd_frame_info')
+            if frame_info is None:
+                raise Exception('missing __librcd_frame_info section, is this really a librcd executable?')
+            fmitosis_prefix = "__librcd_fiber_mitosis__"
+            finfo_lines = StringIO.StringIO(frame_info.data())
+            frame_graph = {}
+            fiber_stack_map = []
+            for line in finfo_lines:
+                tokens = line.strip().split(';')
+                finfo_id = tokens[0]
+                frame_id = tokens[1]
+                if frame_id not in frame_graph:
+                    frame_graph[frame_id] = {'size': 0, 'deep_size': False, 'callouts': {}, 'ndrm': False}
+                    if frame_id.startswith(fmitosis_prefix):
+                        fiber_name = frame_id[len(fmitosis_prefix):]
+                        size_section = elffile.get_section_by_name('__librcd_fse__' + fiber_name)
+                        fiber_stack_map.append({'fiber_name': fiber_name, 'frame': None, 'main_frame_id': '_' + fiber_name, 'size_section': size_section})
+                if finfo_id == 'frame-size':
+                    frame_size = tokens[2]
+                    frame_graph[frame_id]['size'] = int(frame_size)
+                elif finfo_id== 'callout':
+                    dst_frame_id = tokens[2]
+                    frame_graph[frame_id]['callouts'][dst_frame_id] = True
+                elif finfo_id == 'ndrm-callout':
+                    frame_graph[frame_id]['ndrm'] = True
+                else:
+                    raise Exception('unknown frame info id [' + tokens[0] + ']')
+            for fsm in fiber_stack_map:
+                frame_id = fsm['main_frame_id']
+                resolve_deep_frame_size(frame_graph, frame_id)
+                fsm['frame'] = frame_graph[frame_id]
             # Sort, merge and cut away collisions in the respective maps.
             addr_line_map = trim_addr_map(addr_line_map, 'line')
             addr_file_map = trim_addr_map(addr_file_map, 'file')
             addr_func_map = trim_addr_map(addr_func_map, 'func')
+            fiber_stack_map = sorted(fiber_stack_map, cmp=lambda x,y: cmp(x['fiber_name'], y['fiber_name']))
             # Create binary fast sorted lookup table structures and link them together.
             strings_blob = {'refs': {}, 'io': BytesIO(), 'addr': addr_index_ptr_base + rfl_addr_index_t.sizeof()}
             for ent in addr_file_map:
@@ -284,6 +383,10 @@ def main(argv):
             # Write pointer to the rfl_addr_index_t.
             f_out.seek(rfl_addr_index_shdr.header['sh_offset'])
             ULInt64('rfl_addr_index').build_stream(addr_index_ptr_base, f_out)
+            # Write all fiber stack size estimations.
+            for fsm in fiber_stack_map:
+                f_out.seek(fsm['size_section'].header['sh_offset'])
+                ULInt64(fsm['fiber_name']).build_stream(fsm['frame']['deep_size'], f_out)
             # Output the final executable.
             with open(elf_out, 'w+b') as f_out_fin:
                 f_out.seek(0)

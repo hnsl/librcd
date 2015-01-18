@@ -35,9 +35,10 @@ rcd_fid_t name() { \
     return global_fid; \
 }
 
-/// Created with RCD macros, do not use.
+/// Internal librcd struct, do not use.
 typedef struct lwt_fiber_options {
     fstr_t name;
+    size_t est_stack_size;
 } lwt_fiber_options_t;
 
 typedef struct lwt_heap lwt_heap_t;
