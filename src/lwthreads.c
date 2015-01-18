@@ -1905,9 +1905,9 @@ void __lwthreads_main(int argc, char** argv, char** env) {
     if (argc <= 1)
         rcd_primitive_self_test();
 #endif
-    // Create physical executor for main thread.
+    // Create physical executor for main fiber.
     lwt_match_executor_count(1);
-    // Create main thread.
+    // Spawn main fiber.
     fmitosis {
         list(fstr_t)* main_args = new_list(fstr_t);
         for (int i = 1; i < argc; i++)
