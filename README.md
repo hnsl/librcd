@@ -38,4 +38,4 @@ For more code examples, covering e.g. strings, memory management and exceptions,
 
 Librcd is **highly non-portable**, and meant to be used mainly for server development, in a controlled environment. Only x86_64 Linux is supported, and this is [unlikely to change](https://github.com/jumpstarter-io/librcd/issues/2). Furthermore, due to license conflicts, binaries compiled with librcd [cannot currently be legally distributed](https://github.com/jumpstarter-io/librcd/issues/1).
 
-Some documentation [can be found in the wiki](https://github.com/jumpstarter-io/librcd/wiki); see in particular the [Installing](https://github.com/jumpstarter-io/librcd/wiki/Installing) page. Make sure also to check out the mentioned blog post - it provides a lot of motivation and in-depth descriptions of most library features.
+Some documentation [can be found in the wiki](https://github.com/jumpstarter-io/librcd/wiki); see in particular the [Installing](https://github.com/jumpstarter-io/librcd/wiki/Installing) page. The mentioned blog post also provides a lot of motivation and in-depth descriptions of most library features.
