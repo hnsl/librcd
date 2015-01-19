@@ -185,7 +185,9 @@ License: GNU Lesser General Public License version 2.1
 Full-License: See attached: "Licence [3]"
 Files:
     /include/avl.h
+    /include/rb.h
     /src/avl.c
+    /src/rb.c
 
 ==============================================================================
 Origin: http://www.netlib.org/fp/
