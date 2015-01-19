@@ -1,6 +1,8 @@
 # librcd
 *A library for Rapid {C|Concurrency|Correct} Development*
 
+https://blog.jumpstarter.io/announcing-librcd-concurrency-segmented-stacks-c
+
 Librcd is a new C standard library and POSIX replacement for x86_64 Linux, used for most things at [Jumpstarter](https://jumpstarter.io/). It comes with some custom syntax, and makes threading, strings, error handling, memory management and IO easy. Here's a small example:
 
 ```c
@@ -32,7 +34,7 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env) {
 }
 ```
 
-For more code examples, covering e.g. strings, memory management and exceptions, see Hannes's blog post. You can also check out the source code of librcd (it's rather readable), or [wsr](https://github.com/jumpstarter-io/wsr), a basic web server library written on top of librcd.
+For more code examples, covering e.g. strings, memory management and exceptions, see [the announce blog post](https://blog.jumpstarter.io/announcing-librcd-concurrency-segmented-stacks-c). You can also check out the source code of librcd (it's rather readable), or [wsr](https://github.com/jumpstarter-io/wsr), a basic web server library written on top of librcd.
 
 Librcd is **highly non-portable**, and meant to be used mainly for server development, in a controlled environment. Only x86_64 Linux is supported, and this is [unlikely to change](https://github.com/jumpstarter-io/librcd/issues/2). Furthermore, due to license conflicts, binaries compiled with librcd [cannot currently be legally distributed](https://github.com/jumpstarter-io/librcd/issues/1).
 
