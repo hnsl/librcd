@@ -1,7 +1,7 @@
 # librcd
 *A library for Rapid {C|Concurrency|Correct} Development*
 
-Librcd is a new C standard library and POSIX replacement for x86_64 Linux. It comes with some custom syntax, and makes threading, strings, error handling, memory allocation and IO easy. Here's a small example:
+Librcd is a new C standard library and POSIX replacement for x86_64 Linux, used for most things at [Jumpstarter](https://jumpstarter.io/). It comes with some custom syntax, and makes threading, strings, error handling, memory management and IO easy. Here's a small example:
 
 ```c
 #include "rcd.h"
@@ -31,10 +31,9 @@ void rcd_main(list(fstr_t)* main_args, list(fstr_t)* main_env) {
   auto_accept_join(switcheroo, join_server_params, &free_value);
 }
 ```
-XXX replace with something smaller and more interesting. Maybe strings + memory allocation + exceptions?
 
-Librcd is **highly non-portable**, and meant to be used mainly for server development, in a controlled environment. Only x86_64 Linux is supported, and this is unlikely to change in the near future ([issue #2](https://github.com/jumpstarter-io/librcd/issues/2)). Due to license conflicts, binaries compiled with librcd cannot currently be legally distributed ([issue #1](https://github.com/jumpstarter-io/librcd/issues/1)).
+For more code examples, covering e.g. strings, memory management and exceptions, see Hannes's blog post. You can also check out the source code of librcd (it's rather readable), or [wsr](https://github.com/jumpstarter-io/wsr), a basic web server library written on top of librcd.
 
-XXX toolchain, segmented stacks.
+Librcd is **highly non-portable**, and meant to be used mainly for server development, in a controlled environment. Only x86_64 Linux is supported, and this is [unlikely to change](https://github.com/jumpstarter-io/librcd/issues/2). Furthermore, due to license conflicts, binaries compiled with librcd [cannot currently be legally distributed](https://github.com/jumpstarter-io/librcd/issues/1).
 
-All documentation [can be found in the wiki](https://github.com/jumpstarter-io/librcd/wiki).
+Some documentation [can be found in the wiki](https://github.com/jumpstarter-io/librcd/wiki); see in particular the [Installing](https://github.com/jumpstarter-io/librcd/wiki/Installing) page. Make sure also to check out the mentioned blog post - it provides a lot of motivation and in-depth descriptions of most library features.
