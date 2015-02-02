@@ -244,7 +244,7 @@ fstr_mem_t* fstr_from_double(double d) {
     char* dtoa_r = dtoa(d, 0, 0, &decpt, &sign, &rve);
     fstr_t tokens[6];
     uint8_t w_offs = 0;
-    size_t len = rve - dtoa_r;
+    int32_t len = rve - dtoa_r;
     assert(len != 0);
     if (decpt == 9999) {
         // Special value (inf/nan).
@@ -254,7 +254,8 @@ fstr_mem_t* fstr_from_double(double d) {
         if (sign != 0) {
             tokens[w_offs++] = "-";
         }
-        if (decpt < -5) {
+        if (decpt <= -5) {
+            // Very small value (1 ppm or smaller). Use normalized scientific notation.
             tokens[w_offs++] = (fstr_t) {.len = 1, .str = (uint8_t*) dtoa_r};
             if (len > 1) {
                 tokens[w_offs++] = ".";
@@ -268,14 +269,34 @@ fstr_mem_t* fstr_from_double(double d) {
             tokens[w_offs++] = (fstr_t) {.len = len, .str = (uint8_t*) dtoa_r};
         } else {
             // Copy the digits before the decimal point.
-            tokens[w_offs++] = (fstr_t) {.len = MIN(len, decpt), .str = (uint8_t*) dtoa_r};
+            fstr_t bdp_part = {.len = MIN(len, decpt), .str = (uint8_t*) dtoa_r};
             if (decpt < len) {
+                tokens[w_offs++] = bdp_part;
                 tokens[w_offs++] = ".";
                 // Copy digits after decimal point.
                 tokens[w_offs++] = (fstr_t) {.len = len - decpt, .str = (uint8_t*) (dtoa_r + decpt)};
             } else if (decpt > len) {
-                tokens[w_offs++] = "e";
-                tokens[w_offs++] = fstr_serial_uint(e_buf, decpt - len, 10);
+                int32_t e = decpt - len;
+                if (d >= 1e12 || d <= -1e12) {
+                    // Very large negative or positive number. Use normalized scientific notation.
+                    if (bdp_part.len > 1) {
+                        e += bdp_part.len - 1;
+                        tokens[w_offs++] = (fstr_t) {.len = 1, .str = bdp_part.str};
+                        tokens[w_offs++] = ".";
+                        tokens[w_offs++] = (fstr_t) {.len = bdp_part.len - 1, .str = bdp_part.str + 1};
+                    } else {
+                        tokens[w_offs++] = bdp_part;
+                    }
+                    tokens[w_offs++] = "e";
+                    tokens[w_offs++] = fstr_serial_uint(e_buf, e, 10);
+                } else {
+                    // Using standard form for numbers with absolute value smaller than a trillion.
+                    tokens[w_offs++] = bdp_part;
+                    fstr_t zero_str = "000000000000";
+                    tokens[w_offs++] = (fstr_t) {.len = e, .str = zero_str.str};
+                }
+            } else {
+                tokens[w_offs++] = bdp_part;
             }
         }
     }
