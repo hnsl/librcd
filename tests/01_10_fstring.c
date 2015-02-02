@@ -325,6 +325,54 @@ void rcd_self_test_fstring() {
                 fstr_mem_t* ds = fstr_from_double(12345);
                 atest(fstr_equal(fss(ds), "12345"));
             } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(100);
+                atest(fstr_equal(fss(ds), "100"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(9e9);
+                atest(fstr_equal(fss(ds), "9000000000"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(1.23e-5);
+                atest(fstr_equal(fss(ds), "0.0000123"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(-1.23e-5);
+                atest(fstr_equal(fss(ds), "-0.0000123"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(1e-6);
+                atest(fstr_equal(fss(ds), "1e-6"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(-1e-6);
+                atest(fstr_equal(fss(ds), "-1e-6"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(9.98e-6);
+                atest(fstr_equal(fss(ds), "9.98e-6"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(-9.98e-6);
+                atest(fstr_equal(fss(ds), "-9.98e-6"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(4e11);
+                atest(fstr_equal(fss(ds), "400000000000"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(-4e11);
+                atest(fstr_equal(fss(ds), "-400000000000"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(4.567e11);
+                atest(fstr_equal(fss(ds), "456700000000"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(-4.567e11);
+                atest(fstr_equal(fss(ds), "-456700000000"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(4e12);
+                atest(fstr_equal(fss(ds), "4e12"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(-4e12);
+                atest(fstr_equal(fss(ds), "-4e12"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(4.567e12);
+                atest(fstr_equal(fss(ds), "4.567e12"));
+            } sub_heap {
+                fstr_mem_t* ds = fstr_from_double(-4.567e12);
+                atest(fstr_equal(fss(ds), "-4.567e12"));
+            } sub_heap {
                 fstr_mem_t* ds = fstr_from_double(1e100);
                 atest(fstr_equal(fss(ds), "1e100"));
             } sub_heap {
@@ -338,10 +386,10 @@ void rcd_self_test_fstring() {
                 atest(fstr_equal(fss(ds), "-1e-100"));
             } sub_heap {
                 fstr_mem_t* ds = fstr_from_double(1.23456789e100);
-                atest(fstr_equal(fss(ds), "123456789e92"));
+                atest(fstr_equal(fss(ds), "1.23456789e100"));
             } sub_heap {
                 fstr_mem_t* ds = fstr_from_double(-1.23456789e100);
-                atest(fstr_equal(fss(ds), "-123456789e92"));
+                atest(fstr_equal(fss(ds), "-1.23456789e100"));
             } sub_heap {
                 fstr_mem_t* ds = fstr_from_double(1.23456789e-100);
                 atest(fstr_equal(fss(ds), "1.23456789e-100"));
@@ -368,7 +416,7 @@ void rcd_self_test_fstring() {
                 atest(fstr_equal(fss(ds), "0.000033333333333333335"));
             } sub_heap {
                 fstr_mem_t* ds = fstr_from_double(3.333333333333333323665863962E-6);
-                atest(fstr_equal(fss(ds), "0.0000033333333333333333"));
+                atest(fstr_equal(fss(ds), "3.3333333333333333e-6"));
             } sub_heap {
                 fstr_mem_t* ds = fstr_from_double(3.33333333333333353542410077558E-7);
                 atest(fstr_equal(fss(ds), "3.3333333333333335e-7"));
@@ -389,7 +437,7 @@ void rcd_self_test_fstring() {
                 atest(fstr_equal(fss(ds), "-0.000033333333333333335"));
             } sub_heap {
                 fstr_mem_t* ds = fstr_from_double(-3.333333333333333323665863962E-6);
-                atest(fstr_equal(fss(ds), "-0.0000033333333333333333"));
+                atest(fstr_equal(fss(ds), "-3.3333333333333333e-6"));
             } sub_heap {
                 fstr_mem_t* ds = fstr_from_double(-3.33333333333333353542410077558E-7);
                 atest(fstr_equal(fss(ds), "-3.3333333333333335e-7"));
