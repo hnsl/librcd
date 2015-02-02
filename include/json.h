@@ -213,21 +213,23 @@ static json_value_t json_new_arr_in_obj(json_value_t parent, fstr_t key) {
     return arr;
 }
 
+static void json_append(json_value_t arr, json_value_t obj) {
+    if (arr.type != JSON_ARRAY)
+        _json_fail_invalid_type(JSON_ARRAY, arr.type);
+    list_push_end(arr.array_value, json_value_t, obj);
+}
+
 /// Create a new object and append it to another array.
 static json_value_t json_new_obj_in_arr(json_value_t parent) {
     json_value_t obj = json_new_object();
-    if (parent.type != JSON_ARRAY)
-        _json_fail_invalid_type(JSON_ARRAY, parent.type);
-    list_push_end(parent.array_value, json_value_t, obj);
+    json_append(parent, obj);
     return obj;
 }
 
 /// Create a new array and append it to another array.
 static json_value_t json_new_arr_in_arr(json_value_t parent) {
     json_value_t arr = json_new_array();
-    if (parent.type != JSON_ARRAY)
-        _json_fail_invalid_type(JSON_ARRAY, parent.type);
-    list_push_end(parent.array_value, json_value_t, arr);
+    json_append(parent, arr);
     return arr;
 }
 
