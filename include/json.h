@@ -102,6 +102,47 @@
     __value; \
 })
 
+#define _JSON_REF_SET(parent_e, value_e, is_default, ...) ({ \
+    json_value_t __value = parent_e; \
+    fstr_t __path[] = {__VA_ARGS__}; \
+    bool __read = true; \
+    for (int64_t __i = 0; __i < LENGTHOF(__path); __i++) { \
+        if (__value.type != JSON_OBJECT) \
+            _json_fail_invalid_type(JSON_OBJECT, __value.type); \
+        json_value_t* __next_value; \
+        bool __last = (__i + 1 == LENGTHOF(__path)); \
+        if (!is_default && __last) { \
+            __read = false; \
+        } \
+        if (__read) { \
+            __next_value = dict_read(__value.object_value, json_value_t, __path[__i]); \
+            if (__next_value == 0) { \
+                __read = false; \
+            } \
+        } \
+        if (!__read) { \
+            json_value_t __new_value = (__last? (value_e): jobj_new()); \
+            JSON_SET(__value, __path[__i], __new_value); \
+            __next_value = &__new_value; \
+        } \
+         __value = *__next_value; \
+    } \
+    __value; \
+})
+
+/// Like JSON_REF but sets the final referenced value to the specified value.
+/// Will recursively initialize new empty objects if they don't already exist
+/// in the key chain. Throws json_type eio if a value in the key chain is not
+/// an object. Returns the new value on success.
+#define JSON_REF_SET(parent, value, ...) \
+    _JSON_REF_SET(parent, value, false, __VA_ARGS__)
+
+/// Like JSON_REF_SET but only sets the final key and evaluates the default
+/// expression if the key does not already exist. If the key exists the
+/// function returns the value, otherwise it returns the new default value.
+#define JSON_TOUCH(parent, default, ...) \
+    _JSON_REF_SET(parent, default, true, __VA_ARGS__)
+
 /// JSON type identifier.
 typedef enum json_type {
     JSON_NULL = 0,
