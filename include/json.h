@@ -62,7 +62,9 @@
 /// json_value_t obj = json_new_object();
 /// JSON_SET(obj, "property", json_string_v("value"));
 #define JSON_SET(parent, prop, value) ({ \
-    assert(parent.type == JSON_OBJECT); \
+    if (parent.type != JSON_OBJECT) { \
+        _json_fail_invalid_type(JSON_OBJECT, parent.type); \
+    } \
     dict_replace(parent.object_value, json_value_t, prop, value); \
 })
 
