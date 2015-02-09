@@ -57,6 +57,15 @@
     LET(json_value_t new_obj = json_new_arr_in_arr(this)) \
     LET(json_value_t this = new_obj)
 
+/// Set a property of a JSON object to some value. Example usage:
+///
+/// json_value_t obj = json_new_object();
+/// JSON_SET(obj, "property", json_string_v("value"));
+#define JSON_SET(parent, prop, value) ({ \
+    assert(parent.type == JSON_OBJECT); \
+    dict_replace(parent.object_value, json_value_t, prop, value); \
+})
+
 /// Traverse a chain of JSON properties in a lenient manner, returning a null JSON value
 /// if any link in the chain does not exist. Example usage:
 ///
@@ -89,15 +98,6 @@
             _json_fail_missing_property(__path[__i]); \
     } \
     __value; \
-})
-
-/// Set a property of a JSON object to some value. Example usage:
-///
-/// json_value_t obj = json_new_object();
-/// JSON_SET(obj, "property", json_string_v("value"));
-#define JSON_SET(parent, prop, value) ({ \
-    assert(parent.type == JSON_OBJECT); \
-    dict_replace(parent.object_value, json_value_t, prop, value); \
 })
 
 /// JSON type identifier.
