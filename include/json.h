@@ -3,19 +3,12 @@
 
 #include "rcd.h"
 
-#define json_null_v ((json_value_t){.type = JSON_NULL})
-#define json_bool_v(x)   ((json_value_t){.type = JSON_BOOL,   .bool_value   = x})
-#define json_number_v(x) ((json_value_t){.type = JSON_NUMBER, .number_value = x})
-#define json_string_v(x) ((json_value_t){.type = JSON_STRING, .string_value = x})
-#define json_array_v(x)  ((json_value_t){.type = JSON_ARRAY,  .array_value  = x})
-#define json_object_v(x) ((json_value_t){.type = JSON_OBJECT, .object_value = x})
-
-#define jnull json_null_v
-#define jbool(x) json_bool_v(x)
-#define jnum(x) json_number_v(x)
-#define jstr(x) json_string_v(x)
-#define jarr(x) json_array_v(x)
-#define jobj(x) json_object_v(x)
+#define jnull    ((json_value_t){.type = JSON_NULL})
+#define jbool(x) ((json_value_t){.type = JSON_BOOL,   .bool_value   = x})
+#define jnum(x)  ((json_value_t){.type = JSON_NUMBER, .number_value = x})
+#define jstr(x)  ((json_value_t){.type = JSON_STRING, .string_value = x})
+#define jarr(x)  ((json_value_t){.type = JSON_ARRAY,  .array_value  = x})
+#define jobj(x)  ((json_value_t){.type = JSON_OBJECT, .object_value = x})
 
 #define jarr_new(...) jarr(new_list(json_value_t, __VA_ARGS__))
 #define jobj_new(...) jobj(new_dict(json_value_t, __VA_ARGS__))
@@ -56,7 +49,7 @@
     for (int64_t _i = 0; _i < LENGTHOF(_path); _i++) { \
         json_value_t* _next_value = (_value.type == JSON_OBJECT? \
             dict_read(_value.object_value, json_value_t, _path[_i]): 0); \
-        _value = (_next_value == 0? json_null_v: *_next_value); \
+        _value = (_next_value == 0? jnull: *_next_value); \
     } \
     _value; \
 })
@@ -69,7 +62,7 @@
     for (int64_t _i = 0; _i < LENGTHOF(_path); _i++) { \
         json_value_t* _next_value = (_value.type == JSON_OBJECT? \
             dict_read(_value.object_value, json_value_t, _path[_i]): 0); \
-        _value = (_next_value == 0? json_null_v: *_next_value); \
+        _value = (_next_value == 0? jnull: *_next_value); \
         if (json_is_null(_value)) \
             _json_fail_missing_property(_path[_i]); \
     } \
@@ -209,11 +202,11 @@ static inline fstr_t __attribute__((overloadable)) STR(json_value_t x) { return 
 static inline fstr_t __attribute__((overloadable)) STR(json_type_t x) { return json_serial_type(x); }
 
 static inline json_value_t json_new_array() {
-    return json_array_v(new_list(json_value_t));
+    return jarr(new_list(json_value_t));
 }
 
 static inline json_value_t json_new_object() {
-    return json_object_v(new_dict(json_value_t));
+    return jobj(new_dict(json_value_t));
 }
 
 static void json_append(json_value_t arr, json_value_t obj) {
