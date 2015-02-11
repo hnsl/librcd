@@ -2227,7 +2227,11 @@ rio_t* rio_ipc_fd_recv(rio_t* unix_dgram_h, rio_type_t type, bool is_readable, b
             int32_t fcntl_r = rio_raw_fcntl_toggle_nonblocking(new_fd, true);
             if (fcntl_r == -1)
                 RCD_SYSCALL_EXCEPTION(fcntl, exception_io);
-            r_rio_h = rio_new_h(type, new_fd, is_readable, is_writable, 0);
+            if (type == rio_type_pipe) {
+                r_rio_h = rio_new_pipe_h((is_readable? new_fd: -1), (is_writable? new_fd: -1), 0);
+            } else {
+                r_rio_h = rio_new_h(type, new_fd, is_readable, is_writable, 0);
+            }
             break;
         }
         cmsg = CMSG_NXTHDR(&msg, cmsg);
