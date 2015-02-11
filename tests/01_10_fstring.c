@@ -130,6 +130,30 @@ void rcd_self_test_fstring() {
     atest(fstr_equal("qwerty", "qwerty"));
     atest(fstr_equal("", ""));
     atest(!fstr_equal("", "e"));
+    // Test fstr_cmp_natural.
+    atest(fstr_cmp_natural("abc", "def") < 0);
+    atest(fstr_cmp_natural("zzz", "eee") > 0);
+    atest(fstr_cmp_natural("qwerty", "qwerty") == 0);
+    atest(fstr_cmp_natural("qwerty", "qwert.") > 0);
+    atest(fstr_cmp_natural("", "") == 0);
+    atest(fstr_cmp_natural("", "e") < 0);
+    atest(fstr_cmp_natural("", "5") < 0);
+    atest(fstr_cmp_natural("5", "5") == 0);
+    atest(fstr_cmp_natural("5", "") > 0);
+    atest(fstr_cmp_natural("3", "5") < 0);
+    atest(fstr_cmp_natural("5", "5") == 0);
+    atest(fstr_cmp_natural("7", "5") > 0);
+    atest(fstr_cmp_natural("abc3", "abc5") < 0);
+    atest(fstr_cmp_natural("abc5", "abc5") == 0);
+    atest(fstr_cmp_natural("abc7", "abc5") > 0);
+    atest(fstr_cmp_natural("abc5", "abc33") < 0);
+    atest(fstr_cmp_natural("abc55", "abc5") > 0);
+    atest(fstr_cmp_natural("abc75", "abc5xxx") > 0);
+    atest(fstr_cmp_natural("abc123efg", "abc123efg") == 0);
+    atest(fstr_cmp_natural("abc123efghi", "abc1234efg") < 0);
+    atest(fstr_cmp_natural("abc123efg456hij789", "abc123efg456hij78") > 0);
+    atest(fstr_cmp_natural("cool9.png", "cool10.png") < 0);
+    atest(fstr_cmp_natural("cool1.png", "cool100.png") < 0);
     // Test fstr prefixes.
     atest(fstr_prefixes("", ""));
     atest(!fstr_prefixes("", "a"));
