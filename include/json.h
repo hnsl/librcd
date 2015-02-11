@@ -144,7 +144,7 @@
 /// Like JSON_REF but sets the final referenced value to the specified value.
 /// Will recursively initialize new empty objects if they don't already exist
 /// in the key chain. Throws json_type eio if a value in the key chain is not
-/// an object. Returns the new value on success.
+/// an object.
 #define JSON_REF_SET(parent, value, ...) \
     (void) _JSON_REF_SET(parent, value, false, __VA_ARGS__)
 
