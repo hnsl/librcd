@@ -10,6 +10,12 @@
 #define jarr(x)  ((json_value_t){.type = JSON_ARRAY,  .array_value  = x})
 #define jobj(x)  ((json_value_t){.type = JSON_OBJECT, .object_value = x})
 
+#define jboolv(x) json_get_bool(x)
+#define jnumv(x)  json_get_number(x)
+#define jstrv(x)  json_get_string(x)
+#define jarrv(x)  json_get_array(x)
+#define jobjv(x)  json_get_object(x)
+
 #define jarr_new(...) jarr(new_list(json_value_t, __VA_ARGS__))
 #define jobj_new(...) jobj(new_dict(json_value_t, __VA_ARGS__))
 
