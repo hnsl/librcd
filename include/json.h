@@ -146,7 +146,7 @@
 /// in the key chain. Throws json_type eio if a value in the key chain is not
 /// an object. Returns the new value on success.
 #define JSON_REF_SET(parent, value, ...) \
-    _JSON_REF_SET(parent, value, false, __VA_ARGS__)
+    (void) _JSON_REF_SET(parent, value, false, __VA_ARGS__)
 
 /// Like JSON_REF_SET but only sets the final key and evaluates the default
 /// expression if the key does not already exist. If the key exists the
