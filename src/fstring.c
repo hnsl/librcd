@@ -484,6 +484,47 @@ int64_t fstr_cmp_lexical(const fstr_t str1, const fstr_t str2) {
     return cmp != 0? cmp: str1.len - str2.len;
 }
 
+static fstr_t fstr_nat_consume_str(fstr_t* io) {
+    fstr_t out = {.len = 0};
+    fstr_t str = *io;
+    #pragma re2c(str): ^([^0-9]*){out} ([0-9]|$) {@match}
+    match: {
+        *io = fstr_slice(*io, out.len, -1);
+        return out;
+    }
+}
+
+static fstr_t fstr_nat_consume_num(fstr_t* io) {
+    fstr_t out = {.len = 0};
+    fstr_t str = *io;
+    #pragma re2c(str): ^([0-9]*){out} ([^0-9]|$) {@match}
+    match: {
+        *io = fstr_slice(*io, out.len, -1);
+        return out;
+    }
+}
+
+int64_t fstr_cmp_natural(fstr_t str1, fstr_t str2) {
+    // Humans see strings as a series of tokens which consist of characters
+    // grouped by their class. In this natural sort implementation we only
+    // consider numbers and non-numbers.
+    while (str1.len > 0 || str2.len > 0) {
+        // Compare next string token.
+        fstr_t str1s = fstr_nat_consume_str(&str1);
+        fstr_t str2s = fstr_nat_consume_str(&str2);
+        int32_t cmp1_v = fstr_cmp(str1s, str2s);
+        if (cmp1_v != 0)
+            return cmp1_v;
+        // Compare next numeric token.
+        fstr_t str1n = fstr_nat_consume_num(&str1);
+        fstr_t str2n = fstr_nat_consume_num(&str2);
+        int32_t cmp2_v = fstr_cmp(str1n, str2n);
+        if (cmp2_v != 0)
+            return cmp2_v;
+    }
+    return 0;
+}
+
 static int32_t fstr_sort_cmp(const void* arg1, const void* arg2) {
     fstr_t *str1_ptr = (void*) arg1, *str2_ptr = (void*) arg2;
     int64_t cmp_v = fstr_cmp(*str1_ptr, *str2_ptr);
@@ -496,8 +537,18 @@ static int32_t fstr_sort_cmp_lexical(const void* arg1, const void* arg2) {
     return cmp_v == 0? 0: (cmp_v > 0? 1: -1);
 }
 
+static int32_t fstr_sort_cmp_nat(const void* arg1, const void* arg2) {
+    fstr_t *str1_ptr = (void*) arg1, *str2_ptr = (void*) arg2;
+    int64_t cmp_v = fstr_cmp_natural(*str1_ptr, *str2_ptr);
+    return cmp_v == 0? 0: (cmp_v > 0? 1: -1);
+}
+
 void fstr_sort(fstr_t fstr_list[], size_t n_fstr_list, bool lexical) {
     sort(fstr_list, n_fstr_list, sizeof(*fstr_list), lexical? fstr_sort_cmp_lexical: fstr_sort_cmp, 0);
+}
+
+void fstr_sort_nat(fstr_t fstr_list[], size_t n_fstr_list) {
+    sort(fstr_list, n_fstr_list, sizeof(*fstr_list), fstr_sort_cmp_nat, 0);
 }
 
 fstr_mem_t* fstr_order_next(fstr_t src) { sub_heap {

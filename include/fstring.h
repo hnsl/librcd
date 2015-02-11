@@ -313,9 +313,15 @@ int64_t fstr_cmp_case(fstr_t str1, fstr_t str2);
 /// which is slower than undefined deterministic ordering.
 int64_t fstr_cmp_lexical(const fstr_t str1, const fstr_t str2);
 
+/// Compares two fixed strings natural order relationship.
+int64_t fstr_cmp_natural(fstr_t str1, fstr_t str2);
+
 /// Takes a C array of fixed strings and sorts them.
 /// If lexical is true the sorting will be done in lexical order.
 void fstr_sort(fstr_t fstr_list[], size_t n_fstr_list, bool lexical);
+
+/// Takes a C array of fixed strings and sorts them in natural order.
+void fstr_sort_nat(fstr_t fstr_list[], size_t n_fstr_list);
 
 /// Gets the next string in non lexicographical order.
 /// E.g. "" -> "\x00" -> "\x01" -> ... -> "\xff" -> "\x00\x00" -> "\x00\x01"
