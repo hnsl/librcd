@@ -57,6 +57,14 @@
     LET(json_value_t new_obj = json_new_arr_in_arr(this)) \
     LET(json_value_t this = new_obj)
 
+#define JSON_ARR_FOREACH(parent, value) \
+    if (parent.type == JSON_ARRAY) \
+        list_foreach(parent.array_value, json_value_t, value)
+
+#define JSON_OBJ_FOREACH(parent, key, value) \
+    if (parent.type == JSON_OBJECT) \
+        dict_foreach(parent.object_value, json_value_t, key, value)
+
 /// Set a property of a JSON object to some value. Example usage:
 ///
 /// json_value_t obj = json_new_object();
