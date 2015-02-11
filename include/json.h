@@ -58,22 +58,25 @@
     LET(json_value_t this = new_obj)
 
 #define JSON_ARR_FOREACH(parent, value) \
-    if (parent.type == JSON_ARRAY) \
-        list_foreach(parent.array_value, json_value_t, value)
+    LET(json_value_t _parent = parent) \
+        if (_parent.type == JSON_ARRAY) \
+            list_foreach(_parent.array_value, json_value_t, value)
 
 #define JSON_OBJ_FOREACH(parent, key, value) \
-    if (parent.type == JSON_OBJECT) \
-        dict_foreach(parent.object_value, json_value_t, key, value)
+    LET(json_value_t _parent = parent) \
+        if (_parent.type == JSON_OBJECT) \
+            dict_foreach(_parent.object_value, json_value_t, key, value)
 
 /// Set a property of a JSON object to some value. Example usage:
 ///
 /// json_value_t obj = json_new_object();
 /// JSON_SET(obj, "property", json_string_v("value"));
 #define JSON_SET(parent, prop, value) ({ \
-    if (parent.type != JSON_OBJECT) { \
+    json_value_t _parent = parent; \
+    if (_parent.type != JSON_OBJECT) { \
         _json_fail_invalid_type(JSON_OBJECT, parent.type); \
     } \
-    dict_replace(parent.object_value, json_value_t, prop, value); \
+    dict_replace(_parent.object_value, json_value_t, prop, value); \
 })
 
 /// Traverse a chain of JSON properties in a lenient manner, returning a null JSON value
@@ -85,57 +88,57 @@
 ///     do_something(json_get_number(val));
 /// }
 #define JSON_LREF(value, ...) ({ \
-    json_value_t __value = value; \
-    fstr_t __path[] = {__VA_ARGS__}; \
-    for (int64_t __i = 0; __i < LENGTHOF(__path); __i++) { \
-        json_value_t* __next_value = (__value.type == JSON_OBJECT? \
-            dict_read(__value.object_value, json_value_t, __path[__i]): 0); \
-        __value = (__next_value == 0? json_null_v: *__next_value); \
+    json_value_t _value = value; \
+    fstr_t _path[] = {__VA_ARGS__}; \
+    for (int64_t _i = 0; _i < LENGTHOF(_path); _i++) { \
+        json_value_t* _next_value = (_value.type == JSON_OBJECT? \
+            dict_read(_value.object_value, json_value_t, _path[_i]): 0); \
+        _value = (_next_value == 0? json_null_v: *_next_value); \
     } \
-    __value; \
+    _value; \
 })
 
 /// Traverse a chain of JSON properties in a strict manner, throwing an exception if some
 /// property traversed does not exist or is null.
 #define JSON_REF(value, ...) ({ \
-    json_value_t __value = value; \
-    fstr_t __path[] = {__VA_ARGS__}; \
-    for (int64_t __i = 0; __i < LENGTHOF(__path); __i++) { \
-        json_value_t* __next_value = (__value.type == JSON_OBJECT? \
-            dict_read(__value.object_value, json_value_t, __path[__i]): 0); \
-        __value = (__next_value == 0? json_null_v: *__next_value); \
-        if (json_is_null(__value)) \
-            _json_fail_missing_property(__path[__i]); \
+    json_value_t _value = value; \
+    fstr_t _path[] = {__VA_ARGS__}; \
+    for (int64_t _i = 0; _i < LENGTHOF(_path); _i++) { \
+        json_value_t* _next_value = (_value.type == JSON_OBJECT? \
+            dict_read(_value.object_value, json_value_t, _path[_i]): 0); \
+        _value = (_next_value == 0? json_null_v: *_next_value); \
+        if (json_is_null(_value)) \
+            _json_fail_missing_property(_path[_i]); \
     } \
-    __value; \
+    _value; \
 })
 
 #define _JSON_REF_SET(parent_e, value_e, is_default, ...) ({ \
-    json_value_t __value = parent_e; \
-    fstr_t __path[] = {__VA_ARGS__}; \
-    bool __read = true; \
-    for (int64_t __i = 0; __i < LENGTHOF(__path); __i++) { \
-        if (__value.type != JSON_OBJECT) \
-            _json_fail_invalid_type(JSON_OBJECT, __value.type); \
-        json_value_t* __next_value; \
-        bool __last = (__i + 1 == LENGTHOF(__path)); \
-        if (!is_default && __last) { \
-            __read = false; \
+    json_value_t _value = parent_e; \
+    fstr_t _path[] = {__VA_ARGS__}; \
+    bool _read = true; \
+    for (int64_t _i = 0; _i < LENGTHOF(_path); _i++) { \
+        if (_value.type != JSON_OBJECT) \
+            _json_fail_invalid_type(JSON_OBJECT, _value.type); \
+        json_value_t* _next_value; \
+        bool _last = (_i + 1 == LENGTHOF(_path)); \
+        if (!is_default && _last) { \
+            _read = false; \
         } \
-        if (__read) { \
-            __next_value = dict_read(__value.object_value, json_value_t, __path[__i]); \
-            if (__next_value == 0) { \
-                __read = false; \
+        if (_read) { \
+            _next_value = dict_read(_value.object_value, json_value_t, _path[_i]); \
+            if (_next_value == 0) { \
+                _read = false; \
             } \
         } \
-        if (!__read) { \
-            json_value_t __new_value = (__last? (value_e): jobj_new()); \
-            JSON_SET(__value, __path[__i], __new_value); \
-            __next_value = &__new_value; \
+        if (!_read) { \
+            json_value_t _new_value = (_last? (value_e): jobj_new()); \
+            JSON_SET(_value, _path[_i], _new_value); \
+            _next_value = &_new_value; \
         } \
-         __value = *__next_value; \
+         _value = *_next_value; \
     } \
-    __value; \
+    _value; \
 })
 
 /// Like JSON_REF but sets the final referenced value to the specified value.
