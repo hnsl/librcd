@@ -24,10 +24,7 @@ void rcd_self_test_json() {
         json_value_t v4 = JSON_TOUCH(v, jobj_new({"baz", jstr("biz")}), "foo", "bar");
         atest(v4.type == JSON_NUMBER);
         atest(v4.number_value == 33);
-        json_value_t v5 = JSON_REF_SET(v, jobj_new({"baz", jstr("biz")}), "foo", "bar");
-        atest(v5.type == JSON_OBJECT);
-        json_value_t v6 = JSON_REF(v5, "baz");
-        atest(json_cmp(v6, jstr("biz")));
+        JSON_REF_SET(v, jobj_new({"baz", jstr("biz")}), "foo", "bar");
         json_value_t v7 = JSON_REF(v, "foo", "bar", "baz");
         atest(json_cmp(v7, jstr("biz")));
         json_value_t v8 = JSON_LREF(v, "foo", "bad", "baz");
