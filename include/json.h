@@ -20,43 +20,6 @@
 #define jarr_new(...) jarr(new_list(json_value_t, __VA_ARGS__))
 #define jobj_new(...) jobj(new_dict(json_value_t, __VA_ARGS__))
 
-/// Enter a scope with 'this' assigned to a particular JSON value. This can be
-/// helpful in making creation of JSON structures feel more natural.
-#define json_for(obj) \
-    LET(json_value_t this = obj)
-
-#define json_for_obj(obj) json_for(obj)
-
-/// Create a new object as a member of the object 'this', and enter a scope with it set as 'this'.
-/// Example usage:
-///
-/// json_value_t val = json_new_object();
-/// json_for_obj(val) {
-///     json_for_new_obj("property") {
-///         JSON_SET(this, "leaf", json_string_v("value"));
-///     }
-/// }
-#define json_for_new_oobj(key) \
-    LET(json_value_t new_obj = json_new_obj_in_obj(this, (key))) \
-    LET(json_value_t this = new_obj)
-
-#define json_for_new_obj(key) json_for_new_oobj(key)
-
-/// Create a new array as a member of the object 'this', and enter a scope with it set as 'this'.
-#define json_for_new_oarr(key) \
-    LET(json_value_t new_obj = json_new_arr_in_obj(this, (key))) \
-    LET(json_value_t this = new_obj)
-
-/// Create a new object as a member of the array 'this', and enter a scope with it set as 'this'.
-#define json_for_new_aobj \
-    LET(json_value_t new_obj = json_new_obj_in_arr(this)) \
-    LET(json_value_t this = new_obj)
-
-/// Create a new array as a member of the array 'this', and enter a scope with it set as 'this'.
-#define json_for_new_aarr \
-    LET(json_value_t new_obj = json_new_arr_in_arr(this)) \
-    LET(json_value_t this = new_obj)
-
 #define JSON_ARR_FOREACH(parent, value) \
     LET(json_value_t _parent = parent) \
         if (_parent.type == JSON_ARRAY) \
