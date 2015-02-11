@@ -216,38 +216,10 @@ static inline json_value_t json_new_object() {
     return json_object_v(new_dict(json_value_t));
 }
 
-/// Create a new object and assign it as a property of another object.
-static inline json_value_t json_new_obj_in_obj(json_value_t parent, fstr_t key) {
-    json_value_t obj = json_new_object();
-    JSON_SET(parent, key, obj);
-    return obj;
-}
-
-/// Create a new array and assign it as a property of another object.
-static json_value_t json_new_arr_in_obj(json_value_t parent, fstr_t key) {
-    json_value_t arr = json_new_array();
-    JSON_SET(parent, key, arr);
-    return arr;
-}
-
 static void json_append(json_value_t arr, json_value_t obj) {
     if (arr.type != JSON_ARRAY)
         _json_fail_invalid_type(JSON_ARRAY, arr.type);
     list_push_end(arr.array_value, json_value_t, obj);
-}
-
-/// Create a new object and append it to another array.
-static json_value_t json_new_obj_in_arr(json_value_t parent) {
-    json_value_t obj = json_new_object();
-    json_append(parent, obj);
-    return obj;
-}
-
-/// Create a new array and append it to another array.
-static json_value_t json_new_arr_in_arr(json_value_t parent) {
-    json_value_t arr = json_new_array();
-    json_append(parent, arr);
-    return arr;
 }
 
 static inline void _json_type_expect(json_value_t value, json_type_t expected_type) {
