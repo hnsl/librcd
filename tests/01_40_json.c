@@ -7,7 +7,7 @@
 void rcd_self_test_json() {
     // Create a json object and do some mutations.
     sub_heap {
-        json_value_t v = json_null_v;
+        json_value_t v = jnull;
         try {
             json_value_t v2 = JSON_TOUCH(v, jnum(1), "foo", "bar");
             atest(false);
