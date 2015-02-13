@@ -2965,6 +2965,16 @@ void lwt_alloc_import(void* ptr) {
     vm_heap_import(0, fiber->current_heap, ptr);
 }
 
+void lwt_consume_heap(lwt_heap_t* heap) {
+    LWT_GET_LOCAL_FIBER(fiber);
+    if (heap == 0)
+        return;
+    if (fiber->current_heap == 0)
+        abort();
+    vm_heap_import_all(fiber->current_heap, heap->vm_heap, false);
+    lwt_alloc_free(heap);
+}
+
 size_t lwt_alloc_get_size(void* ptr) {
     LWT_GET_LOCAL_FIBER(fiber);
     if (fiber->current_heap == 0)

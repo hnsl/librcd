@@ -209,6 +209,10 @@ void lwt_alloc_escape(void* ptr);
 /// fiber), otherwise your program will have undefined behavior.
 void lwt_alloc_import(void* ptr);
 
+/// Consumes the specified heap, importing all allocations in it in the
+/// current heap and frees it.
+void lwt_consume_heap(lwt_heap_t* heap);
+
 /// Returns the total allocation size of an allocated segment.
 /// Make sure that the remote heap is synchronized (it should be joined with
 /// the current fiber), otherwise your program will have undefined behavior.
