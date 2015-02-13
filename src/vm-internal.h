@@ -25,6 +25,7 @@ void* vm_heap_alloc_destructable(vm_heap_t* heap, size_t min_size, size_t* size_
 void* vm_heap_alloc(vm_heap_t* heap, size_t min_size, size_t* size_out);
 bool vm_heap_escape(void* primary_ptr);
 bool vm_heap_import(vm_heap_t* require_sub_heap, vm_heap_t* dst_heap, void* primary_ptr);
+bool vm_heap_import_all(vm_heap_t* dst_heap, vm_heap_t* src_heap, bool escape);
 bool vm_heap_has_allocs(vm_heap_t* heap);
 bool vm_heap_free(vm_heap_t* require_sub_heap, void* primary_ptr);
 size_t vm_heap_get_size(vm_heap_t* require_sub_heap, void* primary_ptr);

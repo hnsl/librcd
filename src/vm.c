@@ -909,6 +909,21 @@ bool vm_heap_import(vm_heap_t* require_sub_heap, vm_heap_t* dst_heap, void* prim
     return true;
 }
 
+bool vm_heap_import_all(vm_heap_t* dst_heap, vm_heap_t* src_heap, bool escape) {
+    if (escape) {
+        dst_heap = dst_heap->parent;
+        if (dst_heap == 0)
+           return false;
+    }
+    vm_heap_alloc_hdr_t *alloc_header;
+    DL_FOREACH(src_heap->alloc_headers, alloc_header) {
+        alloc_header->heap = vm_csheap_write(dst_heap);
+    }
+    DL_CONCAT(dst_heap->alloc_headers, src_heap->alloc_headers);
+    src_heap->alloc_headers = 0;
+    return true;
+}
+
 bool vm_heap_free(vm_heap_t* require_sub_heap, void* primary_ptr) {
     if (primary_ptr == 0)
         return true;
