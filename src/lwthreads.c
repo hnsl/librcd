@@ -1969,10 +1969,9 @@ int* __errno_location() {
 
 void __rcd_escape_sh_txn(lwt_heap_t** __rcd_txn_aheap) {
     LWT_GET_LOCAL_FIBER(fiber);
-    vm_heap_t* heap = (*__rcd_txn_aheap)->vm_heap;
-    if (vm_heap_has_allocs(heap)) {
-        vm_heap_import_all(fiber->current_heap, heap, true);
-    }
+    lwt_heap_t* heap = *__rcd_txn_aheap;
+    vm_heap_import_all(fiber->current_heap, heap->vm_heap, true);
+    lwt_alloc_free(heap);
 }
 
 void __rcd_escape_gh_txn(lwt_heap_t** __rcd_global_heap_tail) {
