@@ -1341,6 +1341,39 @@ fstr_t rio_read_to_end(rio_t* rio, fstr_t buffer) {
     return fstr_sslice(buffer, 0, -tail_left.len - 1);
 }
 
+join_locked(fstr_t) read_to_end_tout_result(join_server_params, rcd_exception_t* ex, fstr_t result) {
+    if (ex != 0)
+        lwt_throw_exception(ex);
+    return result;
+}
+
+fiber_main read_to_end_tout_fiber(fiber_main_attr, rio_t* rio, fstr_t buffer, uint128_t timeout_ns) { try {
+    // Cancel fiber after this time.
+    ifc_cancel_alarm_arm(timeout_ns);
+    // Read to end.
+    rcd_exception_t* ex = 0;
+    fstr_t result;
+    try {
+        result = rio_read_to_end(rio, buffer);
+    } catch (exception_io, e) {
+        ex = e;
+    }
+    // Return result.
+    accept_join(read_to_end_tout_result, join_server_params, ex, result);
+} catch (exception_desync, e); }
+
+fstr_t rio_read_to_end_timeout(rio_t* rio, fstr_t buffer, uint128_t timeout_ns) { sub_heap {
+    rcd_sub_fiber_t* sf;
+    fmitosis {
+        sf = spawn_fiber(read_to_end_tout_fiber("", rio_realloc(rio), buffer, timeout_ns));
+    }
+    try {
+        return read_to_end_tout_result(sfid(sf));
+    } catch (exception_inner_join_fail, e) {
+        throw_eio_fwd("timed out while reading to end of stream", rio_tout, e);
+    }
+}}
+
 void rio_skip(rio_t* rio, size_t length) {
     if (length == 0)
         return;

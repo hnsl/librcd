@@ -263,6 +263,9 @@ typedef struct rio_sub_exec {
 /// For files this is the end of file. For TCP this is a graceful connection close.
 define_eio(rio_eos);
 
+/// Timeout. Thrown when timed out while waiting for the operation to finish.
+define_eio(rio_tout);
+
 /// INTERNAL RIO FUNCTION that returns the read file descriptor associated with
 /// a rio handle. Only useful when dealing with external file descriptors.
 /// Normally you should not call this function directly.
@@ -709,6 +712,11 @@ void rio_read_fill(rio_t* rio, fstr_t buffer) NO_NULL_ARGS;
 /// length (e.g. when reading subprocess output).
 /// Throws other io exceptions on read error.
 fstr_t rio_read_to_end(rio_t* rio, fstr_t buffer) NO_NULL_ARGS;
+
+/// Reads until either the buffer ends, the stream ends or timeout.
+/// Calling this function will reallocate and disable the rio handle.
+/// Exactly like rio_read_to_end() but also throws rio_timeout eio exception.
+fstr_t rio_read_to_end_timeout(rio_t* rio, fstr_t buffer, uint128_t timeout_ns) NO_NULL_ARGS;
 
 /// Skips over this many bytes in the rio stream. Can currently only skip over
 /// the internal peek buffer and cannot directly skip I/O on underlying fd.
