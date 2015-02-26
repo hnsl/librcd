@@ -113,6 +113,12 @@ typedef struct rcd_abstract_dict {
 
 #define dict_insert(set, type, fstr_key, e) dict_push_end(set, type, fstr_key, e)
 
+
+#define dict_inserta(set, type, fstr_key, e) ({ \
+    bool insert_ok = dict_push_end(set, type, fstr_key, e); \
+    assert(insert_ok);; \
+})
+
 #define dict_replace(set, type, fstr_key, e) ({ \
     __dict_put(set, type, fstr_key, e); \
     rbtree_node_t* __existing_elem_node = rbtree_insert(&__elem->node, &_abstract_dict->tree); \
