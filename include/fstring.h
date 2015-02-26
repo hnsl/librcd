@@ -252,6 +252,14 @@ static inline bool fstr_putc(fstr_t* dst, uint8_t c) {
     return true;
 }
 
+/// Returns the tail of the buffer that starts on "mark".
+/// When mark has non zero length the pointer is considered.
+/// The pointer represents the first byte in the tail slice returned.
+/// When the pointer is before the first byte in full, full is returned.
+/// When the pointer is beyond the last byte in full, a zero length string is returned.
+/// When mark has zero length a zero length string is returned.
+fstr_t fstr_tail(fstr_t full, fstr_t mark);
+
 /// Returns the head of the buffer that is not member of tail.
 /// Tail must either have a zero length (in which case full will be returned)
 /// or specify a range that is either full or a subset of full where the last

@@ -328,6 +328,14 @@ fstr_t fstr_cpy_over(fstr_t dst, fstr_t src, fstr_t* out_dst_tail, fstr_t* out_s
     return fstr_slice(dst, 0, len);
 }
 
+fstr_t fstr_tail(fstr_t full, fstr_t mark) {
+    if (mark.len == 0)
+        return "";
+    if (mark.str < full.str)
+        return full;
+    return fstr_slice(full, mark.str - full.str, -1);
+}
+
 fstr_t fstr_detail(fstr_t full, fstr_t tail) {
     if (tail.len == 0)
         return full;
