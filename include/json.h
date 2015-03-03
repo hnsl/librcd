@@ -41,6 +41,15 @@
     dict_replace(_parent.object_value, json_value_t, prop, value); \
 })
 
+/// Unset a property of a JSON object if it exists.
+#define JSON_UNSET(parent, prop) ({ \
+    json_value_t _parent = parent; \
+    if (_parent.type != JSON_OBJECT) { \
+        _json_fail_invalid_type(JSON_OBJECT, parent.type); \
+    } \
+    (void) dict_delete(_parent.object_value, json_value_t, prop); \
+})
+
 /// Traverse a chain of JSON properties in a lenient manner, returning a null JSON value
 /// if any link in the chain does not exist. Example usage:
 ///
