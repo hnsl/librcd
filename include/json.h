@@ -191,6 +191,11 @@ fstr_mem_t* json_stringify_pretty(json_value_t value);
 /// and exactly equal. It is undefined if two arrays or dicts are equal or not.
 bool json_cmp(json_value_t a, json_value_t b);
 
+/// Returns the length of the json value. For arrays an objects these are their
+/// basic count. For strings it's their length.
+/// For other types the function returns zero.
+size_t json_length(json_value_t value);
+
 /// Flattens a JSON value to a string. This destroys the type information
 /// but makes the data easier to work with in cases where the type information
 /// is irrelevant.

@@ -447,6 +447,21 @@ bool json_cmp(json_value_t a, json_value_t b) {
     }}
 }
 
+size_t json_length(json_value_t value) {
+    switch (value.type) {{
+    } case JSON_NULL: {
+    } case JSON_BOOL: {
+    } case JSON_NUMBER: {
+        return 0;
+    } case JSON_STRING: {
+        return value.string_value.len;
+    } case JSON_ARRAY: {
+        return list_count(value.array_value, json_value_t);
+    } case JSON_OBJECT: {
+        return dict_count(value.object_value, json_value_t);
+    }}
+}
+
 fstr_mem_t* json_flatten(json_value_t value) { sub_heap {
     switch (value.type) {{
     } case JSON_BOOL: {
