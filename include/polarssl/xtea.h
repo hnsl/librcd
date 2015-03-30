@@ -3,12 +3,9 @@
  *
  * \brief XTEA block cipher (32-bit)
  *
- *  Copyright (C) 2006-2013, Brainspark B.V.
+ *  Copyright (C) 2006-2013, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,11 +24,15 @@
 #ifndef POLARSSL_XTEA_H
 #define POLARSSL_XTEA_H
 
+#if !defined(POLARSSL_CONFIG_FILE)
 #include "config.h"
+#else
+#include POLARSSL_CONFIG_FILE
+#endif
 
-/*NO-SYS #include <string.h> */
+/*NO-SYS #include <stddef.h> */
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(EFIX64) && !defined(EFI32)
 /*NO-SYS #include <basetsd.h> */
 typedef UINT32 uint32_t;
 #else
@@ -47,6 +48,10 @@ typedef UINT32 uint32_t;
 // Regular implementation
 //
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * \brief          XTEA context structure
  */
@@ -56,9 +61,19 @@ typedef struct
 }
 xtea_context;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/**
+ * \brief          Initialize XTEA context
+ *
+ * \param ctx      XTEA context to be initialized
+ */
+void xtea_init( xtea_context *ctx );
+
+/**
+ * \brief          Clear XTEA context
+ *
+ * \param ctx      XTEA context to be cleared
+ */
+void xtea_free( xtea_context *ctx );
 
 /**
  * \brief          XTEA key schedule
@@ -66,7 +81,7 @@ extern "C" {
  * \param ctx      XTEA context to be initialized
  * \param key      the secret key
  */
-void xtea_setup( xtea_context *ctx, unsigned char key[16] );
+void xtea_setup( xtea_context *ctx, const unsigned char key[16] );
 
 /**
  * \brief          XTEA cipher function
@@ -80,9 +95,10 @@ void xtea_setup( xtea_context *ctx, unsigned char key[16] );
  */
 int xtea_crypt_ecb( xtea_context *ctx,
                     int mode,
-                    unsigned char input[8],
+                    const unsigned char input[8],
                     unsigned char output[8] );
 
+#if defined(POLARSSL_CIPHER_MODE_CBC)
 /**
  * \brief          XTEA CBC cipher function
  *
@@ -100,8 +116,9 @@ int xtea_crypt_cbc( xtea_context *ctx,
                     int mode,
                     size_t length,
                     unsigned char iv[8],
-                    unsigned char *input,
+                    const unsigned char *input,
                     unsigned char *output);
+#endif /* POLARSSL_CIPHER_MODE_CBC */
 
 #ifdef __cplusplus
 }

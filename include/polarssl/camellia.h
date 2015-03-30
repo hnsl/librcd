@@ -3,12 +3,9 @@
  *
  * \brief Camellia block cipher
  *
- *  Copyright (C) 2006-2013, Brainspark B.V.
+ *  Copyright (C) 2006-2014, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,11 +24,15 @@
 #ifndef POLARSSL_CAMELLIA_H
 #define POLARSSL_CAMELLIA_H
 
+#if !defined(POLARSSL_CONFIG_FILE)
 #include "config.h"
+#else
+#include POLARSSL_CONFIG_FILE
+#endif
 
-/*NO-SYS #include <string.h> */
+/*NO-SYS #include <stddef.h> */
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(EFIX64) && !defined(EFI32)
 /*NO-SYS #include <basetsd.h> */
 typedef UINT32 uint32_t;
 #else
@@ -48,6 +49,10 @@ typedef UINT32 uint32_t;
 // Regular implementation
 //
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * \brief          CAMELLIA context structure
  */
@@ -58,9 +63,19 @@ typedef struct
 }
 camellia_context;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/**
+ * \brief          Initialize CAMELLIA context
+ *
+ * \param ctx      CAMELLIA context to be initialized
+ */
+void camellia_init( camellia_context *ctx );
+
+/**
+ * \brief          Clear CAMELLIA context
+ *
+ * \param ctx      CAMELLIA context to be cleared
+ */
+void camellia_free( camellia_context *ctx );
 
 /**
  * \brief          CAMELLIA key schedule (encryption)
@@ -68,10 +83,11 @@ extern "C" {
  * \param ctx      CAMELLIA context to be initialized
  * \param key      encryption key
  * \param keysize  must be 128, 192 or 256
- * 
+ *
  * \return         0 if successful, or POLARSSL_ERR_CAMELLIA_INVALID_KEY_LENGTH
  */
-int camellia_setkey_enc( camellia_context *ctx, const unsigned char *key, unsigned int keysize );
+int camellia_setkey_enc( camellia_context *ctx, const unsigned char *key,
+                         unsigned int keysize );
 
 /**
  * \brief          CAMELLIA key schedule (decryption)
@@ -79,10 +95,11 @@ int camellia_setkey_enc( camellia_context *ctx, const unsigned char *key, unsign
  * \param ctx      CAMELLIA context to be initialized
  * \param key      decryption key
  * \param keysize  must be 128, 192 or 256
- * 
+ *
  * \return         0 if successful, or POLARSSL_ERR_CAMELLIA_INVALID_KEY_LENGTH
  */
-int camellia_setkey_dec( camellia_context *ctx, const unsigned char *key, unsigned int keysize );
+int camellia_setkey_dec( camellia_context *ctx, const unsigned char *key,
+                         unsigned int keysize );
 
 /**
  * \brief          CAMELLIA-ECB block encryption/decryption
@@ -91,7 +108,7 @@ int camellia_setkey_dec( camellia_context *ctx, const unsigned char *key, unsign
  * \param mode     CAMELLIA_ENCRYPT or CAMELLIA_DECRYPT
  * \param input    16-byte input block
  * \param output   16-byte output block
- * 
+ *
  * \return         0 if successful
  */
 int camellia_crypt_ecb( camellia_context *ctx,
@@ -99,10 +116,19 @@ int camellia_crypt_ecb( camellia_context *ctx,
                     const unsigned char input[16],
                     unsigned char output[16] );
 
+#if defined(POLARSSL_CIPHER_MODE_CBC)
 /**
  * \brief          CAMELLIA-CBC buffer encryption/decryption
  *                 Length should be a multiple of the block
  *                 size (16 bytes)
+ *
+ * \note           Upon exit, the content of the IV is updated so that you can
+ *                 call the function same function again on the following
+ *                 block(s) of data and get the same result as if it was
+ *                 encrypted in one call. This allows a "streaming" usage.
+ *                 If on the other hand you need to retain the contents of the
+ *                 IV, you should either save it manually or use the cipher
+ *                 module instead.
  *
  * \param ctx      CAMELLIA context
  * \param mode     CAMELLIA_ENCRYPT or CAMELLIA_DECRYPT
@@ -110,8 +136,9 @@ int camellia_crypt_ecb( camellia_context *ctx,
  * \param iv       initialization vector (updated after use)
  * \param input    buffer holding the input data
  * \param output   buffer holding the output data
- * 
- * \return         0 if successful, or POLARSSL_ERR_CAMELLIA_INVALID_INPUT_LENGTH
+ *
+ * \return         0 if successful, or
+ *                 POLARSSL_ERR_CAMELLIA_INVALID_INPUT_LENGTH
  */
 int camellia_crypt_cbc( camellia_context *ctx,
                     int mode,
@@ -119,13 +146,23 @@ int camellia_crypt_cbc( camellia_context *ctx,
                     unsigned char iv[16],
                     const unsigned char *input,
                     unsigned char *output );
+#endif /* POLARSSL_CIPHER_MODE_CBC */
 
+#if defined(POLARSSL_CIPHER_MODE_CFB)
 /**
  * \brief          CAMELLIA-CFB128 buffer encryption/decryption
  *
  * Note: Due to the nature of CFB you should use the same key schedule for
  * both encryption and decryption. So a context initialized with
  * camellia_setkey_enc() for both CAMELLIA_ENCRYPT and CAMELLIE_DECRYPT.
+ *
+ * \note           Upon exit, the content of the IV is updated so that you can
+ *                 call the function same function again on the following
+ *                 block(s) of data and get the same result as if it was
+ *                 encrypted in one call. This allows a "streaming" usage.
+ *                 If on the other hand you need to retain the contents of the
+ *                 IV, you should either save it manually or use the cipher
+ *                 module instead.
  *
  * \param ctx      CAMELLIA context
  * \param mode     CAMELLIA_ENCRYPT or CAMELLIA_DECRYPT
@@ -134,8 +171,9 @@ int camellia_crypt_cbc( camellia_context *ctx,
  * \param iv       initialization vector (updated after use)
  * \param input    buffer holding the input data
  * \param output   buffer holding the output data
- * 
- * \return         0 if successful, or POLARSSL_ERR_CAMELLIA_INVALID_INPUT_LENGTH
+ *
+ * \return         0 if successful, or
+ *                 POLARSSL_ERR_CAMELLIA_INVALID_INPUT_LENGTH
  */
 int camellia_crypt_cfb128( camellia_context *ctx,
                        int mode,
@@ -144,7 +182,9 @@ int camellia_crypt_cfb128( camellia_context *ctx,
                        unsigned char iv[16],
                        const unsigned char *input,
                        unsigned char *output );
+#endif /* POLARSSL_CIPHER_MODE_CFB */
 
+#if defined(POLARSSL_CIPHER_MODE_CTR)
 /**
  * \brief               CAMELLIA-CTR buffer encryption/decryption
  *
@@ -154,6 +194,7 @@ int camellia_crypt_cfb128( camellia_context *ctx,
  * both encryption and decryption. So a context initialized with
  * camellia_setkey_enc() for both CAMELLIA_ENCRYPT and CAMELLIA_DECRYPT.
  *
+ * \param ctx           CAMELLIA context
  * \param length        The length of the data
  * \param nc_off        The offset in the current stream_block (for resuming
  *                      within current cipher stream). The offset pointer to
@@ -173,6 +214,7 @@ int camellia_crypt_ctr( camellia_context *ctx,
                        unsigned char stream_block[16],
                        const unsigned char *input,
                        unsigned char *output );
+#endif /* POLARSSL_CIPHER_MODE_CTR */
 
 #ifdef __cplusplus
 }

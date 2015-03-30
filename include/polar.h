@@ -19,12 +19,14 @@
         polar_error(__r_code, fstr(#r_code_expr), exception_type); \
 })
 
+#define POLARSSL_ERROR_STRERROR_BC
+
 #define RCD_POLAR_EC(r_code_expr) RCD_POLAR_ECE(r_code_expr, exception_io)
 
 /// Polarssl server certificate and key.
 typedef struct polar_sck {
-    struct _x509_cert* own_cert;
-    struct _rsa_context* rsa_key;
+    struct _x509_crt* own_cert;
+    struct _pk_context* private_key;
 } polar_sck_t;
 
 typedef struct polar_tls_sni_cb {

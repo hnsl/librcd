@@ -6,12 +6,9 @@
  *
  * \author Mathias Olsson <mathias@kompetensum.com>
  *
- *  Copyright (C) 2006-2012, Brainspark B.V.
+ *  Copyright (C) 2006-2012, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,11 +27,11 @@
 #ifndef POLARSSL_PBKDF2_H
 #define POLARSSL_PBKDF2_H
 
-/*NO-SYS #include <string.h> */
-
 #include "md.h"
 
-#ifdef _MSC_VER
+/*NO-SYS #include <stddef.h> */
+
+#if defined(_MSC_VER) && !defined(EFIX64) && !defined(EFI32)
 /*NO-SYS #include <basetsd.h> */
 typedef UINT32 uint32_t;
 #else
@@ -60,7 +57,7 @@ extern "C" {
  * \param key_length            Length of generated key
  * \param output   Generated key. Must be at least as big as key_length
  *
- * \returns        0 on success, or a PolarSSL error code if verification fails.
+ * \returns        0 on success, or a POLARSSL_ERR_xxx code if verification fails.
  */
 int pbkdf2_hmac( md_context_t *ctx, const unsigned char *password,
                  size_t plen, const unsigned char *salt, size_t slen,

@@ -3,12 +3,9 @@
  *
  * \brief Privacy Enhanced Mail (PEM) decoding
  *
- *  Copyright (C) 2006-2013, Brainspark B.V.
+ *  Copyright (C) 2006-2013, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,7 +24,7 @@
 #ifndef POLARSSL_PEM_H
 #define POLARSSL_PEM_H
 
-/*NO-SYS #include <string.h> */
+/*NO-SYS #include <stddef.h> */
 
 /**
  * \name PEM Error codes
@@ -46,6 +43,11 @@
 #define POLARSSL_ERR_PEM_BAD_INPUT_DATA                    -0x1480  /**< Bad input parameters to function. */
 /* \} name */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#if defined(POLARSSL_PEM_PARSE_C)
 /**
  * \brief       PEM context structure
  */
@@ -56,10 +58,6 @@ typedef struct
     unsigned char *info;    /*!< buffer for extra header information */
 }
 pem_context;
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \brief       PEM context setup
@@ -84,9 +82,13 @@ void pem_init( pem_context *ctx );
  *                  POLARSSL_ERR_PEM_NO_HEADER_FOOTER_PRESENT, use_len is
  *                  the length to skip)
  *
- * \return          0 on success, ior a specific PEM error code
+ * \note            Attempts to check password correctness by verifying if
+ *                  the decrypted text starts with an ASN.1 sequence of
+ *                  appropriate length
+ *
+ * \return          0 on success, or a specific PEM error code
  */
-int pem_read_buffer( pem_context *ctx, char *header, char *footer,
+int pem_read_buffer( pem_context *ctx, const char *header, const char *footer,
                      const unsigned char *data,
                      const unsigned char *pwd,
                      size_t pwdlen, size_t *use_len );
@@ -97,6 +99,29 @@ int pem_read_buffer( pem_context *ctx, char *header, char *footer,
  * \param ctx   context to be freed
  */
 void pem_free( pem_context *ctx );
+#endif /* POLARSSL_PEM_PARSE_C */
+
+#if defined(POLARSSL_PEM_WRITE_C)
+/**
+ * \brief           Write a buffer of PEM information from a DER encoded
+ *                  buffer.
+ *
+ * \param header    header string to write
+ * \param footer    footer string to write
+ * \param der_data  DER data to write
+ * \param der_len   length of the DER data
+ * \param buf       buffer to write to
+ * \param buf_len   length of output buffer
+ * \param olen      total length written / required (if buf_len is not enough)
+ *
+ * \return          0 on success, or a specific PEM or BASE64 error code. On
+ *                  POLARSSL_ERR_BASE64_BUFFER_TOO_SMALL olen is the required
+ *                  size.
+ */
+int pem_write_buffer( const char *header, const char *footer,
+                      const unsigned char *der_data, size_t der_len,
+                      unsigned char *buf, size_t buf_len, size_t *olen );
+#endif /* POLARSSL_PEM_WRITE_C */
 
 #ifdef __cplusplus
 }

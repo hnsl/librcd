@@ -1,16 +1,13 @@
 /**
- * \file pkcs#5.h
+ * \file pkcs5.h
  *
  * \brief PKCS#5 functions
  *
  * \author Mathias Olsson <mathias@kompetensum.com>
  *
- *  Copyright (C) 2006-2013, Brainspark B.V.
+ *  Copyright (C) 2006-2013, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,12 +26,12 @@
 #ifndef POLARSSL_PKCS5_H
 #define POLARSSL_PKCS5_H
 
-/*NO-SYS #include <string.h> */
-
 #include "asn1.h"
 #include "md.h"
 
-#ifdef _MSC_VER
+/*NO-SYS #include <stddef.h> */
+
+#if defined(_MSC_VER) && !defined(EFIX64) && !defined(EFI32)
 /*NO-SYS #include <basetsd.h> */
 typedef UINT32 uint32_t;
 #else
@@ -49,24 +46,6 @@ typedef UINT32 uint32_t;
 #define PKCS5_DECRYPT      0
 #define PKCS5_ENCRYPT      1
 
-/*
- * PKCS#5 OIDs
- */
-#define OID_PKCS5               "\x2a\x86\x48\x86\xf7\x0d\x01\x05"
-#define OID_PKCS5_PBES2         OID_PKCS5 "\x0d"
-#define OID_PKCS5_PBKDF2        OID_PKCS5 "\x0c"
-
-/*
- * Encryption Algorithm OIDs
- */
-#define OID_DES_CBC             "\x2b\x0e\x03\x02\x07"
-#define OID_DES_EDE3_CBC        "\x2a\x86\x48\x86\xf7\x0d\x03\x07"
-
-/*
- * Digest Algorithm OIDs
- */
-#define OID_HMAC_SHA1           "\x2a\x86\x48\x86\xf7\x0d\x02\x07"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -77,12 +56,12 @@ extern "C" {
  * \param pbe_params the ASN.1 algorithm parameters
  * \param mode       either PKCS5_DECRYPT or PKCS5_ENCRYPT
  * \param pwd        password to use when generating key
- * \param plen       length of password
+ * \param pwdlen     length of password
  * \param data       data to process
  * \param datalen    length of data
  * \param output     output buffer
  *
- * \returns        0 on success, or a PolarSSL error code if verification fails.
+ * \returns        0 on success, or a POLARSSL_ERR_xxx code if verification fails.
  */
 int pkcs5_pbes2( asn1_buf *pbe_params, int mode,
                  const unsigned char *pwd,  size_t pwdlen,
@@ -101,7 +80,7 @@ int pkcs5_pbes2( asn1_buf *pbe_params, int mode,
  * \param key_length            Length of generated key
  * \param output   Generated key. Must be at least as big as key_length
  *
- * \returns        0 on success, or a PolarSSL error code if verification fails.
+ * \returns        0 on success, or a POLARSSL_ERR_xxx code if verification fails.
  */
 int pkcs5_pbkdf2_hmac( md_context_t *ctx, const unsigned char *password,
                        size_t plen, const unsigned char *salt, size_t slen,

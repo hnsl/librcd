@@ -3,12 +3,9 @@
  *
  * \brief RFC 1521 base64 encoding/decoding
  *
- *  Copyright (C) 2006-2010, Brainspark B.V.
+ *  Copyright (C) 2006-2013, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,7 +24,7 @@
 #ifndef POLARSSL_BASE64_H
 #define POLARSSL_BASE64_H
 
-/*NO-SYS #include <string.h> */
+/*NO-SYS #include <stddef.h> */
 
 #define POLARSSL_ERR_BASE64_BUFFER_TOO_SMALL               -0x002A  /**< Output buffer too small. */
 #define POLARSSL_ERR_BASE64_INVALID_CHARACTER              -0x002C  /**< Invalid character in input. */
@@ -57,7 +54,7 @@ int base64_encode( unsigned char *dst, size_t *dlen,
 /**
  * \brief          Decode a base64-formatted buffer
  *
- * \param dst      destination buffer
+ * \param dst      destination buffer (can be NULL for checking size)
  * \param dlen     size of the buffer
  * \param src      source buffer
  * \param slen     amount of data to be decoded
@@ -67,8 +64,8 @@ int base64_encode( unsigned char *dst, size_t *dlen,
  *                 not correct. *dlen is always updated to reflect the amount
  *                 of data that has (or would have) been written.
  *
- * \note           Call this function with *dlen = 0 to obtain the
- *                 required buffer size in *dlen
+ * \note           Call this function with *dst = NULL or *dlen = 0 to obtain
+ *                 the required buffer size in *dlen
  */
 int base64_decode( unsigned char *dst, size_t *dlen,
                    const unsigned char *src, size_t slen );

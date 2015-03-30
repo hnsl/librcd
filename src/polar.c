@@ -155,7 +155,7 @@ join_locked(void) tls_epollr_notify(join_server_params, tls_session_t* session) 
 join_locked(void) tls_epollw_notify(join_server_params, tls_session_t* session) {}
 
 static void init_ca_chain(void* arg_ptr) { uninterruptible sub_heap {
-    x509_cert* ca_chain = arg_ptr;
+    x509_crt* ca_chain = arg_ptr;
     fstr_t ca_paths[] = POLAR_TLS_CA_PATHS;
     for (size_t i = 0; i < LENGTHOF(ca_paths); i++) {
         fstr_t ca_path = ca_paths[i];
@@ -166,7 +166,7 @@ static void init_ca_chain(void* arg_ptr) { uninterruptible sub_heap {
                     if (rio_file_stat(ca_file_path).file_type != rio_file_type_regular)
                         break;
                     /* DBG("reading cert [", ca_file_path, "]"); */
-                    RCD_POLAR_ECE(x509parse_crtfile(ca_chain, fstr_to_cstr(ca_file_path)), exception_io);
+                    RCD_POLAR_ECE(x509_crt_parse_file(ca_chain, fstr_to_cstr(ca_file_path)), exception_io);
                 } catch (exception_io, e) {
                     /* rio_debug(concs("tls init ca error: failed to read cert [", ca_file_path, "], certificate validation might fail:\n")); */
                     /* rio_debug(fss(lwt_get_exception_dump(e))); */
@@ -179,9 +179,9 @@ static void init_ca_chain(void* arg_ptr) { uninterruptible sub_heap {
     }
 }}
 
-static x509_cert* tls_get_ca_chain() {
+static x509_crt* tls_get_ca_chain() {
     static lwt_once_t once = LWT_ONCE_INIT;
-    static x509_cert ca_chain = {0};
+    static x509_crt ca_chain = {0};
     lwt_once(&once, init_ca_chain, &ca_chain);
     return &ca_chain;
 }
@@ -267,7 +267,7 @@ static int tls_server_sni_cb(void* parameter, ssl_context* ssl, const unsigned c
     polar_sck_t sck;
     if (!sni_cb->fn(hostname, &sck, sni_cb->arg_ptr))
         return 1;
-    ssl_set_own_cert(ssl, sck.own_cert, sck.rsa_key);
+    ssl_set_own_cert(ssl, sck.own_cert, sck.private_key);
     return 0;
 }
 
@@ -283,7 +283,7 @@ fiber_main tls_server_session_fiber(fiber_main_attr, rio_t* socket, polar_sck_t*
     ssl_set_authmode(&session.ssl_ctx, SSL_VERIFY_NONE);
     ssl_set_bio(&session.ssl_ctx, tls_bio_recv, &session, tls_bio_send, &session);
     if (sck != 0)
-        ssl_set_own_cert(&session.ssl_ctx, sck->own_cert, sck->rsa_key);
+        ssl_set_own_cert(&session.ssl_ctx, sck->own_cert, sck->private_key);
     if (sni_cb != 0)
         ssl_set_sni(&session.ssl_ctx, tls_server_sni_cb, sni_cb);
     // TODO: We disable renegotiation. We should fix this for protection against leaking entropy.

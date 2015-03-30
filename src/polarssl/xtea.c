@@ -1,12 +1,9 @@
 /*
  *  An 32-bit implementation of the XTEA algorithm
  *
- *  Copyright (C) 2006-2013, Brainspark B.V.
+ *  Copyright (C) 2006-2014, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,13 +20,33 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#if !defined(POLARSSL_CONFIG_FILE)
 #include "polarssl/config.h"
+#else
+#include POLARSSL_CONFIG_FILE
+#endif
 
 #if defined(POLARSSL_XTEA_C)
 
 #include "polarssl/xtea.h"
 
+/*NO-SYS #include <string.h> */
+
+#if defined(POLARSSL_SELF_TEST)
+#if defined(POLARSSL_PLATFORM_C)
+#include "polarssl/platform.h"
+#else
+/*NO-SYS #include <stdio.h> */
+#define polarssl_printf printf
+#endif /* POLARSSL_PLATFORM_C */
+#endif /* POLARSSL_SELF_TEST */
+
 #if !defined(POLARSSL_XTEA_ALT)
+
+/* Implementation that should never be optimized out by the compiler */
+static void polarssl_zeroize( void *v, size_t n ) {
+    volatile unsigned char *p = v; while( n-- ) *p++ = 0;
+}
 
 /*
  * 32-bit integer manipulation macros (big endian)
@@ -54,14 +71,27 @@
 }
 #endif
 
+void xtea_init( xtea_context *ctx )
+{
+    memset( ctx, 0, sizeof( xtea_context ) );
+}
+
+void xtea_free( xtea_context *ctx )
+{
+    if( ctx == NULL )
+        return;
+
+    polarssl_zeroize( ctx, sizeof( xtea_context ) );
+}
+
 /*
  * XTEA key schedule
  */
-void xtea_setup( xtea_context *ctx, unsigned char key[16] )
+void xtea_setup( xtea_context *ctx, const unsigned char key[16] )
 {
     int i;
 
-    memset(ctx, 0, sizeof(xtea_context));
+    memset( ctx, 0, sizeof(xtea_context) );
 
     for( i = 0; i < 4; i++ )
     {
@@ -72,13 +102,13 @@ void xtea_setup( xtea_context *ctx, unsigned char key[16] )
 /*
  * XTEA encrypt function
  */
-int xtea_crypt_ecb( xtea_context *ctx, int mode, unsigned char input[8],
-                     unsigned char output[8])
+int xtea_crypt_ecb( xtea_context *ctx, int mode,
+                    const unsigned char input[8], unsigned char output[8])
 {
     uint32_t *k, v0, v1, i;
 
     k = ctx->k;
-    
+
     GET_UINT32_BE( v0, input, 0 );
     GET_UINT32_BE( v1, input, 4 );
 
@@ -111,30 +141,28 @@ int xtea_crypt_ecb( xtea_context *ctx, int mode, unsigned char input[8],
     return( 0 );
 }
 
+#if defined(POLARSSL_CIPHER_MODE_CBC)
 /*
  * XTEA-CBC buffer encryption/decryption
  */
-int xtea_crypt_cbc( xtea_context *ctx,
-                    int mode,
-                    size_t length,
-                    unsigned char iv[8],
-                    unsigned char *input,
+int xtea_crypt_cbc( xtea_context *ctx, int mode, size_t length,
+                    unsigned char iv[8], const unsigned char *input,
                     unsigned char *output)
 {
     int i;
     unsigned char temp[8];
 
-    if(length % 8)
+    if( length % 8 )
         return( POLARSSL_ERR_XTEA_INVALID_INPUT_LENGTH );
 
-    if( mode == XTEA_DECRYPT ) 
+    if( mode == XTEA_DECRYPT )
     {
         while( length > 0 )
         {
             memcpy( temp, input, 8 );
             xtea_crypt_ecb( ctx, mode, input, output );
 
-            for(i = 0; i < 8; i++) 
+            for( i = 0; i < 8; i++ )
                 output[i] = (unsigned char)( output[i] ^ iv[i] );
 
             memcpy( iv, temp, 8 );
@@ -143,8 +171,8 @@ int xtea_crypt_cbc( xtea_context *ctx,
             output += 8;
             length -= 8;
         }
-    } 
-    else 
+    }
+    else
     {
         while( length > 0 )
         {
@@ -153,7 +181,7 @@ int xtea_crypt_cbc( xtea_context *ctx,
 
             xtea_crypt_ecb( ctx, mode, output, output );
             memcpy( iv, output, 8 );
-            
+
             input  += 8;
             output += 8;
             length -= 8;
@@ -162,12 +190,10 @@ int xtea_crypt_cbc( xtea_context *ctx,
 
     return( 0 );
 }
+#endif /* POLARSSL_CIPHER_MODE_CBC */
 #endif /* !POLARSSL_XTEA_ALT */
 
 #if defined(POLARSSL_SELF_TEST)
-
-/*NO-SYS #include <string.h> */
-/*NO-SYS #include <stdio.h> */
 
 /*
  * XTEA tests vectors (non-official)
@@ -214,38 +240,43 @@ static const unsigned char xtea_test_ct[6][8] =
  */
 int xtea_self_test( int verbose )
 {
-    int i;
+    int i, ret = 0;
     unsigned char buf[8];
     xtea_context ctx;
 
+    xtea_init( &ctx );
     for( i = 0; i < 6; i++ )
     {
         if( verbose != 0 )
-            printf( "  XTEA test #%d: ", i + 1 );
+            polarssl_printf( "  XTEA test #%d: ", i + 1 );
 
         memcpy( buf, xtea_test_pt[i], 8 );
 
-        xtea_setup( &ctx, (unsigned char *) xtea_test_key[i] );
+        xtea_setup( &ctx, xtea_test_key[i] );
         xtea_crypt_ecb( &ctx, XTEA_ENCRYPT, buf, buf );
 
         if( memcmp( buf, xtea_test_ct[i], 8 ) != 0 )
         {
             if( verbose != 0 )
-                printf( "failed\n" );
+                polarssl_printf( "failed\n" );
 
-            return( 1 );
+            ret = 1;
+            goto exit;
         }
 
         if( verbose != 0 )
-            printf( "passed\n" );
+            polarssl_printf( "passed\n" );
     }
 
     if( verbose != 0 )
-        printf( "\n" );
+        polarssl_printf( "\n" );
 
-    return( 0 );
+exit:
+    xtea_free( &ctx );
+
+    return( ret );
 }
 
-#endif
+#endif /* POLARSSL_SELF_TEST */
 
-#endif
+#endif /* POLARSSL_XTEA_C */
