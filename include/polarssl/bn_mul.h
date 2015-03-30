@@ -3,12 +3,9 @@
  *
  * \brief  Multi-precision integer library
  *
- *  Copyright (C) 2006-2010, Brainspark B.V.
+ *  Copyright (C) 2006-2010, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -299,7 +296,7 @@
     );
 
 
-#else
+#else /* __MACH__ && __APPLE__ */
 
 #define MULADDC_INIT                        \
     asm(                                    \
@@ -333,7 +330,7 @@
         : "r3", "r4", "r5", "r6", "r7", "r8", "r9"  \
     );
 
-#endif
+#endif /* __MACH__ && __APPLE__ */
 
 #elif defined(__powerpc__) || defined(__ppc__) /* end PPC64/begin PPC32  */
 
@@ -371,7 +368,7 @@
         : "r3", "r4", "r5", "r6", "r7", "r8", "r9"  \
     );
 
-#else
+#else /* __MACH__ && __APPLE__ */
 
 #define MULADDC_INIT                        \
     asm(                                    \
@@ -405,7 +402,7 @@
         : "r3", "r4", "r5", "r6", "r7", "r8", "r9"  \
     );
 
-#endif
+#endif /* __MACH__ && __APPLE__ */
 
 #endif /* PPC32 */
 
@@ -683,7 +680,7 @@
     );
 #endif /* Alpha */
 
-#if defined(__mips__) && !defined(__mips64__)
+#if defined(__mips__) && !defined(__mips64)
 
 #define MULADDC_INIT                    \
     asm(                                \
@@ -834,7 +831,7 @@
 #define MULADDC_CORE                    \
     r   = *(s++) * (t_udbl) b;          \
     r0  = (t_uint) r;                   \
-    r1  = (t_uint) r >> biL;            \
+    r1  = (t_uint)( r >> biL );         \
     r0 += c;  r1 += (r0 <  c);          \
     r0 += *d; r1 += (r0 < *d);          \
     c = r1; *(d++) = r0;

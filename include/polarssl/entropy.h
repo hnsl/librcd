@@ -3,12 +3,9 @@
  *
  * \brief Entropy accumulator implementation
  *
- *  Copyright (C) 2006-2013, Brainspark B.V.
+ *  Copyright (C) 2006-2014, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,11 +24,28 @@
 #ifndef POLARSSL_ENTROPY_H
 #define POLARSSL_ENTROPY_H
 
-/*NO-SYS #include <string.h> */
-
+#if !defined(POLARSSL_CONFIG_FILE)
 #include "config.h"
+#else
+#include POLARSSL_CONFIG_FILE
+#endif
 
-#include "sha4.h"
+/*NO-SYS #include <stddef.h> */
+
+#if defined(POLARSSL_SHA512_C) && !defined(POLARSSL_ENTROPY_FORCE_SHA256)
+#include "sha512.h"
+#define POLARSSL_ENTROPY_SHA512_ACCUMULATOR
+#else
+#if defined(POLARSSL_SHA256_C)
+#define POLARSSL_ENTROPY_SHA256_ACCUMULATOR
+#include "sha256.h"
+#endif
+#endif
+
+#if defined(POLARSSL_THREADING_C)
+#include "threading.h"
+#endif
+
 #if defined(POLARSSL_HAVEGE_C)
 #include "havege.h"
 #endif
@@ -41,12 +55,29 @@
 #define POLARSSL_ERR_ENTROPY_NO_SOURCES_DEFINED            -0x0040  /**< No sources have been added to poll. */
 #define POLARSSL_ERR_ENTROPY_FILE_IO_ERROR                 -0x0058  /**< Read/write error in file. */
 
-#if !defined(POLARSSL_CONFIG_OPTIONS)
-#define ENTROPY_MAX_SOURCES     20      /**< Maximum number of sources supported */
-#define ENTROPY_MAX_GATHER      128     /**< Maximum amount requested from entropy sources */
-#endif /* !POLARSSL_CONFIG_OPTIONS  */
+/**
+ * \name SECTION: Module settings
+ *
+ * The configuration options you can set for this module are in this section.
+ * Either change them in config.h or define them on the compiler command line.
+ * \{
+ */
 
+#if !defined(ENTROPY_MAX_SOURCES)
+#define ENTROPY_MAX_SOURCES     20      /**< Maximum number of sources supported */
+#endif
+
+#if !defined(ENTROPY_MAX_GATHER)
+#define ENTROPY_MAX_GATHER      128     /**< Maximum amount requested from entropy sources */
+#endif
+
+/* \} name SECTION: Module settings */
+
+#if defined(POLARSSL_ENTROPY_SHA512_ACCUMULATOR)
 #define ENTROPY_BLOCK_SIZE      64      /**< Block size of entropy accumulator (SHA-512) */
+#else
+#define ENTROPY_BLOCK_SIZE      32      /**< Block size of entropy accumulator (SHA-256) */
+#endif
 
 #define ENTROPY_MAX_SEED_SIZE   1024    /**< Maximum size of seed we read from seed file */
 #define ENTROPY_SOURCE_MANUAL   ENTROPY_MAX_SOURCES
@@ -66,7 +97,8 @@ extern "C" {
  * \return          0 if no critical failures occurred,
  *                  POLARSSL_ERR_ENTROPY_SOURCE_FAILED otherwise
  */
-typedef int (*f_source_ptr)(void *, unsigned char *, size_t, size_t *);
+typedef int (*f_source_ptr)(void *data, unsigned char *output, size_t len,
+                            size_t *olen);
 
 /**
  * \brief           Entropy source state
@@ -83,13 +115,20 @@ source_state;
 /**
  * \brief           Entropy context structure
  */
-typedef struct 
+typedef struct
 {
-    sha4_context    accumulator;
+#if defined(POLARSSL_ENTROPY_SHA512_ACCUMULATOR)
+    sha512_context  accumulator;
+#else
+    sha256_context  accumulator;
+#endif
     int             source_count;
     source_state    source[ENTROPY_MAX_SOURCES];
 #if defined(POLARSSL_HAVEGE_C)
     havege_state    havege_data;
+#endif
+#if defined(POLARSSL_THREADING_C)
+    threading_mutex_t mutex;    /*!< mutex                  */
 #endif
 }
 entropy_context;
@@ -102,7 +141,15 @@ entropy_context;
 void entropy_init( entropy_context *ctx );
 
 /**
+ * \brief           Free the data in the context
+ *
+ * \param ctx       Entropy context to free
+ */
+void entropy_free( entropy_context *ctx );
+
+/**
  * \brief           Adds an entropy source to poll
+ *                  (Thread-safe if POLARSSL_THREADING_C is enabled)
  *
  * \param ctx       Entropy context
  * \param f_source  Entropy function
@@ -118,6 +165,7 @@ int entropy_add_source( entropy_context *ctx,
 
 /**
  * \brief           Trigger an extra gather poll for the accumulator
+ *                  (Thread-safe if POLARSSL_THREADING_C is enabled)
  *
  * \param ctx       Entropy context
  *
@@ -126,11 +174,13 @@ int entropy_add_source( entropy_context *ctx,
 int entropy_gather( entropy_context *ctx );
 
 /**
- * \brief           Retrieve entropy from the accumulator (Max ENTROPY_BLOCK_SIZE)
+ * \brief           Retrieve entropy from the accumulator
+ *                  (Maximum length: ENTROPY_BLOCK_SIZE)
+ *                  (Thread-safe if POLARSSL_THREADING_C is enabled)
  *
  * \param data      Entropy context
  * \param output    Buffer to fill
- * \param len       Length of buffer
+ * \param len       Number of bytes desired, must be at most ENTROPY_BLOCK_SIZE
  *
  * \return          0 if successful, or POLARSSL_ERR_ENTROPY_SOURCE_FAILED
  */
@@ -138,7 +188,8 @@ int entropy_func( void *data, unsigned char *output, size_t len );
 
 /**
  * \brief           Add data to the accumulator manually
- * 
+ *                  (Thread-safe if POLARSSL_THREADING_C is enabled)
+ *
  * \param ctx       Entropy context
  * \param data      Data to add
  * \param len       Length of data
@@ -174,7 +225,16 @@ int entropy_write_seed_file( entropy_context *ctx, const char *path );
  *                      POLARSSL_ERR_ENTROPY_SOURCE_FAILED
  */
 int entropy_update_seed_file( entropy_context *ctx, const char *path );
-#endif
+#endif /* POLARSSL_FS_IO */
+
+#if defined(POLARSSL_SELF_TEST)
+/**
+ * \brief          Checkup routine
+ *
+ * \return         0 if successful, or 1 if a test failed
+ */
+int entropy_self_test( int verbose );
+#endif /* POLARSSL_SELF_TEST */
 
 #ifdef __cplusplus
 }

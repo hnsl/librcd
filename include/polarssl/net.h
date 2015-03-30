@@ -3,12 +3,9 @@
  *
  * \brief Network communication functions
  *
- *  Copyright (C) 2006-2011, Brainspark B.V.
+ *  Copyright (C) 2006-2011, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,7 +24,7 @@
 #ifndef POLARSSL_NET_H
 #define POLARSSL_NET_H
 
-/*NO-SYS #include <string.h> */
+/*NO-SYS #include <stddef.h> */
 
 #define POLARSSL_ERR_NET_UNKNOWN_HOST                      -0x0056  /**< Failed to get an IP address for the given hostname. */
 #define POLARSSL_ERR_NET_SOCKET_FAILED                     -0x0042  /**< Failed to open a socket. */
@@ -82,9 +79,10 @@ int net_bind( int *fd, const char *bind_ip, int port );
  * \param bind_fd   Relevant socket
  * \param client_fd Will contain the connected client socket
  * \param client_ip Will contain the client IP address
+ *                  Must be at least 4 bytes, or 16 if IPv6 is supported
  *
  * \return          0 if successful, POLARSSL_ERR_NET_ACCEPT_FAILED, or
- *                  POLARSSL_ERR_NET_WOULD_BLOCK is bind_fd was set to
+ *                  POLARSSL_ERR_NET_WANT_READ is bind_fd was set to
  *                  non-blocking and accept() is blocking.
  */
 int net_accept( int bind_fd, int *client_fd, void *client_ip );

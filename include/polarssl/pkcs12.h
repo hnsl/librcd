@@ -3,12 +3,9 @@
  *
  * \brief PKCS#12 Personal Information Exchange Syntax
  *
- *  Copyright (C) 2006-2013, Brainspark B.V.
+ *  Copyright (C) 2006-2013, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,31 +24,23 @@
 #ifndef POLARSSL_PKCS12_H
 #define POLARSSL_PKCS12_H
 
-/*NO-SYS #include <string.h> */
-
 #include "md.h"
 #include "cipher.h"
 #include "asn1.h"
+
+/*NO-SYS #include <stddef.h> */
 
 #define POLARSSL_ERR_PKCS12_BAD_INPUT_DATA                 -0x1F80  /**< Bad input parameters to function. */
 #define POLARSSL_ERR_PKCS12_FEATURE_UNAVAILABLE            -0x1F00  /**< Feature not available, e.g. unsupported encryption scheme. */
 #define POLARSSL_ERR_PKCS12_PBE_INVALID_FORMAT             -0x1E80  /**< PBE ASN.1 data not as expected. */
 #define POLARSSL_ERR_PKCS12_PASSWORD_MISMATCH              -0x1E00  /**< Given private key password does not allow for correct decryption. */
 
-#define PKCS12_DERIVE_KEY       1   /*< encryption/decryption key */
-#define PKCS12_DERIVE_IV        2   /*< initialization vector     */
-#define PKCS12_DERIVE_MAC_KEY   3   /*< integrity / MAC key       */
+#define PKCS12_DERIVE_KEY       1   /**< encryption/decryption key */
+#define PKCS12_DERIVE_IV        2   /**< initialization vector     */
+#define PKCS12_DERIVE_MAC_KEY   3   /**< integrity / MAC key       */
 
 #define PKCS12_PBE_DECRYPT      0
 #define PKCS12_PBE_ENCRYPT      1
-
-/*
- * PKCS#12 PBE types
- */
-#define OID_PKCS12               "\x2a\x86\x48\x86\xf7\x0d\x01\x0c"
-#define OID_PKCS12_PBE_SHA1_RC4_128         OID_PKCS12 "\x01\x01"
-#define OID_PKCS12_PBE_SHA1_DES3_EDE_CBC    OID_PKCS12 "\x01\x03"
-#define OID_PKCS12_PBE_SHA1_DES2_EDE_CBC    OID_PKCS12 "\x01\x04"
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,7 +58,7 @@ extern "C" {
  * \param len        data length
  * \param output     the output buffer
  *
- * \return           0 if successful, or a PolarSSL error code
+ * \return           0 if successful, or a POLARSSL_ERR_xxx code
  */
 int pkcs12_pbe_sha1_rc4_128( asn1_buf *pbe_params, int mode,
                              const unsigned char *pwd,  size_t pwdlen,
@@ -90,7 +79,7 @@ int pkcs12_pbe_sha1_rc4_128( asn1_buf *pbe_params, int mode,
  * \param len        data length
  * \param output     the output buffer
  *
- * \return           0 if successful, or a PolarSSL error code
+ * \return           0 if successful, or a POLARSSL_ERR_xxx code
  */
 int pkcs12_pbe( asn1_buf *pbe_params, int mode,
                 cipher_type_t cipher_type, md_type_t md_type,

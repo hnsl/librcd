@@ -1,14 +1,11 @@
 /**
- * \file sha4.h
+ * \file sha512.h
  *
  * \brief SHA-384 and SHA-512 cryptographic hash function
  *
- *  Copyright (C) 2006-2013, Brainspark B.V.
+ *  Copyright (C) 2006-2014, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,12 +21,16 @@
  *  with this program; if not, write to the Free Software Foundation, Inc.,
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
-#ifndef POLARSSL_SHA4_H
-#define POLARSSL_SHA4_H
+#ifndef POLARSSL_SHA512_H
+#define POLARSSL_SHA512_H
 
+#if !defined(POLARSSL_CONFIG_FILE)
 #include "config.h"
+#else
+#include POLARSSL_CONFIG_FILE
+#endif
 
-/*NO-SYS #include <string.h> */
+/*NO-SYS #include <stddef.h> */
 
 #if defined(_MSC_VER) || defined(__WATCOMC__)
   #define UL64(x) x##ui64
@@ -39,11 +40,15 @@
   #define UL64(x) x##ULL
 #endif
 
-#define POLARSSL_ERR_SHA4_FILE_IO_ERROR                -0x007A  /**< Read/write error in file. */
+#define POLARSSL_ERR_SHA512_FILE_IO_ERROR              -0x007A  /**< Read/write error in file. */
 
-#if !defined(POLARSSL_SHA1_ALT)
+#if !defined(POLARSSL_SHA512_ALT)
 // Regular implementation
 //
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * \brief          SHA-512 context structure
@@ -58,11 +63,21 @@ typedef struct
     unsigned char opad[128];    /*!< HMAC: outer padding        */
     int is384;                  /*!< 0 => SHA-512, else SHA-384 */
 }
-sha4_context;
+sha512_context;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/**
+ * \brief          Initialize SHA-512 context
+ *
+ * \param ctx      SHA-512 context to be initialized
+ */
+void sha512_init( sha512_context *ctx );
+
+/**
+ * \brief          Clear SHA-512 context
+ *
+ * \param ctx      SHA-512 context to be cleared
+ */
+void sha512_free( sha512_context *ctx );
 
 /**
  * \brief          SHA-512 context setup
@@ -70,7 +85,7 @@ extern "C" {
  * \param ctx      context to be initialized
  * \param is384    0 = use SHA512, 1 = use SHA384
  */
-void sha4_starts( sha4_context *ctx, int is384 );
+void sha512_starts( sha512_context *ctx, int is384 );
 
 /**
  * \brief          SHA-512 process buffer
@@ -79,7 +94,8 @@ void sha4_starts( sha4_context *ctx, int is384 );
  * \param input    buffer holding the  data
  * \param ilen     length of the input data
  */
-void sha4_update( sha4_context *ctx, const unsigned char *input, size_t ilen );
+void sha512_update( sha512_context *ctx, const unsigned char *input,
+                    size_t ilen );
 
 /**
  * \brief          SHA-512 final digest
@@ -87,15 +103,15 @@ void sha4_update( sha4_context *ctx, const unsigned char *input, size_t ilen );
  * \param ctx      SHA-512 context
  * \param output   SHA-384/512 checksum result
  */
-void sha4_finish( sha4_context *ctx, unsigned char output[64] );
+void sha512_finish( sha512_context *ctx, unsigned char output[64] );
 
 #ifdef __cplusplus
 }
 #endif
 
-#else  /* POLARSSL_SHA4_ALT */
-#include "sha4_alt.h"
-#endif /* POLARSSL_SHA4_ALT */
+#else  /* POLARSSL_SHA512_ALT */
+#include "sha512_alt.h"
+#endif /* POLARSSL_SHA512_ALT */
 
 #ifdef __cplusplus
 extern "C" {
@@ -109,8 +125,8 @@ extern "C" {
  * \param output   SHA-384/512 checksum result
  * \param is384    0 = use SHA512, 1 = use SHA384
  */
-void sha4( const unsigned char *input, size_t ilen,
-           unsigned char output[64], int is384 );
+void sha512( const unsigned char *input, size_t ilen,
+             unsigned char output[64], int is384 );
 
 /**
  * \brief          Output = SHA-512( file contents )
@@ -119,9 +135,9 @@ void sha4( const unsigned char *input, size_t ilen,
  * \param output   SHA-384/512 checksum result
  * \param is384    0 = use SHA512, 1 = use SHA384
  *
- * \return         0 if successful, or POLARSSL_ERR_SHA4_FILE_IO_ERROR
+ * \return         0 if successful, or POLARSSL_ERR_SHA512_FILE_IO_ERROR
  */
-int sha4_file( const char *path, unsigned char output[64], int is384 );
+int sha512_file( const char *path, unsigned char output[64], int is384 );
 
 /**
  * \brief          SHA-512 HMAC context setup
@@ -131,8 +147,8 @@ int sha4_file( const char *path, unsigned char output[64], int is384 );
  * \param key      HMAC secret key
  * \param keylen   length of the HMAC key
  */
-void sha4_hmac_starts( sha4_context *ctx, const unsigned char *key, size_t keylen,
-                       int is384 );
+void sha512_hmac_starts( sha512_context *ctx, const unsigned char *key,
+                         size_t keylen, int is384 );
 
 /**
  * \brief          SHA-512 HMAC process buffer
@@ -141,7 +157,8 @@ void sha4_hmac_starts( sha4_context *ctx, const unsigned char *key, size_t keyle
  * \param input    buffer holding the  data
  * \param ilen     length of the input data
  */
-void sha4_hmac_update( sha4_context *ctx, const unsigned char *input, size_t ilen );
+void sha512_hmac_update( sha512_context *ctx, const unsigned char *input,
+                         size_t ilen );
 
 /**
  * \brief          SHA-512 HMAC final digest
@@ -149,14 +166,14 @@ void sha4_hmac_update( sha4_context *ctx, const unsigned char *input, size_t ile
  * \param ctx      HMAC context
  * \param output   SHA-384/512 HMAC checksum result
  */
-void sha4_hmac_finish( sha4_context *ctx, unsigned char output[64] );
+void sha512_hmac_finish( sha512_context *ctx, unsigned char output[64] );
 
 /**
  * \brief          SHA-512 HMAC context reset
  *
  * \param ctx      HMAC context to be reset
  */
-void sha4_hmac_reset( sha4_context *ctx );
+void sha512_hmac_reset( sha512_context *ctx );
 
 /**
  * \brief          Output = HMAC-SHA-512( hmac key, input buffer )
@@ -168,7 +185,7 @@ void sha4_hmac_reset( sha4_context *ctx );
  * \param output   HMAC-SHA-384/512 result
  * \param is384    0 = use SHA512, 1 = use SHA384
  */
-void sha4_hmac( const unsigned char *key, size_t keylen,
+void sha512_hmac( const unsigned char *key, size_t keylen,
                 const unsigned char *input, size_t ilen,
                 unsigned char output[64], int is384 );
 
@@ -177,10 +194,13 @@ void sha4_hmac( const unsigned char *key, size_t keylen,
  *
  * \return         0 if successful, or 1 if the test failed
  */
-int sha4_self_test( int verbose );
+int sha512_self_test( int verbose );
+
+/* Internal use */
+void sha512_process( sha512_context *ctx, const unsigned char data[128] );
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* sha4.h */
+#endif /* sha512.h */

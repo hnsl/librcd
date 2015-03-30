@@ -3,12 +3,9 @@
  *
  * \brief MD5 message digest algorithm (hash function)
  *
- *  Copyright (C) 2006-2013, Brainspark B.V.
+ *  Copyright (C) 2006-2013, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,11 +24,15 @@
 #ifndef POLARSSL_MD5_H
 #define POLARSSL_MD5_H
 
+#if !defined(POLARSSL_CONFIG_FILE)
 #include "config.h"
+#else
+#include POLARSSL_CONFIG_FILE
+#endif
 
-/*NO-SYS #include <string.h> */
+/*NO-SYS #include <stddef.h> */
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(EFIX64) && !defined(EFI32)
 /*NO-SYS #include <basetsd.h> */
 typedef UINT32 uint32_t;
 #else
@@ -43,6 +44,10 @@ typedef UINT32 uint32_t;
 #if !defined(POLARSSL_MD5_ALT)
 // Regular implementation
 //
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * \brief          MD5 context structure
@@ -58,9 +63,19 @@ typedef struct
 }
 md5_context;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/**
+ * \brief          Initialize MD5 context
+ *
+ * \param ctx      MD5 context to be initialized
+ */
+void md5_init( md5_context *ctx );
+
+/**
+ * \brief          Clear MD5 context
+ *
+ * \param ctx      MD5 context to be cleared
+ */
+void md5_free( md5_context *ctx );
 
 /**
  * \brief          MD5 context setup
