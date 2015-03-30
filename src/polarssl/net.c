@@ -1,12 +1,9 @@
 /*
  *  TCP networking functions
  *
- *  Copyright (C) 2006-2010, Brainspark B.V.
+ *  Copyright (C) 2006-2014, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,22 +20,40 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#if !defined(POLARSSL_CONFIG_FILE)
 #include "polarssl/config.h"
+#else
+#include POLARSSL_CONFIG_FILE
+#endif
 
 #if defined(POLARSSL_NET_C)
 
 #include "polarssl/net.h"
 
-#if defined(_WIN32) || defined(_WIN32_WCE)
+/*NO-SYS #include <string.h> */
+
+#if (defined(_WIN32) || defined(_WIN32_WCE)) && !defined(EFIX64) && \
+    !defined(EFI32)
+
+#if defined(POLARSSL_HAVE_IPV6)
+#ifdef _WIN32_WINNT
+#undef _WIN32_WINNT
+#endif
+/* Enables getaddrinfo() & Co */
+#define _WIN32_WINNT 0x0501
+/*NO-SYS #include <ws2tcpip.h> */
+#endif
 
 /*NO-SYS #include <winsock2.h> */
 /*NO-SYS #include <windows.h> */
 
+#if defined(_MSC_VER)
 #if defined(_WIN32_WCE)
 #pragma comment( lib, "ws2.lib" )
 #else
 #pragma comment( lib, "ws2_32.lib" )
 #endif
+#endif /* _MSC_VER */
 
 #define read(fd,buf,len)        recv(fd,(char*)buf,(int) len,0)
 #define write(fd,buf,len)       send(fd,(char*)buf,(int) len,0)
@@ -46,13 +61,15 @@
 
 static int wsa_init_done = 0;
 
-#else
+#else /* ( _WIN32 || _WIN32_WCE ) && !EFIX64 && !EFI32 */
 
 /*NO-SYS #include <sys/types.h> */
 /*NO-SYS #include <sys/socket.h> */
 /*NO-SYS #include <netinet/in.h> */
 /*NO-SYS #include <arpa/inet.h> */
+#if defined(POLARSSL_HAVE_TIME)
 /*NO-SYS #include <sys/time.h> */
+#endif
 /*NO-SYS #include <unistd.h> */
 /*NO-SYS #include <signal.h> */
 /*NO-SYS #include <fcntl.h> */
@@ -62,21 +79,32 @@ static int wsa_init_done = 0;
 #if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) ||  \
     defined(__DragonFly__)
 /*NO-SYS #include <sys/endian.h> */
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) || defined(HAVE_MACHINE_ENDIAN_H) ||   \
+      defined(EFIX64) || defined(EFI32)
 /*NO-SYS #include <machine/endian.h> */
 #elif defined(sun)
 /*NO-SYS #include <sys/isa_defs.h> */
+#elif defined(_AIX) || defined(HAVE_ARPA_NAMESER_COMPAT_H)
+/*NO-SYS #include <arpa/nameser_compat.h> */
 #else
 /*NO-SYS #include <endian.h> */
 #endif
 
-#endif
+#endif /* ( _WIN32 || _WIN32_WCE ) && !EFIX64 && !EFI32 */
 
 /*NO-SYS #include <stdlib.h> */
 /*NO-SYS #include <stdio.h> */
-/*NO-SYS #include <time.h> */
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined  snprintf && !defined(EFIX64) && \
+    !defined(EFI32)
+#define  snprintf  _snprintf
+#endif
+
+#if defined(POLARSSL_HAVE_TIME)
+/*NO-SYS #include <time.h> */
+#endif
+
+#if defined(_MSC_VER) && !defined(EFIX64) && !defined(EFI32)
 /*NO-SYS #include <basetsd.h> */
 typedef UINT32 uint32_t;
 #else
@@ -85,10 +113,11 @@ typedef UINT32 uint32_t;
 
 /*
  * htons() is not always available.
- * By default go for LITTLE_ENDIAN variant. Otherwise hope for _BYTE_ORDER and __BIG_ENDIAN
- * to help determine endianess.
+ * By default go for LITTLE_ENDIAN variant. Otherwise hope for _BYTE_ORDER and
+ * __BIG_ENDIAN to help determine endianness.
  */
-#if defined(__BYTE_ORDER) && defined(__BIG_ENDIAN) && __BYTE_ORDER == __BIG_ENDIAN
+#if defined(__BYTE_ORDER) && defined(__BIG_ENDIAN) &&                   \
+    __BYTE_ORDER == __BIG_ENDIAN
 #define POLARSSL_HTONS(n) (n)
 #define POLARSSL_HTONL(n) (n)
 #else
@@ -100,20 +129,24 @@ typedef UINT32 uint32_t;
                            (((unsigned long )(n) & 0xFF000000) >> 24))
 #endif
 
-unsigned short net_htons(unsigned short n);
-unsigned long  net_htonl(unsigned long  n);
+#if defined(POLARSSL_PLATFORM_C)
+#include "polarssl/platform.h"
+#else
+#define polarssl_snprintf snprintf
+#endif
+
+unsigned short net_htons( unsigned short n );
+unsigned long  net_htonl( unsigned long  n );
 #define net_htons(n) POLARSSL_HTONS(n)
 #define net_htonl(n) POLARSSL_HTONL(n)
 
 /*
- * Initiate a TCP connection with host:port
+ * Prepare for using the sockets interface
  */
-int net_connect( int *fd, const char *host, int port )
+static int net_prepare( void )
 {
-    struct sockaddr_in server_addr;
-    struct hostent *server_host;
-
-#if defined(_WIN32) || defined(_WIN32_WCE)
+#if ( defined(_WIN32) || defined(_WIN32_WCE) ) && !defined(EFIX64) && \
+    !defined(EFI32)
     WSADATA wsaData;
 
     if( wsa_init_done == 0 )
@@ -124,10 +157,74 @@ int net_connect( int *fd, const char *host, int port )
         wsa_init_done = 1;
     }
 #else
+#if !defined(EFIX64) && !defined(EFI32)
     signal( SIGPIPE, SIG_IGN );
 #endif
+#endif
+    return( 0 );
+}
 
-    memset( &server_addr, 0, sizeof( server_addr ) );
+/*
+ * Initiate a TCP connection with host:port
+ */
+int net_connect( int *fd, const char *host, int port )
+{
+#if defined(POLARSSL_HAVE_IPV6)
+    int ret;
+    struct addrinfo hints, *addr_list, *cur;
+    char port_str[6];
+
+    if( ( ret = net_prepare() ) != 0 )
+        return( ret );
+
+    /* getaddrinfo expects port as a string */
+    memset( port_str, 0, sizeof( port_str ) );
+    polarssl_snprintf( port_str, sizeof( port_str ), "%d", port );
+
+    /* Do name resolution with both IPv6 and IPv4, but only TCP */
+    memset( &hints, 0, sizeof( hints ) );
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    if( getaddrinfo( host, port_str, &hints, &addr_list ) != 0 )
+        return( POLARSSL_ERR_NET_UNKNOWN_HOST );
+
+    /* Try the sockaddrs until a connection succeeds */
+    ret = POLARSSL_ERR_NET_UNKNOWN_HOST;
+    for( cur = addr_list; cur != NULL; cur = cur->ai_next )
+    {
+        *fd = (int) socket( cur->ai_family, cur->ai_socktype,
+                            cur->ai_protocol );
+        if( *fd < 0 )
+        {
+            ret = POLARSSL_ERR_NET_SOCKET_FAILED;
+            continue;
+        }
+
+        if( connect( *fd, cur->ai_addr, cur->ai_addrlen ) == 0 )
+        {
+            ret = 0;
+            break;
+        }
+
+        close( *fd );
+        ret = POLARSSL_ERR_NET_CONNECT_FAILED;
+    }
+
+    freeaddrinfo( addr_list );
+
+    return( ret );
+
+#else
+    /* Legacy IPv4-only version */
+
+    int ret;
+    struct sockaddr_in server_addr;
+    struct hostent *server_host;
+
+    if( ( ret = net_prepare() ) != 0 )
+        return( ret );
 
     if( ( server_host = gethostbyname( host ) ) == NULL )
         return( POLARSSL_ERR_NET_UNKNOWN_HOST );
@@ -150,6 +247,7 @@ int net_connect( int *fd, const char *host, int port )
     }
 
     return( 0 );
+#endif /* POLARSSL_HAVE_IPV6 */
 }
 
 /*
@@ -157,35 +255,88 @@ int net_connect( int *fd, const char *host, int port )
  */
 int net_bind( int *fd, const char *bind_ip, int port )
 {
-    int n, c[4];
+#if defined(POLARSSL_HAVE_IPV6)
+    int n, ret;
+    struct addrinfo hints, *addr_list, *cur;
+    char port_str[6];
+
+    if( ( ret = net_prepare() ) != 0 )
+        return( ret );
+
+    /* getaddrinfo expects port as a string */
+    memset( port_str, 0, sizeof( port_str ) );
+    polarssl_snprintf( port_str, sizeof( port_str ), "%d", port );
+
+    /* Bind to IPv6 and/or IPv4, but only in TCP */
+    memset( &hints, 0, sizeof( hints ) );
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    if( bind_ip == NULL )
+        hints.ai_flags = AI_PASSIVE;
+
+    if( getaddrinfo( bind_ip, port_str, &hints, &addr_list ) != 0 )
+        return( POLARSSL_ERR_NET_UNKNOWN_HOST );
+
+    /* Try the sockaddrs until a binding succeeds */
+    ret = POLARSSL_ERR_NET_UNKNOWN_HOST;
+    for( cur = addr_list; cur != NULL; cur = cur->ai_next )
+    {
+        *fd = (int) socket( cur->ai_family, cur->ai_socktype,
+                            cur->ai_protocol );
+        if( *fd < 0 )
+        {
+            ret = POLARSSL_ERR_NET_SOCKET_FAILED;
+            continue;
+        }
+
+        n = 1;
+        if( setsockopt( *fd, SOL_SOCKET, SO_REUSEADDR,
+                        (const char *) &n, sizeof( n ) ) != 0 )
+        {
+            close( *fd );
+            ret = POLARSSL_ERR_NET_SOCKET_FAILED;
+            continue;
+        }
+
+        if( bind( *fd, cur->ai_addr, cur->ai_addrlen ) != 0 )
+        {
+            close( *fd );
+            ret = POLARSSL_ERR_NET_BIND_FAILED;
+            continue;
+        }
+
+        if( listen( *fd, POLARSSL_NET_LISTEN_BACKLOG ) != 0 )
+        {
+            close( *fd );
+            ret = POLARSSL_ERR_NET_LISTEN_FAILED;
+            continue;
+        }
+
+        /* I we ever get there, it's a success */
+        ret = 0;
+        break;
+    }
+
+    freeaddrinfo( addr_list );
+
+    return( ret );
+
+#else
+    /* Legacy IPv4-only version */
+
+    int ret, n, c[4];
     struct sockaddr_in server_addr;
 
-#if defined(_WIN32) || defined(_WIN32_WCE)
-    WSADATA wsaData;
-
-    if( wsa_init_done == 0 )
-    {
-        if( WSAStartup( MAKEWORD(2,0), &wsaData ) == SOCKET_ERROR )
-            return( POLARSSL_ERR_NET_SOCKET_FAILED );
-
-        wsa_init_done = 1;
-    }
-#else
-    signal( SIGPIPE, SIG_IGN );
-#endif
-
-    memset( &server_addr, 0, sizeof( server_addr ) );
+    if( ( ret = net_prepare() ) != 0 )
+        return( ret );
 
     if( ( *fd = (int) socket( AF_INET, SOCK_STREAM, IPPROTO_IP ) ) < 0 )
         return( POLARSSL_ERR_NET_SOCKET_FAILED );
 
     n = 1;
-    if( setsockopt( *fd, SOL_SOCKET, SO_REUSEADDR,
-                    (const char *) &n, sizeof( n ) ) != 0 )
-    {
-        close( *fd );
-        return( POLARSSL_ERR_NET_SOCKET_FAILED );
-    }
+    setsockopt( *fd, SOL_SOCKET, SO_REUSEADDR,
+                (const char *) &n, sizeof( n ) );
 
     server_addr.sin_addr.s_addr = net_htonl( INADDR_ANY );
     server_addr.sin_family      = AF_INET;
@@ -222,9 +373,11 @@ int net_bind( int *fd, const char *bind_ip, int port )
     }
 
     return( 0 );
+#endif /* POLARSSL_HAVE_IPV6 */
 }
 
-#if ( defined(_WIN32) || defined(_WIN32_WCE) )
+#if ( defined(_WIN32) || defined(_WIN32_WCE) ) && !defined(EFIX64) && \
+    !defined(EFI32)
 /*
  * Check if the requested operation would be blocking on a non-blocking socket
  * and thus 'failed' with a negative return value.
@@ -261,14 +414,18 @@ static int net_would_block( int fd )
     }
     return( 0 );
 }
-#endif
+#endif /* ( _WIN32 || _WIN32_WCE ) && !EFIX64 && !EFI32 */
 
 /*
  * Accept a connection from a remote client
  */
 int net_accept( int bind_fd, int *client_fd, void *client_ip )
 {
+#if defined(POLARSSL_HAVE_IPV6)
+    struct sockaddr_storage client_addr;
+#else
     struct sockaddr_in client_addr;
+#endif
 
 #if defined(__socklen_t_defined) || defined(_SOCKLEN_T) ||  \
     defined(_SOCKLEN_T_DECLARED)
@@ -289,8 +446,25 @@ int net_accept( int bind_fd, int *client_fd, void *client_ip )
     }
 
     if( client_ip != NULL )
+    {
+#if defined(POLARSSL_HAVE_IPV6)
+        if( client_addr.ss_family == AF_INET )
+        {
+            struct sockaddr_in *addr4 = (struct sockaddr_in *) &client_addr;
+            memcpy( client_ip, &addr4->sin_addr.s_addr,
+                        sizeof( addr4->sin_addr.s_addr ) );
+        }
+        else
+        {
+            struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *) &client_addr;
+            memcpy( client_ip, &addr6->sin6_addr.s6_addr,
+                        sizeof( addr6->sin6_addr.s6_addr ) );
+        }
+#else
         memcpy( client_ip, &client_addr.sin_addr.s_addr,
                     sizeof( client_addr.sin_addr.s_addr ) );
+#endif /* POLARSSL_HAVE_IPV6 */
+    }
 
     return( 0 );
 }
@@ -300,7 +474,8 @@ int net_accept( int bind_fd, int *client_fd, void *client_ip )
  */
 int net_set_block( int fd )
 {
-#if defined(_WIN32) || defined(_WIN32_WCE)
+#if ( defined(_WIN32) || defined(_WIN32_WCE) ) && !defined(EFIX64) && \
+    !defined(EFI32)
     u_long n = 0;
     return( ioctlsocket( fd, FIONBIO, &n ) );
 #else
@@ -310,7 +485,8 @@ int net_set_block( int fd )
 
 int net_set_nonblock( int fd )
 {
-#if defined(_WIN32) || defined(_WIN32_WCE)
+#if ( defined(_WIN32) || defined(_WIN32_WCE) ) && !defined(EFIX64) && \
+    !defined(EFI32)
     u_long n = 1;
     return( ioctlsocket( fd, FIONBIO, &n ) );
 #else
@@ -318,21 +494,23 @@ int net_set_nonblock( int fd )
 #endif
 }
 
+#if defined(POLARSSL_HAVE_TIME)
 /*
  * Portable usleep helper
  */
 void net_usleep( unsigned long usec )
 {
     struct timeval tv;
-    tv.tv_sec  = 0;
-#if !defined(_WIN32) && (defined(__unix__) || defined(__unix) || \
-    (defined(__APPLE__) && defined(__MACH__)))
-    tv.tv_usec = (suseconds_t) usec;
+    tv.tv_sec  = usec / 1000000;
+#if !defined(_WIN32) && ( defined(__unix__) || defined(__unix) || \
+    ( defined(__APPLE__) && defined(__MACH__) ) )
+    tv.tv_usec = (suseconds_t) usec % 1000000;
 #else
-    tv.tv_usec = usec;
+    tv.tv_usec = usec % 1000000;
 #endif
     select( 0, NULL, NULL, NULL, &tv );
 }
+#endif /* POLARSSL_HAVE_TIME */
 
 /*
  * Read at most 'len' characters
@@ -347,7 +525,8 @@ int net_recv( void *ctx, unsigned char *buf, size_t len )
         if( net_would_block( fd ) != 0 )
             return( POLARSSL_ERR_NET_WANT_READ );
 
-#if defined(_WIN32) || defined(_WIN32_WCE)
+#if ( defined(_WIN32) || defined(_WIN32_WCE) ) && !defined(EFIX64) && \
+    !defined(EFI32)
         if( WSAGetLastError() == WSAECONNRESET )
             return( POLARSSL_ERR_NET_CONN_RESET );
 #else
@@ -377,7 +556,8 @@ int net_send( void *ctx, const unsigned char *buf, size_t len )
         if( net_would_block( fd ) != 0 )
             return( POLARSSL_ERR_NET_WANT_WRITE );
 
-#if defined(_WIN32) || defined(_WIN32_WCE)
+#if ( defined(_WIN32) || defined(_WIN32_WCE) ) && !defined(EFIX64) && \
+    !defined(EFI32)
         if( WSAGetLastError() == WSAECONNRESET )
             return( POLARSSL_ERR_NET_CONN_RESET );
 #else
@@ -403,4 +583,4 @@ void net_close( int fd )
     close( fd );
 }
 
-#endif
+#endif /* POLARSSL_NET_C */

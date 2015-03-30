@@ -1,12 +1,9 @@
 /**
  *  \brief HAVEGE: HArdware Volatile Entropy Gathering and Expansion
  *
- *  Copyright (C) 2006-2010, Brainspark B.V.
+ *  Copyright (C) 2006-2014, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,7 +27,11 @@
  *  Contact: seznec(at)irisa_dot_fr - orocheco(at)irisa_dot_fr
  */
 
+#if !defined(POLARSSL_CONFIG_FILE)
 #include "polarssl/config.h"
+#else
+#include POLARSSL_CONFIG_FILE
+#endif
 
 #if defined(POLARSSL_HAVEGE_C)
 
@@ -38,7 +39,11 @@
 #include "polarssl/timing.h"
 
 /*NO-SYS #include <string.h> */
-/*NO-SYS #include <time.h> */
+
+/* Implementation that should never be optimized out by the compiler */
+static void polarssl_zeroize( void *v, size_t n ) {
+    volatile unsigned char *p = v; while( n-- ) *p++ = 0;
+}
 
 /* ------------------------------------------------------------------------
  * On average, one iteration accesses two 8-word blocks in the havege WALK
@@ -146,7 +151,7 @@
     *C = (*C >> (15)) ^ (*C << (17)) ^ CLK;             \
     *D = (*D >> (16)) ^ (*D << (16)) ^ CLK;             \
                                                         \
-    PT1 = ( RES[(i - 8) ^ PTX] ^                        \
+    PT1 = ( RES[( i - 8 ) ^ PTX] ^                      \
             WALK[PT1 ^ PTX ^ 7] ) & (~1);               \
     PT1 ^= (PT2 ^ 0x10) & 0x10;                         \
                                                         \
@@ -197,6 +202,14 @@ void havege_init( havege_state *hs )
     havege_fill( hs );
 }
 
+void havege_free( havege_state *hs )
+{
+    if( hs == NULL )
+        return;
+
+    polarssl_zeroize( hs, sizeof( havege_state ) );
+}
+
 /*
  * HAVEGE rand function
  */
@@ -220,7 +233,7 @@ int havege_random( void *p_rng, unsigned char *buf, size_t len )
         val ^= hs->pool[hs->offset[1]++];
 
         memcpy( p, &val, use_len );
-        
+
         len -= use_len;
         p += use_len;
     }
@@ -228,4 +241,4 @@ int havege_random( void *p_rng, unsigned char *buf, size_t len )
     return( 0 );
 }
 
-#endif
+#endif /* POLARSSL_HAVEGE_C */

@@ -3,12 +3,9 @@
  *
  * \brief Blowfish block cipher
  *
- *  Copyright (C) 2012-2013, Brainspark B.V.
+ *  Copyright (C) 2012-2014, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,11 +24,15 @@
 #ifndef POLARSSL_BLOWFISH_H
 #define POLARSSL_BLOWFISH_H
 
+#if !defined(POLARSSL_CONFIG_FILE)
 #include "config.h"
+#else
+#include POLARSSL_CONFIG_FILE
+#endif
 
-/*NO-SYS #include <string.h> */
+/*NO-SYS #include <stddef.h> */
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(EFIX64) && !defined(EFI32)
 /*NO-SYS #include <basetsd.h> */
 typedef UINT32 uint32_t;
 #else
@@ -42,7 +43,7 @@ typedef UINT32 uint32_t;
 #define BLOWFISH_DECRYPT     0
 #define BLOWFISH_MAX_KEY     448
 #define BLOWFISH_MIN_KEY     32
-#define BLOWFISH_ROUNDS      16         /* when increasing this value, make sure to extend the initialisation vectors */
+#define BLOWFISH_ROUNDS      16         /**< Rounds to use. When increasing this value, make sure to extend the initialisation vectors */
 #define BLOWFISH_BLOCKSIZE   8          /* Blowfish uses 64 bit blocks */
 
 #define POLARSSL_ERR_BLOWFISH_INVALID_KEY_LENGTH                -0x0016  /**< Invalid key length. */
@@ -51,6 +52,10 @@ typedef UINT32 uint32_t;
 #if !defined(POLARSSL_BLOWFISH_ALT)
 // Regular implementation
 //
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * \brief          Blowfish context structure
@@ -62,9 +67,19 @@ typedef struct
 }
 blowfish_context;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/**
+ * \brief          Initialize Blowfish context
+ *
+ * \param ctx      Blowfish context to be initialized
+ */
+void blowfish_init( blowfish_context *ctx );
+
+/**
+ * \brief          Clear Blowfish context
+ *
+ * \param ctx      Blowfish context to be cleared
+ */
+void blowfish_free( blowfish_context *ctx );
 
 /**
  * \brief          Blowfish key schedule
@@ -75,7 +90,8 @@ extern "C" {
  *
  * \return         0 if successful, or POLARSSL_ERR_BLOWFISH_INVALID_KEY_LENGTH
  */
-int blowfish_setkey( blowfish_context *ctx, const unsigned char *key, unsigned int keysize );
+int blowfish_setkey( blowfish_context *ctx, const unsigned char *key,
+                     unsigned int keysize );
 
 /**
  * \brief          Blowfish-ECB block encryption/decryption
@@ -92,10 +108,19 @@ int blowfish_crypt_ecb( blowfish_context *ctx,
                         const unsigned char input[BLOWFISH_BLOCKSIZE],
                         unsigned char output[BLOWFISH_BLOCKSIZE] );
 
+#if defined(POLARSSL_CIPHER_MODE_CBC)
 /**
  * \brief          Blowfish-CBC buffer encryption/decryption
  *                 Length should be a multiple of the block
  *                 size (8 bytes)
+ *
+ * \note           Upon exit, the content of the IV is updated so that you can
+ *                 call the function same function again on the following
+ *                 block(s) of data and get the same result as if it was
+ *                 encrypted in one call. This allows a "streaming" usage.
+ *                 If on the other hand you need to retain the contents of the
+ *                 IV, you should either save it manually or use the cipher
+ *                 module instead.
  *
  * \param ctx      Blowfish context
  * \param mode     BLOWFISH_ENCRYPT or BLOWFISH_DECRYPT
@@ -104,7 +129,8 @@ int blowfish_crypt_ecb( blowfish_context *ctx,
  * \param input    buffer holding the input data
  * \param output   buffer holding the output data
  *
- * \return         0 if successful, or POLARSSL_ERR_BLOWFISH_INVALID_INPUT_LENGTH
+ * \return         0 if successful, or
+ *                 POLARSSL_ERR_BLOWFISH_INVALID_INPUT_LENGTH
  */
 int blowfish_crypt_cbc( blowfish_context *ctx,
                         int mode,
@@ -112,11 +138,20 @@ int blowfish_crypt_cbc( blowfish_context *ctx,
                         unsigned char iv[BLOWFISH_BLOCKSIZE],
                         const unsigned char *input,
                         unsigned char *output );
+#endif /* POLARSSL_CIPHER_MODE_CBC */
 
+#if defined(POLARSSL_CIPHER_MODE_CFB)
 /**
  * \brief          Blowfish CFB buffer encryption/decryption.
  *
- * both 
+ * \note           Upon exit, the content of the IV is updated so that you can
+ *                 call the function same function again on the following
+ *                 block(s) of data and get the same result as if it was
+ *                 encrypted in one call. This allows a "streaming" usage.
+ *                 If on the other hand you need to retain the contents of the
+ *                 IV, you should either save it manually or use the cipher
+ *                 module instead.
+ *
  * \param ctx      Blowfish context
  * \param mode     BLOWFISH_ENCRYPT or BLOWFISH_DECRYPT
  * \param length   length of the input data
@@ -134,12 +169,15 @@ int blowfish_crypt_cfb64( blowfish_context *ctx,
                           unsigned char iv[BLOWFISH_BLOCKSIZE],
                           const unsigned char *input,
                           unsigned char *output );
+#endif /*POLARSSL_CIPHER_MODE_CFB */
 
+#if defined(POLARSSL_CIPHER_MODE_CTR)
 /**
  * \brief               Blowfish-CTR buffer encryption/decryption
  *
  * Warning: You have to keep the maximum use of your counter in mind!
  *
+ * \param ctx           Blowfish context
  * \param length        The length of the data
  * \param nc_off        The offset in the current stream_block (for resuming
  *                      within current cipher stream). The offset pointer to
@@ -159,6 +197,7 @@ int blowfish_crypt_ctr( blowfish_context *ctx,
                         unsigned char stream_block[BLOWFISH_BLOCKSIZE],
                         const unsigned char *input,
                         unsigned char *output );
+#endif /* POLARSSL_CIPHER_MODE_CTR */
 
 #ifdef __cplusplus
 }

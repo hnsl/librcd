@@ -31,7 +31,7 @@ def get_config_h_extra():
 #include "rcd.h"
 #include "linux.h"
 
-#define _SOCKLEN_T_DECLARED
+#define _SOCKLEN_T
 
 #define asm __asm__
 
@@ -71,7 +71,7 @@ def main(librcd_path):
         'include/polarssl/md5.h', #
         'include/polarssl/md.h', #
         'include/polarssl/md_wrap.h', # md.h config.h
-        'include/polarssl/net.h', # 
+        'include/polarssl/net.h', #
         'include/polarssl/padlock.h', # aes.h
         'include/polarssl/pbkdf2.h', # md.h
         'include/polarssl/pem.h', #
@@ -79,18 +79,34 @@ def main(librcd_path):
         'include/polarssl/pkcs12.h', # md.h cipher.h asn1.h
         'include/polarssl/pkcs5.h', # md.h asn1.h
         'include/polarssl/sha1.h', # config.h
-        'include/polarssl/sha2.h', # config.h
-        'include/polarssl/sha4.h', # config.h
+        'include/polarssl/sha256.h', # config.h
+        'include/polarssl/sha512.h', # config.h
         'include/polarssl/entropy.h', # config.h sha4.h havege.h
         'include/polarssl/timing.h', #
         'include/polarssl/version.h', # config.h
         'include/polarssl/x509.h', # asn1.h rsa.h dhm.h
-        'include/polarssl/x509write.h', # rsa.h
         'include/polarssl/xtea.h', # config.h
         'include/polarssl/ssl.h', # net.h rsa.h md5.h sha1.h sha2.h sha4.h x509.h config.h
         'include/polarssl/debug.h', # config.h ssl.h
         'include/polarssl/ssl_cache.h', # ssl.h
         'include/polarssl/openssl.h', # aes.h md5.h rsa.h sha1.h
+        'include/polarssl/platform.h', # net.c
+        'include/polarssl/ecp.h', # ssl.h
+        'include/polarssl/ssl_ciphersuites.h', # ssl.h
+        'include/polarssl/check_config.h', # config.h
+        'include/polarssl/oid.h', #platform.h
+        'include/polarssl/pk.h', #ssl_ciphersuites.h
+        'include/polarssl/ecdsa.h', #platform.h
+        'include/polarssl/x509_crt.h', #restructure
+        'include/polarssl/x509_crl.h', #restructure
+        'include/polarssl/x509_csr.h',#restructure
+        'include/polarssl/ecdh.h', #restructure
+        'include/polarssl/ripemd160.h', #restructure
+        'include/polarssl/ccm.h', #restructure
+        'include/polarssl/aesni.h', #restructure
+        'include/polarssl/hmac_drbg.h', #restructure
+        'include/polarssl/error.h', #restructure
+        'include/polarssl/pk_wrap.h', #restructure
     ]
 
     hard_c_src_files = [
@@ -128,19 +144,36 @@ def main(librcd_path):
         'library/pkcs5.c',
         'library/rsa.c',
         'library/sha1.c',
-        'library/sha2.c',
-        'library/sha4.c',
+        'library/sha256.c',
+        'library/sha512.c',
         'library/ssl_cache.c',
         'library/ssl_cli.c',
         'library/ssl_srv.c',
         'library/ssl_tls.c',
         'library/timing.c',
         'library/version.c',
-        'library/x509parse.c',
-        'library/x509write.c',
-        'library/xtea.c'
+        'library/x509write_crt.c',
+        'library/x509write_csr.c',
+        'library/xtea.c',
+        'library/aesni.c',
+        'library/x509_crt.c',
+        'library/x509.c',
+        'library/x509_create.c',
+        'library/oid.c',
+        'library/ecdh.c',
+        'library/pk.c',
+        'library/ripemd160.c',
+        'library/ecp.c',
+        'library/ecp_curves.c',
+        'library/ecdsa.c',
+        'library/ccm.c',
+        'library/pkwrite.c',
+        'library/pk_wrap.c',
+        'library/ssl_ciphersuites.c',
+        'library/pkparse.c',
+        'library/hmac_drbg.c',
     ]
-    
+
     def generate_file(src_file_list, dest_path):
         for src_file in src_file_list:
             filename = os.path.basename(src_file)
@@ -149,11 +182,12 @@ def main(librcd_path):
                 if filename == "config.h":
                     inject_pos = file_content.index('#define POLARSSL_CONFIG_H\n') + 1
                     new_file_content = "".join(file_content[:inject_pos]) + get_config_h_extra() + "".join(file_content[inject_pos:])
-                    for feature in ('POLARSSL_HAVE_SSE2', 'POLARSSL_AES_ROM_TABLES', 'POLARSSL_HAVEGE_C'):
+                    for feature in ('POLARSSL_HAVE_SSE2', 'POLARSSL_AES_ROM_TABLES', 'POLARSSL_HAVEGE_C', 'POLARSSL_SELF_TEST' ):
                         new_file_content = re.sub(r"(#define {})\n \*\/".format(feature), r" */\n\1", new_file_content)
-                elif filename == "rsa.h":
+                    new_file_content = re.sub(r"(#define POLARSSL_SELF_TEST)", r"/*\1 */ ", new_file_content)
+                elif filename == "pk.h":
                     # this will be a problem if they add structs
-                    new_file_content = re.sub(r"(typedef struct)", r"\1 _rsa_context", "".join(file_content))
+                    new_file_content = re.sub(r"(typedef struct)\n{\n    const pk_info_t *", r"\1 _pk_context\n{\n    const pk_info_t", "".join(file_content))
                 elif filename == "timing.c":
                     inject_if_pos = file_content.index("#if defined(INTEGRITY)\n")
                     file_content = file_content[:inject_if_pos] + ["#if 0 /* REMOVED FROM LIBRCD START */\n"] + file_content[inject_if_pos:]

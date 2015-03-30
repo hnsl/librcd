@@ -3,12 +3,9 @@
  *
  * \brief Sample certificates and DHM parameters for testing
  *
- *  Copyright (C) 2006-2010, Brainspark B.V.
+ *  Copyright (C) 2006-2010, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -31,14 +28,44 @@
 extern "C" {
 #endif
 
-extern const char test_ca_crt[];
-extern const char test_ca_key[];
-extern const char test_ca_pwd[];
-extern const char test_srv_crt[];
-extern const char test_srv_key[];
-extern const char test_cli_crt[];
-extern const char test_cli_key[];
+/* Concatenation of all available CA certificates */
+extern const char test_ca_list[];
+
+/*
+ * Convenience for users who just want a certificate:
+ * RSA by default, or ECDSA if RSA i not available
+ */
+extern const char *test_ca_crt;
+extern const char *test_ca_key;
+extern const char *test_ca_pwd;
+extern const char *test_srv_crt;
+extern const char *test_srv_key;
+extern const char *test_cli_crt;
+extern const char *test_cli_key;
+
+#if defined(POLARSSL_ECDSA_C)
+extern const char test_ca_crt_ec[];
+extern const char test_ca_key_ec[];
+extern const char test_ca_pwd_ec[];
+extern const char test_srv_crt_ec[];
+extern const char test_srv_key_ec[];
+extern const char test_cli_crt_ec[];
+extern const char test_cli_key_ec[];
+#endif
+
+#if defined(POLARSSL_RSA_C)
+extern const char test_ca_crt_rsa[];
+extern const char test_ca_key_rsa[];
+extern const char test_ca_pwd_rsa[];
+extern const char test_srv_crt_rsa[];
+extern const char test_srv_key_rsa[];
+extern const char test_cli_crt_rsa[];
+extern const char test_cli_key_rsa[];
+#endif
+
+#if defined(POLARSSL_DHM_C)
 extern const char test_dhm_params[];
+#endif
 
 #ifdef __cplusplus
 }

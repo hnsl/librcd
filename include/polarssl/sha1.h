@@ -3,12 +3,9 @@
  *
  * \brief SHA-1 cryptographic hash function
  *
- *  Copyright (C) 2006-2013, Brainspark B.V.
+ *  Copyright (C) 2006-2014, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,11 +24,15 @@
 #ifndef POLARSSL_SHA1_H
 #define POLARSSL_SHA1_H
 
+#if !defined(POLARSSL_CONFIG_FILE)
 #include "config.h"
+#else
+#include POLARSSL_CONFIG_FILE
+#endif
 
-/*NO-SYS #include <string.h> */
+/*NO-SYS #include <stddef.h> */
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(EFIX64) && !defined(EFI32)
 /*NO-SYS #include <basetsd.h> */
 typedef UINT32 uint32_t;
 #else
@@ -43,6 +44,10 @@ typedef UINT32 uint32_t;
 #if !defined(POLARSSL_SHA1_ALT)
 // Regular implementation
 //
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * \brief          SHA-1 context structure
@@ -58,9 +63,19 @@ typedef struct
 }
 sha1_context;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/**
+ * \brief          Initialize SHA-1 context
+ *
+ * \param ctx      SHA-1 context to be initialized
+ */
+void sha1_init( sha1_context *ctx );
+
+/**
+ * \brief          Clear SHA-1 context
+ *
+ * \param ctx      SHA-1 context to be cleared
+ */
+void sha1_free( sha1_context *ctx );
 
 /**
  * \brief          SHA-1 context setup
@@ -127,7 +142,8 @@ int sha1_file( const char *path, unsigned char output[20] );
  * \param key      HMAC secret key
  * \param keylen   length of the HMAC key
  */
-void sha1_hmac_starts( sha1_context *ctx, const unsigned char *key, size_t keylen );
+void sha1_hmac_starts( sha1_context *ctx, const unsigned char *key,
+                       size_t keylen );
 
 /**
  * \brief          SHA-1 HMAC process buffer
@@ -136,7 +152,8 @@ void sha1_hmac_starts( sha1_context *ctx, const unsigned char *key, size_t keyle
  * \param input    buffer holding the  data
  * \param ilen     length of the input data
  */
-void sha1_hmac_update( sha1_context *ctx, const unsigned char *input, size_t ilen );
+void sha1_hmac_update( sha1_context *ctx, const unsigned char *input,
+                       size_t ilen );
 
 /**
  * \brief          SHA-1 HMAC final digest

@@ -3,12 +3,9 @@
  *
  * \brief SSL session cache implementation
  *
- *  Copyright (C) 2006-2013, Brainspark B.V.
+ *  Copyright (C) 2006-2013, ARM Limited, All Rights Reserved
  *
- *  This file is part of PolarSSL (http://www.polarssl.org)
- *  Lead Maintainer: Paul Bakker <polarssl_maintainer at polarssl.org>
- *
- *  All rights reserved.
+ *  This file is part of mbed TLS (https://polarssl.org)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,10 +26,27 @@
 
 #include "ssl.h"
 
-#if !defined(POLARSSL_CONFIG_OPTIONS)
+#if defined(POLARSSL_THREADING_C)
+#include "threading.h"
+#endif
+
+/**
+ * \name SECTION: Module settings
+ *
+ * The configuration options you can set for this module are in this section.
+ * Either change them in config.h or define them on the compiler command line.
+ * \{
+ */
+
+#if !defined(SSL_CACHE_DEFAULT_TIMEOUT)
 #define SSL_CACHE_DEFAULT_TIMEOUT       86400   /*!< 1 day  */
+#endif
+
+#if !defined(SSL_CACHE_DEFAULT_MAX_ENTRIES)
 #define SSL_CACHE_DEFAULT_MAX_ENTRIES      50   /*!< Maximum entries in cache */
-#endif /* !POLARSSL_CONFIG_OPTIONS */
+#endif
+
+/* \} name SECTION: Module settings */
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,9 +60,13 @@ typedef struct _ssl_cache_entry ssl_cache_entry;
  */
 struct _ssl_cache_entry
 {
+#if defined(POLARSSL_HAVE_TIME)
     time_t timestamp;           /*!< entry timestamp    */
+#endif
     ssl_session session;        /*!< entry session      */
+#if defined(POLARSSL_X509_CRT_PARSE_C)
     x509_buf peer_cert;         /*!< entry peer_cert    */
+#endif
     ssl_cache_entry *next;      /*!< chain pointer      */
 };
 
@@ -60,6 +78,9 @@ struct _ssl_cache_context
     ssl_cache_entry *chain;     /*!< start of the chain     */
     int timeout;                /*!< cache entry timeout    */
     int max_entries;            /*!< maximum entries        */
+#if defined(POLARSSL_THREADING_C)
+    threading_mutex_t mutex;    /*!< mutex                  */
+#endif
 };
 
 /**
@@ -71,6 +92,7 @@ void ssl_cache_init( ssl_cache_context *cache );
 
 /**
  * \brief          Cache get callback implementation
+ *                 (Thread-safe if POLARSSL_THREADING_C is enabled)
  *
  * \param data     SSL cache context
  * \param session  session to retrieve entry for
@@ -79,12 +101,14 @@ int ssl_cache_get( void *data, ssl_session *session );
 
 /**
  * \brief          Cache set callback implementation
+ *                 (Thread-safe if POLARSSL_THREADING_C is enabled)
  *
  * \param data     SSL cache context
  * \param session  session to store entry for
  */
 int ssl_cache_set( void *data, const ssl_session *session );
 
+#if defined(POLARSSL_HAVE_TIME)
 /**
  * \brief          Set the cache timeout
  *                 (Default: SSL_CACHE_DEFAULT_TIMEOUT (1 day))
@@ -92,9 +116,10 @@ int ssl_cache_set( void *data, const ssl_session *session );
  *                 A timeout of 0 indicates no timeout.
  *
  * \param cache    SSL cache context
- * \param timeout  cache entry timeout
+ * \param timeout  cache entry timeout in seconds
  */
 void ssl_cache_set_timeout( ssl_cache_context *cache, int timeout );
+#endif /* POLARSSL_HAVE_TIME */
 
 /**
  * \brief          Set the cache timeout

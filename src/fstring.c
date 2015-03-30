@@ -9,7 +9,7 @@
 #include "dtoa.h"
 #include "polarssl/md5.h"
 #include "polarssl/sha1.h"
-#include "polarssl/sha2.h"
+#include "polarssl/sha256.h"
 #include "utf8proc.h"
 
 typedef enum {
@@ -980,11 +980,11 @@ flstr(20)* fstr_sha1(fstr_t data) {
 }
 
 flstr(32)* fstr_sha256(fstr_t data) {
-    sha2_context ctx;
-    sha2_starts(&ctx, 0);
-    sha2_update(&ctx, data.str, data.len);
+    sha256_context ctx;
+    sha256_starts(&ctx, 0);
+    sha256_update(&ctx, data.str, data.len);
     flstr(32)* sha256_hash = new_flstr(32);
-    sha2_finish(&ctx, (uint8_t*) sha256_hash);
+    sha256_finish(&ctx, (uint8_t*) sha256_hash);
     return sha256_hash;
 }
 
