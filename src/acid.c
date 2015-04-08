@@ -624,7 +624,8 @@ void acid_expand(acid_h* ah, size_t new_length) {
         strict_ftruncate(ah->fd_data, new_length);
         // Map more more memory. We can map anonymous memory since the new
         // data should be zeroed and we would make a private map anyway.
-        strict_mmap(ah->base_addr + ah->data_length, new_length - ah->data_length, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        int flags = (MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE);
+        strict_mmap(ah->base_addr + ah->data_length, new_length - ah->data_length, PROT_READ, flags, -1, 0);
         // We need to wait on fsync to prevent invalid offsets in journal.
         strict_fsync(ah->fd_data);
         // Resize the custom signal handler.
