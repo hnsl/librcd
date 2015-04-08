@@ -263,6 +263,9 @@ void rsig_sigsegv_high_handler(int sig, siginfo_t* si, struct ucontext* uc) {
         " \"Controlling complexity is the essence of computer programming.\"\n   - Brian Kernighan",
     };
     rio_debug(quotes[((size_t) rip) % (LENGTHOF(quotes))]);
-    // Exit with failure status.
+    // We want to exit with the SIGSEGV signal but simply raising it is not enough
+    // since we handle the signal. We therefore execute hlt which has the desired effect.
     rio_debug("\n\nprogram cannot recover from segmentation failure, exiting now\n");
+    __asm__ __volatile__("hlt");
+    unreachable();
 }
