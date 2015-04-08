@@ -148,7 +148,7 @@ static struct stat strict_fstat(int32_t fd) {
     struct stat s;
     int32_t fstat_r = fstat(fd, &s);
     if (fstat_r == -1)
-        RCD_SYSCALL_EXCEPTION(fstat, exception_io);
+        RCD_SYSCALL_EXCEPTION(fstat, exception_fatal);
     return s;
 }
 
