@@ -524,7 +524,7 @@ static void acid_rsig_segv(void* addr, void* arg_ptr) {
             // Allow page to be freely mutated via the MMU.
             strict_mprotect(page_addr, PAGE_SIZE, PROT_READ | PROT_WRITE);
         } else {
-            // Page already dirty, this hapens when two threads both try to
+            // Page already dirty, this happens when two threads both try to
             // read a protected page before it has been marked dirty.
             // Try reading one byte from it while we have the acid handle lock.
             // This is a sanity check that should make the program crash
