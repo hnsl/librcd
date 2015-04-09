@@ -167,13 +167,6 @@ static void strict_munmap(void* addr, size_t length) {
         RCD_SYSCALL_EXCEPTION(munmap, exception_fatal);
 }
 
-static void strict_mprotect(void* addr, size_t length, int prot) {
-    //x-dbg/ DBGFN("strict_mprotect(", addr, ", ", length, ", ", prot, ")");
-    int32_t mprotect_r = mprotect(addr, length, prot);
-    if (mprotect_r == -1)
-        RCD_SYSCALL_EXCEPTION(mprotect, exception_fatal);
-}
-
 static void strict_futex(int* uaddr, int op, int val, const struct timespec* timeout, int* uaddr2, int val3) {
     int32_t futex_r = futex(uaddr, op, val, timeout, uaddr2, val3);
     if (futex_r == -1) {
@@ -527,6 +520,8 @@ static void acid_rsig_segv(void* addr, void* arg_ptr) {
     void* page_addr = (void*) ((uintptr_t) addr & ~0xfff);
     // We immediately take a write lock. It's not worth making a read locked
     // test first since we expect to almost always need to mutate the index.
+    size_t backoff_s = 1;
+    restart_handler:;
     atomic_spinlock_lock(&ah->ilock); {
         // Look up page in new page index and execute cow copy if required before we allow page to mutate.
         acid_page_t* npage = RBTREE_LOOKUP_KEY(acid_page_t, node, &ah->npage_index, page_id);
@@ -541,6 +536,31 @@ static void acid_rsig_segv(void* addr, void* arg_ptr) {
         // Look up page in dirty page index.
         acid_page_t* dpage = RBTREE_LOOKUP_KEY(acid_page_t, node, &ah->dpage_index, page_id);
         if (dpage == 0) {
+            // Allow page to be freely mutated via the MMU.
+            //x-dbg/ DBGFN("strict_mprotect(", addr, ", ", length, ", ", prot, ")");
+            int32_t mprotect_r = mprotect(page_addr, PAGE_SIZE, PROT_READ | PROT_WRITE);
+            if (mprotect_r == -1) {
+                // Handle error.
+                if (errno == ENOMEM) {
+                    // We expect mprotect() to return ENOMEM when internal kernel allocations fail.
+                    // We treat this is a temporary condition instead of crashing for robustness in
+                    // temporary memory pressure situations.
+                    rio_debug("[acid] error: out of memory during mprotect(): waiting for system...\n");
+                    atomic_spinlock_unlock(&ah->ilock);
+                    struct timespec t = {
+                        .tv_sec = backoff_s
+                    };
+                    backoff_s = MIN(backoff_s * 2, 16);
+                    int32_t nanosleep_r = nanosleep(&t, 0);
+                    if (nanosleep_r == -1) {
+                        if (errno != EINTR)
+                            RCD_SYSCALL_EXCEPTION(nanosleep, exception_fatal);
+                    }
+                    goto restart_handler;
+                } else {
+                    RCD_SYSCALL_EXCEPTION(mprotect, exception_fatal);
+                }
+            }
             // Page not already indexed, index it as dirty.
             dpage = alloc_acid_page();
             dpage->page_id = page_id;
@@ -550,8 +570,6 @@ static void acid_rsig_segv(void* addr, void* arg_ptr) {
             if (rbtree_insert(&dpage->node, &ah->dpage_index) != 0)
                 throw("dirty page index is corrupt", exception_fatal);
             ah->n_dpage_index++;
-            // Allow page to be freely mutated via the MMU.
-            strict_mprotect(page_addr, PAGE_SIZE, PROT_READ | PROT_WRITE);
         } else {
             // Page already dirty, this happens when two threads both try to
             // read a protected page before it has been marked dirty.
