@@ -422,7 +422,7 @@ static void acid_sync_commit(acid_h* ah) {
     strict_pwrite(ah->fd_journal, jidx_pages, raw_jidx_size, 0);
     vm_mmap_unreserve(jidx_pages, jidx_size);
     // Memory map the journal.
-    void* journ_map = strict_mmap(0, total_jsize, PROT_READ, MAP_SHARED, ah->fd_journal, 0);
+    void* journ_map = strict_mmap(0, total_jsize, PROT_READ, MAP_SHARED | MAP_NORESERVE, ah->fd_journal, 0);
     // Sync the journal.
     strict_fsync(ah->fd_journal);
     // The changes are now persistent.
@@ -440,8 +440,37 @@ static void acid_sync_commit(acid_h* ah) {
     // Unmap the journal.
     strict_munmap(journ_map, total_jsize);
     // Free the npage index.
+    // We still has some cleanup to do before the pages is truly clean. The pages still contain memory
+    // that will continue to be pseudo-anonymously backed after the private COW since it is still
+    // dirty from the kernels PoV. This is because we committed it by writing from the journal and not
+    // by syncing the page itself as this would be unsafe. To free that memory we remap the page with
+    // the file. This will turn the memory into clean file backed memory (cache) that the kernel is
+    // free to drop as required. This is safe at this point as we have completely written the journal
+    // so the pages are up to date (when the pages are clean in acid as well). Remapping the page will
+    // have the effect of allowing the kernel to discard the pseudo-anonymous dirty memory and get rid
+    // of up to 2 VMAs as well by merging as VMAs is a limited resource as well.
     for (size_t i = 0; i < n_npage_index; i++) {
         acid_page_t* page = npage_vec[i];
+        // Clean up kernel VMA if page is not already dirty again.
+        atomic_spinlock_lock(&ah->ilock); {
+            uint64_t page_id = page->page_id;
+            acid_page_t* dpage = RBTREE_LOOKUP_KEY(acid_page_t, node, &ah->dpage_index, page_id);
+            if (dpage == 0) {
+                // Discard the pseudo-backed memory with MAP_FIXED.
+                // It would be strange if the kernel did not replace the memory in an atomic manner and
+                // had a time gap where a read access would be invalid. Even if this would be the case
+                // we would just interpret this as a write in the SIGSEGV handler and mark the page as
+                // dirty even though it was not dirty. In the worst case it would therefore simply be
+                // an optimization issue, not a correctness issue.
+                uint64_t offset = (page_id * PAGE_SIZE);
+                strict_mmap(
+                    ah->base_addr + offset, PAGE_SIZE,
+                    PROT_READ, (MAP_PRIVATE | MAP_NORESERVE | MAP_FIXED),
+                    ah->fd_data, offset
+                );
+            }
+        } atomic_spinlock_unlock(&ah->ilock);
+        // Free page entity.
         if (page->new_page_cow != 0)
             vm_mmap_unreserve(page->new_page_cow, PAGE_SIZE);
         free_acid_page(page);
@@ -570,7 +599,7 @@ acid_h* acid_open(fstr_t data_path, fstr_t journal_path, void* base_addr, size_t
         ah->data_length = strict_fstat(ah->fd_data).st_size;
         // Map the journal and read it.
         size_t total_jsize = strict_fstat(ah->fd_journal).st_size;
-        void* journ_map = strict_mmap(0, total_jsize, PROT_READ, MAP_PRIVATE, ah->fd_journal, 0);
+        void* journ_map = strict_mmap(0, total_jsize, PROT_READ, MAP_SHARED | MAP_NORESERVE, ah->fd_journal, 0);
         jrnl_idx_t* jidx = journ_map;
         ah->commit_rev = jidx->commit_rev;
         // Check if the journal contains uncommited changes.
@@ -592,7 +621,11 @@ acid_h* acid_open(fstr_t data_path, fstr_t journal_path, void* base_addr, size_t
             ah->data_length = new_length;
         }
         // Map memory.
-        ah->base_addr = strict_mmap(base_addr, ah->data_length, PROT_READ, MAP_PRIVATE, ah->fd_data, 0);
+        ah->base_addr = strict_mmap(
+            base_addr, ah->data_length,
+            PROT_READ, (MAP_PRIVATE | MAP_NORESERVE | MAP_FIXED),
+            ah->fd_data, 0
+        );
         // Register sigsegv region handler.
         ah->srh = rsig_segv_rhandler_set(acid_rsig_segv, ah->base_addr, ah->data_length, ah);
         assert(ah->srh != 0);
@@ -620,18 +653,25 @@ void acid_expand(acid_h* ah, size_t new_length) {
         return;
     // Do expand. We lock index during critical operations.
     atomic_spinlock_lock(&ah->ilock); {
-        // Resize the data file.
-        strict_ftruncate(ah->fd_data, new_length);
-        // Map more more memory. We can map anonymous memory since the new
-        // data should be zeroed and we would make a private map anyway.
-        int flags = (MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE);
-        strict_mmap(ah->base_addr + ah->data_length, new_length - ah->data_length, PROT_READ, flags, -1, 0);
-        // We need to wait on fsync to prevent invalid offsets in journal.
-        strict_fsync(ah->fd_data);
-        // Resize the custom signal handler.
-        rsig_segv_rhandler_resize(ah->srh, new_length);
-        // Note the new length.
-        ah->data_length = new_length;
+        size_t old_length = ah->data_length;
+        if (old_length < new_length) {
+            // Resize the data file.
+            strict_ftruncate(ah->fd_data, new_length);
+            // Map more more memory. We avoid a fixed mapping since it could discard other mappings,
+            // we want to fail if the new mapping intersects with other mappings. We also avoid an
+            // anonymous mapping since this would prevent the kernel from merging VMAs.
+            strict_mmap(
+                ah->base_addr + old_length, new_length - old_length,
+                PROT_READ, (MAP_PRIVATE | MAP_NORESERVE),
+                ah->fd_data, old_length
+            );
+            // Expand the custom signal handler.
+            rsig_segv_rhandler_resize(ah->srh, new_length);
+            // We need to wait on fsync to prevent invalid offsets in journal.
+            strict_fsync(ah->fd_data);
+            // Note the new length.
+            ah->data_length = new_length;
+        }
     } atomic_spinlock_unlock(&ah->ilock);
 }
 
