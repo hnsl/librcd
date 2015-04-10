@@ -6,6 +6,7 @@
 
 #include "rcd.h"
 #include "linux.h"
+#include "vm-internal.h"
 
 void rcd_self_test_glibrcd() {
     // Test malloc/free/calloc/realloc.
@@ -14,6 +15,7 @@ void rcd_self_test_glibrcd() {
         char* data[5];
         for (int i = 0, size = power; i < 5; i++, size *= power) {
             data[i] = malloc(size);
+            atest((((size_t) data[i] / VM_ALLOC_ALIGN) * VM_ALLOC_ALIGN) == (size_t) data[i]);
             memset(data[i], i, size);
         }
         for (int i = 0, size = power; i < 5; i++, size *= power) {
@@ -25,6 +27,7 @@ void rcd_self_test_glibrcd() {
         }
         for (int i = 0, size = power; i < 5; i++, size *= power) {
             data[i] = calloc(1, size);
+            atest((((size_t) data[i] / VM_ALLOC_ALIGN) * VM_ALLOC_ALIGN) == (size_t) data[i]);
             for (int j = 0; j < size; j++)
                 atest(data[i][j] == 0);
             memset(data[i], i, size);
@@ -35,6 +38,7 @@ void rcd_self_test_glibrcd() {
         }
         for (int i = 0, size = power; i < 5; i++, size *= power) {
             data[i] = realloc(data[i], size / 2);
+            atest((((size_t) data[i] / VM_ALLOC_ALIGN) * VM_ALLOC_ALIGN) == (size_t) data[i]);
         }
         for (int i = 0, size = power; i < 5; i++, size *= power) {
             for (int j = 0; j < size / 2; j++)
@@ -42,6 +46,7 @@ void rcd_self_test_glibrcd() {
         }
         for (int i = 0, size = power; i < 5; i++, size *= power) {
             data[i] = realloc(data[i], size * 2);
+            atest((((size_t) data[i] / VM_ALLOC_ALIGN) * VM_ALLOC_ALIGN) == (size_t) data[i]);
             memset(data[i] + size / 2, i, size / 2 + size);
         }
         for (int i = 0, size = power; i < 5; i++, size *= power) {
