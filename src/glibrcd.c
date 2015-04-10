@@ -61,13 +61,16 @@ void* memset(void* dest, int c, size_t n) {
     return A_memset(dest, c, n);
 }
 
+const size_t size_prefix_size = (sizeof(size_t) + (VM_ALLOC_ALIGN - 1)) & ~(VM_ALLOC_ALIGN - 1);
+CASSERT(size_prefix_size == 16);
+
 void* malloc(size_t size) {
     if (size == 0)
         return 0;
-    size_t total_size = size + sizeof(size_t);
+    size_t total_size = size + size_prefix_size;
     void* primary_ptr = vm_mmap_reserve(total_size, 0);
     *((size_t*) primary_ptr) = total_size;
-    void* ptr = primary_ptr + sizeof(size_t);
+    void* ptr = primary_ptr + size_prefix_size;
     return ptr;
 }
 
@@ -83,13 +86,13 @@ void* calloc(size_t nmemb, size_t size) {
 void* realloc(void* ptr, size_t size) {
     if (ptr == 0)
         return 0;
-    void* primary_ptr = ptr - sizeof(size_t);
+    void* primary_ptr = ptr - size_prefix_size;
     size_t old_total_size = *((size_t*) primary_ptr);
     if (size == 0) {
         vm_mmap_unreserve(primary_ptr, old_total_size);
         return 0;
     } else {
-        size_t old_size = (old_total_size - sizeof(size_t));
+        size_t old_size = (old_total_size - size_prefix_size);
         void* new_ptr = malloc(size);
         memcpy(new_ptr, ptr, MIN(old_size, size));
         vm_mmap_unreserve(primary_ptr, old_total_size);
@@ -100,7 +103,7 @@ void* realloc(void* ptr, size_t size) {
 void free(void* ptr) {
     if (ptr == 0)
         return;
-    void* primary_ptr = ptr - sizeof(size_t);
+    void* primary_ptr = ptr - size_prefix_size;
     size_t total_size = *((size_t*) primary_ptr);
     vm_mmap_unreserve(primary_ptr, total_size);
 }
