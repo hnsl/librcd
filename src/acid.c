@@ -739,7 +739,7 @@ bool acid_snapshot(acid_h* ah) {
     atomic_spinlock_lock(&ah->ctrl.lock); {
         if (ah->ctrl.op == sync_op_quit)
             throw("undefined behavior: using while closing acid handle", exception_fatal);
-        // We are not intrested in starting a commit if sync thread is busy fsyncing.
+        // We are not interested in starting a commit if sync thread is busy fsyncing.
         if (ah->ctrl.in_sync_phase) {
             atomic_spinlock_unlock(&ah->ctrl.lock);
             return false;
