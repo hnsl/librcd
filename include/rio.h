@@ -259,6 +259,9 @@ typedef struct rio_sub_exec {
     bool new_kernel_ns;
 } rio_sub_exec_t;
 
+/// Path to program itself. Can usually be executed to fork process with reset state.
+extern fstr_t rio_self_path;
+
 /// End of stream. Thrown when reading and a a stream is gracefully ended.
 /// For files this is the end of file. For TCP this is a graceful connection close.
 define_eio(rio_eos);
