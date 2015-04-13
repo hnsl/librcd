@@ -49,7 +49,6 @@ def main(librcd_path):
         'include/polarssl/bignum.h', # config.h
         'include/polarssl/rsa.h', # bignum
         'include/polarssl/aes.h', # no include
-        'include/polarssl/arc4.h', # no include
         'include/polarssl/asn1.h', # config.h bignum.h
         'include/polarssl/asn1write.h', # asn1.h
         'include/polarssl/base64.h', # no include
@@ -112,7 +111,6 @@ def main(librcd_path):
 
     hard_c_src_files = [
         'library/aes.c',
-        'library/arc4.c',
         'library/asn1parse.c',
         'library/asn1write.c',
         'library/base64.c',
@@ -184,10 +182,12 @@ def main(librcd_path):
                 if filename == "config.h":
                     inject_pos = file_content.index('#define POLARSSL_CONFIG_H\n') + 1
                     new_file_content = "".join(file_content[:inject_pos]) + get_config_h_extra() + "".join(file_content[inject_pos:])
-                    for feature in ('POLARSSL_HAVE_SSE2', 'POLARSSL_AES_ROM_TABLES', 'POLARSSL_HAVEGE_C', 'POLARSSL_SELF_TEST', 'POLARSSL_THREADING_PTHREAD', 'POLARSSL_THREADING_C' ):
+                    # Enable features
+                    for feature in ('POLARSSL_HAVE_SSE2', 'POLARSSL_AES_ROM_TABLES', 'POLARSSL_HAVEGE_C', 'POLARSSL_SELF_TEST', 'POLARSSL_THREADING_PTHREAD', 'POLARSSL_THREADING_C', 'POLARSSL_REMOVE_ARC4_CIPHERSUITES' ):
                         new_file_content = re.sub(r"//(#define {})".format(feature), r"\1", new_file_content)
-
-                    new_file_content = re.sub(r"(#define POLARSSL_SELF_TEST)", r"/*\1 */ ", new_file_content)
+                    # Disable features
+                    for feature in ('POLARSSL_ARC4_C', 'POLARSSL_SELF_TEST'):
+                        new_file_content = re.sub(r"(#define {})".format(feature), r"/*\1 */ ", new_file_content)
                 elif filename == "pk.h":
                     # this will be a problem if they add structs
                     new_file_content = re.sub(r"(typedef struct)\n{\n    const pk_info_t *", r"\1 _pk_context\n{\n    const pk_info_t", "".join(file_content))
