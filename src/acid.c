@@ -55,11 +55,14 @@ struct acid {
         /// True if sync thread is in sync phase.
         bool in_sync_phase;
         /// Fiber that is created when changing op to commit
+        /// and cancelled when snapshot is complete.
+        rcd_fid_t snapshot_wait_fid;
+        /// Fiber that is created when changing op to commit
         /// and cancelled when journal fsync is complete.
         rcd_fid_t commit_wait_fid;
         /// Fiber that is created when changing op to commit
-        /// and cancelled when snapshot is complete.
-        rcd_fid_t snapshot_wait_fid;
+        /// and cancelled when full sync is complete.
+        rcd_fid_t sync_wait_fid;
     } ctrl;
     /// File descriptor for data file.
     int32_t fd_data;
@@ -308,7 +311,7 @@ static bool journ_verify(void* journ_map, size_t total_jsize, size_t data_size) 
 
 static void acid_sync_commit(acid_h* ah) {
     bool has_changes;
-    rcd_fid_t commit_wait_fid, snapshot_wait_fid;
+    rcd_fid_t commit_wait_fid, snapshot_wait_fid, sync_wait_fid;
     // Take snapshot and mark all dirty pages as new pages that should be
     // included in the next commit/journal revision.
     // We don't win any throughput in the long run by allowing this snapshot
@@ -342,17 +345,20 @@ static void acid_sync_commit(acid_h* ah) {
             // Trigger in sync phase.
             ah->ctrl.in_sync_phase = has_changes;
             // Consume (possibly zero) commit wait fids.
-            commit_wait_fid = ah->ctrl.commit_wait_fid;
-            ah->ctrl.commit_wait_fid = 0;
             snapshot_wait_fid = ah->ctrl.snapshot_wait_fid;
             ah->ctrl.snapshot_wait_fid = 0;
+            commit_wait_fid = ah->ctrl.commit_wait_fid;
+            ah->ctrl.commit_wait_fid = 0;
+            sync_wait_fid = ah->ctrl.sync_wait_fid;
+            ah->ctrl.sync_wait_fid = 0;
         } atomic_spinlock_unlock(&ah->ctrl.lock);
     } atomic_spinlock_unlock(&ah->ilock);
     // Snapshot taken, wake up waiters.
     lwt_cancel_fiber_id(snapshot_wait_fid);
-    // When we have no changes, just wake up pending fsync fiber and return.
+    // When we have no changes, just wake up pending fsync fibers and return.
     if (!has_changes) {
         lwt_cancel_fiber_id(commit_wait_fid);
+        lwt_cancel_fiber_id(sync_wait_fid);
         return;
     }
     // Read new page index.
@@ -476,6 +482,8 @@ static void acid_sync_commit(acid_h* ah) {
     // In-sync phase ends here. It is now safe to wait for snapshot without
     // waiting for disk sync.
     ah->ctrl.in_sync_phase = false;
+    // Full synchronization complete, wake up waiters.
+    lwt_cancel_fiber_id(sync_wait_fid);
 }
 
 static void acid_sync_thread(void* arg_ptr) {
@@ -702,8 +710,8 @@ fiber_main acid_wait_fiber(fiber_main_attr) { try {
     ifc_park();
 } catch (exception_desync, e); }
 
-void acid_fsync(acid_h* ah) {
-    rcd_fid_t wait_fid;
+static void acid_fsync_inner(acid_h* ah, bool journal_only) {
+    rcd_fid_t commit_wait_fid, sync_wait_fid;
     bool futex_wake = false;
     atomic_spinlock_lock(&ah->ctrl.lock); {
         switch (ah->ctrl.op) {{
@@ -716,12 +724,19 @@ void acid_fsync(acid_h* ah) {
         } case sync_op_quit: {
             throw("undefined behavior: using while closing acid handle", exception_fatal);
         }}
-        wait_fid = ah->ctrl.commit_wait_fid;
-        if (wait_fid == 0) {
+        commit_wait_fid = ah->ctrl.commit_wait_fid;
+        if (commit_wait_fid == 0) {
             fmitosis {
-                wait_fid = spawn_static_fiber(acid_wait_fiber(""));
+                commit_wait_fid = spawn_static_fiber(acid_wait_fiber(""));
             }
-            ah->ctrl.commit_wait_fid = wait_fid;
+            ah->ctrl.commit_wait_fid = commit_wait_fid;
+        }
+        sync_wait_fid = ah->ctrl.sync_wait_fid;
+        if (sync_wait_fid == 0) {
+            fmitosis {
+                sync_wait_fid = spawn_static_fiber(acid_wait_fiber(""));
+            }
+            ah->ctrl.sync_wait_fid = sync_wait_fid;
         }
     } atomic_spinlock_unlock(&ah->ctrl.lock);
     // Wake sync thread.
@@ -730,11 +745,23 @@ void acid_fsync(acid_h* ah) {
         strict_futex(&ah->ctrl.op_futex, FUTEX_WAKE, INT32_MAX, 0, 0, 0);
     }
     // Wait for fsync.
-    ifc_wait(wait_fid);
+    if (journal_only) {
+        ifc_wait(commit_wait_fid);
+    } else {
+        ifc_wait(sync_wait_fid);
+    }
 }
 
-bool acid_snapshot(acid_h* ah) {
-    rcd_fid_t wait_fid;
+void acid_fsync(acid_h* ah) {
+    acid_fsync_inner(ah, false);
+}
+
+void acid_fsync_journal(acid_h* ah) {
+    acid_fsync_inner(ah, true);
+}
+
+rcd_fid_t acid_fsync_async(acid_h* ah) {
+    rcd_fid_t snap_wait_fid, sync_wait_fid;
     bool futex_wake = false;
     atomic_spinlock_lock(&ah->ctrl.lock); {
         if (ah->ctrl.op == sync_op_quit)
@@ -742,7 +769,7 @@ bool acid_snapshot(acid_h* ah) {
         // We are not interested in starting a commit if sync thread is busy fsyncing.
         if (ah->ctrl.in_sync_phase) {
             atomic_spinlock_unlock(&ah->ctrl.lock);
-            return false;
+            return 0;
         }
         // Order commit if not already ordered.
         if (ah->ctrl.op == sync_op_none) {
@@ -750,12 +777,20 @@ bool acid_snapshot(acid_h* ah) {
             futex_wake = true;
         }
         // Start wait for snapshot fiber.
-        wait_fid = ah->ctrl.snapshot_wait_fid;
-        if (wait_fid == 0) {
+        snap_wait_fid = ah->ctrl.snapshot_wait_fid;
+        if (snap_wait_fid == 0) {
             fmitosis {
-                wait_fid = spawn_static_fiber(acid_wait_fiber(""));
+                snap_wait_fid = spawn_static_fiber(acid_wait_fiber(""));
             }
-            ah->ctrl.snapshot_wait_fid = wait_fid;
+            ah->ctrl.snapshot_wait_fid = snap_wait_fid;
+        }
+        // Start wait for sync fiber.
+        sync_wait_fid = ah->ctrl.sync_wait_fid;
+        if (sync_wait_fid == 0) {
+            fmitosis {
+                sync_wait_fid = spawn_static_fiber(acid_wait_fiber(""));
+            }
+            ah->ctrl.sync_wait_fid = sync_wait_fid;
         }
     } atomic_spinlock_unlock(&ah->ctrl.lock);
     // Wake sync thread.
@@ -764,6 +799,11 @@ bool acid_snapshot(acid_h* ah) {
         strict_futex(&ah->ctrl.op_futex, FUTEX_WAKE, INT32_MAX, 0, 0, 0);
     }
     // Wait for snapshot.
-    ifc_wait(wait_fid);
-    return true;
+    ifc_wait(snap_wait_fid);
+    // Return commit wait fid.
+    return sync_wait_fid;
+}
+
+bool acid_snapshot(acid_h* ah) {
+    return (acid_fsync_async(ah) != 0);
 }

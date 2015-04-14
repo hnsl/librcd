@@ -40,7 +40,7 @@ void acid_close(acid_h* ah);
 /// journal file does not exist it will be created. The data file is truncated
 /// to PAGE_SIZE if its smaller as that is the smallest allow data file.
 /// If the acid data handle was not gracefully closed the last session the
-/// journal will be automatically commited and a complete fsync is executed
+/// journal will be automatically committed and a complete fsync is executed
 /// before the call returns. If the journal is corrupt the data is removed.
 /// This is opaque and not visible to the caller. Both the data and journal
 /// file is locked on open. If locking fails the function throws an exception.
@@ -53,20 +53,35 @@ void acid_expand(acid_h* ah, size_t new_length);
 /// Returns the complete memory range of the acid map as a fixed string.
 fstr_t acid_memory(acid_h* ah);
 
-/// Triggers a new commit of the journal unless one is already pending and
-/// waits until all previous changes are synced to journal before proceeding.
-/// This functon is a cancellation point and will abort wait and throw
+/// Waits for compelte fsync of both journal and database to disk.
+/// This function is a cancellation point and will abort wait and throw
 /// cancellation/join race.
 void acid_fsync(acid_h* ah);
 
 /// Triggers a new commit of the journal unless one is already pending and
+/// waits until all previous changes are synced to journal before proceeding.
+/// This function is a cancellation point and will abort wait and throw
+/// cancellation/join race.
+void acid_fsync_journal(acid_h* ah);
+
+/// Triggers a new commit of the journal unless one is already pending and
 /// waits until all dirty pages before the call has been snapshotted and is
-/// ready to be commited to journal. This call only waits for snapshot (CPU),
-/// never on fsync (disk). If the sync thread is busy flusing to disk the
+/// ready to be committed to journal. When snapshot is taken it returns
+/// a fiber that will be cancelled when commit is complete. Waiting for
+/// this fiber allows asynchronous fsync().
+/// Returns 0 when snapshot could not be immediately taken.
+/// This function is a cancellation point and will abort wait and throw
+/// cancellation/join race.
+rcd_fid_t acid_fsync_async(acid_h* ah);
+
+/// Triggers a new commit of the journal unless one is already pending and
+/// waits until all dirty pages before the call has been snapshotted and is
+/// ready to be committed to journal. This call only waits for snapshot (CPU),
+/// never on fsync (disk). If the sync thread is busy flushing to disk the
 /// function returns false without having any effect. If the function returns
 /// true it is guaranteed that any previous changes is snapshotted and queued
-/// to be asynchronously commited to disk.
-/// This functon is a cancellation point and will abort wait and throw
+/// to be asynchronously committed to disk.
+/// This function is a cancellation point and will abort wait and throw
 /// cancellation/join race.
 bool acid_snapshot(acid_h* ah);
 
