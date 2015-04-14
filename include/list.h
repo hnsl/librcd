@@ -193,6 +193,11 @@ typedef struct rcd_abstract_dict {
     (__elem != 0); \
 })
 
+#define dict_deletea(set, type, fstr_key) ({ \
+    bool delete_ok = dict_delete(set, type, fstr_key); \
+    assert(delete_ok);; \
+})
+
 #define dict_first_key(set, type) ({ \
     dict(type)* __typed_set = set; \
     rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
