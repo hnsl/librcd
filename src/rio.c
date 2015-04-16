@@ -1285,6 +1285,8 @@ static fstr_t rio_read_direct(rio_t* rio, fstr_t buffer, bool* out_more_hint) {
             break;
         if (errno == EWOULDBLOCK)
             lwt_block_until_edge_level_io_event(read_fd, lwt_fd_event_read);
+        else if (errno == EPIPE)
+            throw_eio("read() failed: end of pipe stream reached", rio_eos);
         else if (errno != EINTR)
             RCD_SYSCALL_EXCEPTION(read, exception_io);
     }
