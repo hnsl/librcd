@@ -961,7 +961,7 @@ fstr_mem_t* fstr_base32_decode(fstr_t s) { sub_heap {
     return escape(output);
 }}
 
-fstr_mem_t* fstr_ace_encode(fstr_t decoded) {
+fstr_mem_t* fstr_ace_encode(fstr_t decoded) { sub_heap {
     // Worst case is every character being hex encoded and inflated by 4 characters (c -> \xXX).
     fstr_mem_t* ret = fstr_alloc(decoded.len * 4);
     fstr_t rtail = fss(ret);
@@ -1024,7 +1024,7 @@ fstr_mem_t* fstr_ace_encode(fstr_t decoded) {
     }
     ret->len -= rtail.len;
     return escape(ret);
-}
+}}
 
 fstr_mem_t* fstr_ace_decode(fstr_t encoded) { sub_heap {
     fstr_mem_t* ret = fstr_alloc(encoded.len);
