@@ -1177,6 +1177,33 @@ void rcd_self_test_fstring() {
             }
         }
     }
+    // Test ace encode/decode.
+    sub_heap {
+        // The hash test string should be the exact same in ace.
+        fstr_t ace0 = fss(fstr_ace_encode(test_hash_str));
+        atest(fstr_equal(ace0, test_hash_str));
+        fstr_t dec0 = fss(fstr_ace_decode(ace0));
+        atest(fstr_equal(dec0, test_hash_str));
+        // Test encoding all characters.
+        fstr_t all = fss(fstr_alloc(0x100));
+        for (size_t i = 0; i < 0x100; i++) {
+            all.str[i] = i;
+        }
+        fstr_t ace1 = fss(fstr_ace_encode(all));
+        fstr_t dec1 = fss(fstr_ace_decode(ace1));
+        atest(fstr_equal(dec1, all));
+        // Test cornercase.
+        fstr_t test = "\0\\\0\\\0\\\0\\\0\\";
+        fstr_t ace3 = fss(fstr_ace_encode(test));
+        atest(fstr_equal(ace3, "\\x00\\\\\\x00\\\\\\x00\\\\\\x00\\\\\\x00\\\\"));
+        fstr_t dec3 = fss(fstr_ace_decode(ace1));
+        // Test cornercase all null.
+        fstr_fill(all, 0);
+        fstr_t ace2 = fss(fstr_ace_encode(all));
+        atest(ace2.len == all.len * 4);
+        fstr_t dec2 = fss(fstr_ace_decode(ace2));
+        atest(fstr_equal(dec2, all));
+    }
     // Test fstr_path_base.
     TEST_MEM_LEAK {
         {
