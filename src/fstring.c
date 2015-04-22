@@ -961,6 +961,140 @@ fstr_mem_t* fstr_base32_decode(fstr_t s) { sub_heap {
     return escape(output);
 }}
 
+fstr_mem_t* fstr_ace_encode(fstr_t decoded) {
+    // Worst case is every character being hex encoded and inflated by 4 characters (c -> \xXX).
+    fstr_mem_t* ret = fstr_alloc(decoded.len * 4);
+    fstr_t rtail = fss(ret);
+    for (size_t i = 0; i < decoded.len; i++) {
+        uint8_t c = decoded.str[i];
+        switch (c) {{
+        } case '\a': {
+            fstr_putc(&rtail, '\\');
+            fstr_putc(&rtail, 'a');
+            break;
+        } case '\b': {
+            fstr_putc(&rtail, '\\');
+            fstr_putc(&rtail, 'b');
+            break;
+        } case '\t': {
+            fstr_putc(&rtail, '\\');
+            fstr_putc(&rtail, 't');
+            break;
+        } case '\n': {
+            fstr_putc(&rtail, '\\');
+            fstr_putc(&rtail, 'n');
+            break;
+        } case '\v': {
+            fstr_putc(&rtail, '\\');
+            fstr_putc(&rtail, 'v');
+            break;
+        } case '\f': {
+            fstr_putc(&rtail, '\\');
+            fstr_putc(&rtail, 'f');
+            break;
+        } case '\r': {
+            fstr_putc(&rtail, '\\');
+            fstr_putc(&rtail, 'r');
+            break;
+        } case '"': {
+            fstr_putc(&rtail, '\\');
+            fstr_putc(&rtail, '"');
+            break;
+        } case '\'': {
+            fstr_putc(&rtail, '\\');
+            fstr_putc(&rtail, '\'');
+            break;
+        } case '\\': {
+            fstr_putc(&rtail, '\\');
+            fstr_putc(&rtail, '\\');
+            break;
+        } default: {
+            if (c < 0x20 || c >= 0x7f) {
+                // Escape control characters and undefined characters.
+                fstr_putc(&rtail, '\\');
+                fstr_putc(&rtail, 'x');
+                fstr_t buf = fstr_slice(rtail, 0, 2);
+                fstr_serial_int(buf, c, 16);
+                rtail = fstr_slice(rtail, 2, -1);
+            } else {
+                fstr_putc(&rtail, c);
+            }
+            break;
+        }}
+    }
+    ret->len -= rtail.len;
+    return escape(ret);
+}
+
+fstr_mem_t* fstr_ace_decode(fstr_t encoded) { sub_heap {
+    fstr_mem_t* ret = fstr_alloc(encoded.len);
+    fstr_t rtail = fss(ret);
+    bool escaping = false;
+    for (size_t i = 0; i < encoded.len; i++) {
+        uint8_t c = encoded.str[i];
+        if (escaping) {
+            switch (c) {{
+            } case 'a': {
+                fstr_putc(&rtail, '\a');
+                break;
+            } case 'b': {
+                fstr_putc(&rtail, '\b');
+                break;
+            } case 't': {
+                fstr_putc(&rtail, '\t');
+                break;
+            } case 'n': {
+                fstr_putc(&rtail, '\n');
+                break;
+            } case 'v': {
+                fstr_putc(&rtail, '\v');
+                break;
+            } case 'f': {
+                fstr_putc(&rtail, '\f');
+                break;
+            } case 'r': {
+                fstr_putc(&rtail, '\r');
+                break;
+            } case '"': {
+                fstr_putc(&rtail, '\"');
+                break;
+            } case '\'': {
+                fstr_putc(&rtail, '\'');
+                break;
+            } case '\\': {
+                fstr_putc(&rtail, '\\');
+                break;
+            } case 'x': {
+                fstr_t hex = fstr_slice(encoded, i + 1, i + 3);
+                {
+                    fstr_t hv = hex;
+                    #pragma re2c(hv): ^[a-zA-Z0-9]{2,2}$ {@hex_valid}
+                    throw(concs("syntax error at offset ", i, ": hex sequence is not valid"), exception_io);
+                    hex_valid:;
+                }
+                fstr_putc(&rtail, fstr_to_int(hex, 16));
+                i += 2;
+                break;
+            } default: {
+                throw(concs("syntax error at offset ", i, ": unknown escape character [", c, "]"), exception_io);
+                break;
+            }}
+            escaping = false;
+        } else {
+            switch (c) {{
+            } case '\\': {
+                escaping = true;
+                break;
+            } default: {
+                fstr_putc(&rtail, c);
+                break;
+            }}
+        }
+    }
+    ret->len -= rtail.len;
+    return escape(ret);
+}}
+
 flstr(16)* fstr_md5(fstr_t data) {
     md5_context ctx;
     md5_starts(&ctx);

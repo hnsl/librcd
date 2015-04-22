@@ -477,6 +477,15 @@ fstr_mem_t* fstr_base32_encode(fstr_t s);
 /// Decodes base32 to binary data.
 fstr_mem_t* fstr_base32_decode(fstr_t s);
 
+/// Encodes a binary string in valid ASCII.
+/// The characters \r, \n and \ is escaped in their standard c escape format.
+/// Other control characters and undefined characters are hex escaped.
+fstr_mem_t* fstr_ace_encode(fstr_t decoded);
+
+/// Decodes a string escaped with fstr_ace_encode().
+/// Throws an io exception is the format is not recognized.
+fstr_mem_t* fstr_ace_decode(fstr_t encoded);
+
 /// Computes md5 hash of the specified data.
 flstr(16)* fstr_md5(fstr_t data);
 
