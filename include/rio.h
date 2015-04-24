@@ -1020,4 +1020,205 @@ list(fstr_t)* rio_ipc_main_injection_get_args(void (*main_fn_ptr)());
 /// on system, etc).
 list(uint32_t)* rio_resolve_host_ipv4_addr(fstr_t host_name);
 
+/// Reads an unsigned 8-bit integer from the stream.
+static inline uint8_t rio_read_u8(rio_t* handle) {
+    uint8_t value = 0;
+    rio_read_fill(handle, FSTR_PACK(value));
+    return value;
+}
+
+/// Unpacks an unsigned 8-bit integer from a datagram.
+static inline uint8_t rio_dg_read_u8(fstr_t* dgram) {
+    uint8_t value = FSTR_UNPACK((*dgram), uint8_t);
+    return value;
+}
+
+/// Reads a network byte encoded unsigned 16-bit unsigned integer from a stream.
+static inline uint16_t rio_read_u16(rio_t* handle) {
+    uint16_t value = 0;
+    rio_read_fill(handle, FSTR_PACK(value));
+    return RIO_NBO_SWAP16(value);
+}
+
+/// Unpacks a network byte encoded unsigned 16-bit integer from a datagram.
+static inline uint16_t rio_dg_read_u16(fstr_t* dgram) {
+    uint16_t value = FSTR_UNPACK((*dgram), uint16_t);
+    return RIO_NBO_SWAP16(value);
+}
+
+/// Reads a network byte encoded unsigned 32-bit integer from a stream.
+static inline uint32_t rio_read_u32(rio_t* handle) {
+    uint32_t value = 0;
+    rio_read_fill(handle, FSTR_PACK(value));
+    return RIO_NBO_SWAP32(value);
+}
+
+/// Unpacks a network byte encoded unsigned 32-bit integer from a datagram.
+static inline uint32_t rio_dg_read_u32(fstr_t* dgram) {
+    uint32_t value = FSTR_UNPACK((*dgram), uint32_t);
+    return RIO_NBO_SWAP32(value);
+}
+
+/// Reads a network byte encoded unsigned 64-bit integer from a stream.
+static inline uint64_t rio_read_u64(rio_t* handle) {
+    uint64_t value = 0;
+    rio_read_fill(handle, FSTR_PACK(value));
+    return RIO_NBO_SWAP64(value);
+}
+
+/// Unpacks a network byte encoded unsigned 64-bit integer from a datagram.
+static inline uint64_t rio_dg_read_u64(fstr_t* dgram) {
+    uint64_t value = FSTR_UNPACK((*dgram), uint64_t);
+    return RIO_NBO_SWAP64(value);
+}
+
+/// Reads a network byte encoded unsigned 128-bit integer from a stream.
+static inline uint128_t rio_read_u128(rio_t* handle) {
+    uint128_t value = 0;
+    rio_read_fill(handle, FSTR_PACK(value));
+    return RIO_NBO_SWAP128(value);
+}
+
+/// Unpacks a network byte encoded unsigned 128-bit integer from a datagram.
+static inline uint128_t rio_dg_read_u128(fstr_t* dgram) {
+    uint128_t value = FSTR_UNPACK((*dgram), uint128_t);
+    return RIO_NBO_SWAP128(value);
+}
+
+/// Reads a signed 8-bit integer from the stream.
+static inline int8_t rio_read_i8(rio_t* handle) {
+    int8_t value = 0;
+    rio_read_fill(handle, FSTR_PACK(value));
+    return value;
+}
+
+/// Unpacks a signed 8-bit integer from a datagram.
+static inline int8_t rio_dg_read_i8(fstr_t* dgram) {
+    int8_t value = FSTR_UNPACK((*dgram), int8_t);
+    return value;
+}
+
+/// Reads a network byte encoded signed 16-bit unsigned integer from a stream.
+static inline int16_t rio_read_i16(rio_t* handle) {
+    int16_t value = 0;
+    rio_read_fill(handle, FSTR_PACK(value));
+    return RIO_NBO_SWAP16(value);
+}
+
+/// Unpacks a network byte encoded signed 16-bit integer from a datagram.
+static inline int16_t rio_dg_read_i16(fstr_t* dgram) {
+    int16_t value = FSTR_UNPACK((*dgram), int16_t);
+    return RIO_NBO_SWAP16(value);
+}
+
+/// Reads a network byte encoded signed 32-bit unsigned integer from a stream.
+static inline int32_t rio_read_i32(rio_t* handle) {
+    int32_t value = 0;
+    rio_read_fill(handle, FSTR_PACK(value));
+    return RIO_NBO_SWAP32(value);
+}
+
+/// Unpacks a network byte encoded signed 32-bit integer from a datagram.
+static inline int32_t rio_dg_read_i32(fstr_t* dgram) {
+    int32_t value = FSTR_UNPACK((*dgram), int32_t);
+    return RIO_NBO_SWAP32(value);
+}
+
+/// Reads a network byte encoded signed 64-bit unsigned integer from a stream.
+static inline int64_t rio_read_i64(rio_t* handle) {
+    int64_t value = 0;
+    rio_read_fill(handle, FSTR_PACK(value));
+    return RIO_NBO_SWAP64(value);
+}
+
+/// Unpacks a network byte encoded signed 64-bit integer from a datagram.
+static inline int64_t rio_dg_read_i64(fstr_t* dgram) {
+    int64_t value = FSTR_UNPACK((*dgram), int64_t);
+    return RIO_NBO_SWAP64(value);
+}
+
+/// Reads a network byte encoded signed 128-bit unsigned integer from a stream.
+static inline int128_t rio_read_i128(rio_t* handle) {
+    int128_t value = 0;
+    rio_read_fill(handle, FSTR_PACK(value));
+    return RIO_NBO_SWAP128(value);
+}
+
+/// Unpacks a network byte encoded signed 128-bit integer from a datagram.
+static inline int128_t rio_dg_read_i128(fstr_t* dgram) {
+    int128_t value = FSTR_UNPACK((*dgram), int128_t);
+    return RIO_NBO_SWAP128(value);
+}
+
+/// Writes an unsigned 8-bit integer to a stream.
+static inline void rio_write_u8(rio_t* handle, uint8_t value, bool more_hint) {
+    rio_write_part(handle, FSTR_PACK(value), more_hint);
+}
+
+/// Writes a network byte encoded unsigned 16-bit integer to a stream.
+static inline void rio_write_u16(rio_t* handle, uint16_t value, bool more_hint) {
+    uint16_t nbo_value = RIO_NBO_SWAP16(value);
+    rio_write_part(handle, FSTR_PACK(nbo_value), more_hint);
+}
+
+/// Writes a network byte encoded unsigned 32-bit integer to a stream.
+static inline void rio_write_u32(rio_t* handle, uint32_t value, bool more_hint) {
+    uint32_t nbo_value = RIO_NBO_SWAP32(value);
+    rio_write_part(handle, FSTR_PACK(nbo_value), more_hint);
+}
+
+/// Writes a network byte encoded unsigned 64-bit integer to a stream.
+static inline void rio_write_u64(rio_t* handle, uint64_t value, bool more_hint) {
+    uint64_t nbo_value = RIO_NBO_SWAP64(value);
+    rio_write_part(handle, FSTR_PACK(nbo_value), more_hint);
+}
+
+/// Writes a network byte encoded unsigned 128-bit integer to a stream.
+static inline void rio_write_u128(rio_t* handle, uint128_t value, bool more_hint) {
+    uint128_t nbo_value = RIO_NBO_SWAP128(value);
+    rio_write_part(handle, FSTR_PACK(nbo_value), more_hint);
+}
+
+/// Writes a signed 8-bit integer to a stream.
+static inline void rio_write_i8(rio_t* handle, int8_t value, bool more_hint) {
+    rio_write_part(handle, FSTR_PACK(value), more_hint);
+}
+
+/// Writes a network byte encoded signed 16-bit integer to a stream.
+static inline void rio_write_i16(rio_t* handle, int16_t value, bool more_hint) {
+    int16_t nbo_value = RIO_NBO_SWAP16(value);
+    rio_write_part(handle, FSTR_PACK(nbo_value), more_hint);
+}
+
+/// Writes a network byte encoded signed 32-bit integer to a stream.
+static inline void rio_write_i32(rio_t* handle, int32_t value, bool more_hint) {
+    int32_t nbo_value = RIO_NBO_SWAP32(value);
+    rio_write_part(handle, FSTR_PACK(nbo_value), more_hint);
+}
+
+/// Writes a network byte encoded signed 64-bit integer to a stream.
+static inline void rio_write_i64(rio_t* handle, int64_t value, bool more_hint) {
+    int64_t nbo_value = RIO_NBO_SWAP64(value);
+    rio_write_part(handle, FSTR_PACK(nbo_value), more_hint);
+}
+
+/// Writes a network byte encoded signed 128-bit integer to a stream.
+static inline void rio_write_i128(rio_t* handle, int128_t value, bool more_hint) {
+    int128_t nbo_value = RIO_NBO_SWAP128(value);
+    rio_write_part(handle, FSTR_PACK(nbo_value), more_hint);
+}
+
+/// Reads a boolean from a stream encoded with one byte
+/// where all values represent true except zero.
+static inline bool rio_read_bool(rio_t* handle) {
+    uint8_t value = rio_read_u8(handle);
+    return value != 0x00;
+}
+
+/// Write a boolean to a stream encoded with one byte
+/// where false = 0x00 and true = 0xff.
+static inline void rio_write_bool(rio_t* handle, bool value, bool more_hint) {
+    rio_write_u8(handle, (value == true)? 0xff: 0x00, more_hint);
+}
+
 #endif	/* RIO_H */
