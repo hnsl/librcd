@@ -536,8 +536,13 @@ static void acid_rsig_segv(void* addr, void* arg_ptr) {
         if (npage != 0) {
             atomic_spinlock_lock(&npage->plock); {
                 if (!npage->jbuffered && npage->new_page_cow == 0) {
-                    npage->new_page_cow = vm_mmap_reserve(PAGE_SIZE, 0);
-                    memcpy(npage->new_page_cow, page_addr, PAGE_SIZE);
+                    void* new_page_cow = vm_mmap_reserve(PAGE_SIZE, 0);
+                    memcpy(new_page_cow, page_addr, PAGE_SIZE);
+                    // Making atomic assignment of new_page_cow pointer ordered after
+                    // copy operation is complete. This allows checking of the pointer
+                    // outside the page lock.
+                    sync_synchronize();
+                    npage->new_page_cow = new_page_cow;
                 }
             } atomic_spinlock_unlock(&npage->plock);
         }
