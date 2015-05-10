@@ -14,6 +14,7 @@ void rcd_self_test_memory();
 void rcd_self_test_libgcc();
 void rcd_self_test_regex();
 void rcd_self_test_util_macros();
+void rcd_self_test_list();
 void rcd_self_test_dict();
 void rcd_self_test_queue();
 void rcd_self_test_avl();
@@ -35,6 +36,8 @@ void rcd_primitive_self_test() {
     rcd_self_test_regex();
     rio_debug("[rcd_primitive_self_test]: testing util macros\n");
     rcd_self_test_util_macros();
+    rio_debug("[rcd_primitive_self_test]: testing list\n");
+    rcd_self_test_list();
     rio_debug("[rcd_primitive_self_test]: testing dict\n");
     rcd_self_test_dict();
     rio_debug("[rcd_primitive_self_test]: testing queue\n");
@@ -50,7 +53,6 @@ void rcd_primitive_self_test() {
 void rcd_self_test_exceptions();
 void rcd_self_test_stacklets();
 void rcd_self_test_fstring();
-void rcd_self_test_list();
 void rcd_self_test_json();
 void rcd_self_test_multi_fiber();
 void rcd_self_test_io();
@@ -81,8 +83,6 @@ void rcd_advanced_self_test(list(fstr_t)* main_args, list(fstr_t)* main_env) {
     rcd_self_test_stacklets();
     rio_debug("[rcd_advanced_self_test]: testing fstring\n");
     rcd_self_test_fstring();
-    rio_debug("[rcd_advanced_self_test]: testing list\n");
-    rcd_self_test_list();
     rio_debug("[rcd_advanced_self_test]: testing json\n");
     rcd_self_test_json();
     rio_debug("[rcd_advanced_self_test]: testing multi fiber\n");
