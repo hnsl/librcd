@@ -16,6 +16,7 @@ void rcd_self_test_regex();
 void rcd_self_test_util_macros();
 void rcd_self_test_list();
 void rcd_self_test_dict();
+void rcd_self_test_vec();
 void rcd_self_test_queue();
 void rcd_self_test_avl();
 void rcd_self_test_hmap();
@@ -40,6 +41,8 @@ void rcd_primitive_self_test() {
     rcd_self_test_list();
     rio_debug("[rcd_primitive_self_test]: testing dict\n");
     rcd_self_test_dict();
+    rio_debug("[rcd_primitive_self_test]: testing vec\n");
+    rcd_self_test_vec();
     rio_debug("[rcd_primitive_self_test]: testing queue\n");
     rcd_self_test_queue();
     rio_debug("[rcd_primitive_self_test]: testing avl\n");
