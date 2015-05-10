@@ -297,6 +297,10 @@ void __morestack_adjust_overflow_arg_area(va_list va_list);
 #define dict(type) \
     struct __rcd_dict__##type
 
+/// Basic vector pseudo-type macro. Further defined in list.h.
+#define vec(type) \
+    struct __rcd_vec__##type
+
 /// Typed sub fiber.
 #define sf(sf_t_name) struct sf_t_name##__rcd_sf_t
 

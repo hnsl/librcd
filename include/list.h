@@ -34,6 +34,17 @@ typedef struct rcd_abstract_dict {
     size_t length;
 } rcd_abstract_dict_t;
 
+typedef struct rcd_abstract_vec {
+    /// Number of elements in the vector.
+    size_t length;
+    /// Capacity, maximum number of elements in the vector.
+    size_t cap;
+    /// Raw size of the vector in bytes.
+    size_t size;
+    /// Pointer to vector memory.
+    void* mem;
+} rcd_abstract_vec_t;
+
 #define list_count(set, type) ({ \
     list(type)* __typed_set = set; \
     ((rcd_abstract_list_t*) __typed_set)->length; \
@@ -42,6 +53,11 @@ typedef struct rcd_abstract_dict {
 #define dict_count(set, type) ({ \
     dict(type)* __typed_set = set; \
     ((rcd_abstract_dict_t*) __typed_set)->length; \
+})
+
+#define vec_count(set, type) ({ \
+    vec(type)* __typed_set = set; \
+    ((rcd_abstract_vec_t*) __typed_set)->length; \
 })
 
 #define list_push_end(set, type, e) ({ \
@@ -159,6 +175,82 @@ typedef struct rcd_abstract_dict {
     } \
 })
 
+/// Returns a reference to a specific OFFSET in the vector.
+/// The vector is expanded as needed to make the OFFSET valid.
+#define vec_ref(SET, TYPE, OFFS) ({ \
+    vec(TYPE)* ___typed_set = SET; \
+    rcd_abstract_vec_t* ___vec = (rcd_abstract_vec_t*) ___typed_set; \
+    (TYPE*) _vec_ref(___vec, sizeof(TYPE), (OFFS)); \
+})
+
+/// SETs a value at a specific OFFSET.
+/// The vector is expanded as needed to make the OFFSET valid.
+#define vec_set(SET, TYPE, OFFS, X) ({ \
+    vec(TYPE)* __typed_set = (SET); \
+    size_t __offs = (OFFS); \
+    rcd_abstract_vec_t* __vec = (rcd_abstract_vec_t*) __typed_set; \
+    *vec_ref(__typed_set, TYPE, __offs) = (X); \
+    ; \
+})
+
+/// Appends a value to the vector.
+/// The vector is expanded as needed to make the append possible.
+#define vec_append(SET, TYPE, X) ({ \
+    vec(TYPE)* __typed_set = SET; \
+    rcd_abstract_vec_t* __vec = (rcd_abstract_vec_t*) __typed_set; \
+    *vec_ref(__typed_set, TYPE, __vec->length) = (X); \
+    ; \
+})
+
+/// Appends a series of values to the vector.
+#define vec_append_n(SET, TYPE, ...) ({ \
+    vec(TYPE)* _typed_set = (SET); \
+    rcd_abstract_vec_t* _vec = (rcd_abstract_vec_t*) _typed_set; \
+    TYPE _vv[] = {__VA_ARGS__}; \
+    size_t _vv_n = LENGTHOF(_vv); \
+    if (_vv_n > 0) { \
+        /* preallocate last index */ \
+        size_t offs = _vec->length; \
+        (void) vec_ref(_typed_set, TYPE, offs + _vv_n - 1); \
+        for (size_t _i = 0; _i < _vv_n; _i++) { \
+            vec_set(_typed_set, TYPE, offs + _i, _vv[_i]); \
+        } \
+    } \
+})
+
+/// Gets an element pointer in the vector from a specific offset.
+/// Throws an arg exception if the offset is invalid.
+#define vec_get_ptr(SET, TYPE, OFFS) ({ \
+    vec(TYPE)* _typed_set = (SET); \
+    size_t _offs = (OFFS); \
+    rcd_abstract_vec_t* _vec = (rcd_abstract_vec_t*) _typed_set; \
+    if (_offs >= _vec->length) { \
+        _vec_throw_get_oob(_offs, _vec->length); \
+    } \
+    (TYPE*) (_vec->mem + _offs * sizeof(TYPE)); \
+})
+
+/// Gets an element in the vector from a specific offset.
+/// Throws an arg exception if the offset is invalid.
+#define vec_get(SET, TYPE, OFFS) \
+    (*vec_get_ptr(SET, TYPE, OFFS))
+
+/// Return the content of the vector as a plain c array.
+/// This array is guaranteed to have vec_count() number of slots.
+/// The memory is guaranteed to be valid until the vector is modified in some way.
+#define vec_array(SET, TYPE) ({ \
+    vec(TYPE)* _typed_set = (SET); \
+    rcd_abstract_vec_t* _vec = (rcd_abstract_vec_t*) _typed_set; \
+    (TYPE*) _vec->mem; \
+})
+
+/// Clones a vector.
+#define vec_clone(SET, TYPE) ({ \
+    vec(TYPE)* _typed_set = (SET); \
+    rcd_abstract_vec_t* _vec = (rcd_abstract_vec_t*) _typed_set; \
+    (vec(TYPE)*) _vec_clone(_vec, sizeof(TYPE)); \
+})
+
 #define __dict_get(set, type, fstr_key) ({ \
     fstr_t __cmp_key = fstr_key; \
     rbtree_node_t* __node_ptr; \
@@ -215,7 +307,7 @@ typedef struct rcd_abstract_dict {
 #define list_peek_end(set, type) ({ \
     list(type)* _typed_set = set; \
     if (list_count(_typed_set, type) == 0) \
-        throw(fstr("attempted to read last element in empty list"), exception_arg); \
+        _list_peek_end_zero_err(); \
     rcd_abstract_list_t* __abstract_list = (rcd_abstract_list_t*) _typed_set; \
     *((type*) &__abstract_list->base->prev->type_data); \
 })
@@ -234,7 +326,7 @@ typedef struct rcd_abstract_dict {
 #define list_peek_start(set, type) ({ \
     list(type)* _typed_set = set; \
     if (list_count(_typed_set, type) == 0) \
-        throw(fstr("attempted to read first element in empty list"), exception_arg); \
+        _list_peek_start_zero_err(); \
     *((type*) &((rcd_abstract_list_t*) _typed_set)->base->type_data); \
 })
 
@@ -262,6 +354,11 @@ typedef struct rcd_abstract_dict {
     for (fstr_t each_key = fss(&_cur->key); _iter == 0;) \
     for (type __each_value_type; (_iter == 1 && (_next = 0), _iter == 0);) \
     for (type each_value; (_iter++) == 0? (each_value = *((type*) __dict_elem_to_mem_ptr(_cur, type)), true): false;)
+
+#define vec_foreach(SET, TYPE, ITERATOR, KEY) \
+    LET(vec(TYPE)* _vec = SET) \
+    for (size_t ITERATOR = 0; ITERATOR < vec_count(_vec, TYPE); ITERATOR++) \
+    LET(TYPE KEY = vec_get(_vec, TYPE, ITERATOR))
 
 #define list_foreach_delete_current(set, type) ({ \
     list(type)* __typed_set = set; \
@@ -337,6 +434,13 @@ int rcd_dict_cmp(const rbtree_node_t* node1, const rbtree_node_t* node2);
     _dict; \
 })
 
+#define new_vec(TYPE, ...) ({ \
+    rcd_abstract_vec_t* _new_vec = _vec_new(); \
+    vec(TYPE)* _new_typed_set = (void*) _new_vec; \
+    vec_append_n(_new_typed_set, TYPE, __VA_ARGS__); \
+    _new_typed_set; \
+})
+
 /// Allocates a new list containing the in-memory keys of the dict.
 #define dict_keys(set, type) ({ \
     list(fstr_t)* keys = new_list(fstr_t); \
@@ -399,5 +503,13 @@ int rcd_dict_cmp(const rbtree_node_t* node1, const rbtree_node_t* node2);
 
 #define QUEUE_DEQUEUE(queue) \
     __QUEUE_DEQUEUE_ABSTRACT(queue, _next->prev = 0;);
+
+noret void _list_peek_end_zero_err();
+noret void _list_peek_start_zero_err();
+
+rcd_abstract_vec_t* _vec_new();
+void* _vec_ref(rcd_abstract_vec_t* vec, size_t ent_size, size_t offs);
+rcd_abstract_vec_t* _vec_clone(rcd_abstract_vec_t* vec, size_t ent_size);
+noret void _vec_throw_get_oob(size_t offs, size_t len);
 
 #endif	/* LIST_H */
