@@ -35,6 +35,8 @@ rcd_abstract_vec_t* _vec_new() {
 }
 
 /// Reallocates a vector, both preserving old content and null-initializing new content.
+/// The amortized constant time guarantee is provided by the buffer doubling behavior
+/// in the vm allocator. We are not doubing any buffers here.
 static void vec_realloc(rcd_abstract_vec_t* vec, size_t ent_size, size_t req_size) {
     size_t cpy_size = vec->length * ent_size;
     size_t min_size = MAX(cpy_size, req_size);
