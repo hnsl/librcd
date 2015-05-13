@@ -27,6 +27,9 @@ fstr_mem_t* rest_basic_auth_val(fstr_t username, fstr_t password);
 /// encoded as "+". This is deprecated and should be avoided.
 fstr_mem_t* rest_urlencode(fstr_t str, bool plus_enc_sp);
 
+/// Like rest_urlencode() but allows control of the case of the escaped symbols.
+fstr_mem_t* rest_urlencodec(fstr_t str, bool plus_enc_sp, bool ucase);
+
 /// URL decodes the string as per rfc 3986. If plus_dec_sp is true "+" will be
 /// decoded as a space. This is deprecated and should be avoided.
 fstr_mem_t* rest_urldecode(fstr_t str, bool plus_dec_sp);

@@ -13,6 +13,10 @@ fstr_mem_t* rest_basic_auth_val(fstr_t username, fstr_t password) { sub_heap {
 }}
 
 fstr_mem_t* rest_urlencode(fstr_t str, bool plus_enc_sp) {
+    return rest_urlencodec(str, plus_enc_sp, false);
+}
+
+fstr_mem_t* rest_urlencodec(fstr_t str, bool plus_enc_sp, bool ucase) {
     fstr_mem_t* buf = fstr_alloc(str.len * 3);
     fstr_t buf_tail = fss(buf);
     for (size_t i = 0; i < str.len; i++) {
@@ -32,7 +36,10 @@ fstr_mem_t* rest_urlencode(fstr_t str, bool plus_enc_sp) {
         } else {
             // Hexencode the character.
             fstr_putc(&buf_tail, '%');
-            fstr_serial_uint(fstr_slice(buf_tail, 0, 2), ch, 16);
+            fstr_t dst = fstr_slice(buf_tail, 0, 2);
+            fstr_serial_uint(dst, ch, 16);
+            if (ucase)
+                fstr_toupper(dst);
             buf_tail = fstr_slice(buf_tail, 2, -1);
         }
     }
