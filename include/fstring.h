@@ -123,8 +123,9 @@ typedef struct fixed_str_buffer fsbuf_t;
 
 typedef int64_t (*fstr_cmp_fn_t)(const fstr_t, const fstr_t);
 
-// Predeclare list(fstr_t), see https://stackoverflow.com/q/16831605.
+// Predeclare list(fstr_t) and vec(fstr_t), see https://stackoverflow.com/q/16831605.
 list(fstr_t);
+vec(fstr_t);
 
 void _fstr_unpack_error();
 
@@ -410,7 +411,11 @@ int64_t fstr_rscan(fstr_t str, fstr_t sub_str);
 /// Returns an allocated empty string if n_fstr_list = 0.
 fstr_mem_t* fstr_concat(fstr_t fstr_list[], size_t n_fstr_list, fstr_t glue);
 
-/// Takes a C array of fixed strings and glues them together.
+/// Takes a vector of fixed strings and concatenates them.
+/// Returns an allocated empty string if length is zero.
+fstr_mem_t* fstr_concatv(vec(fstr_t)* vec, fstr_t glue);
+
+/// Takes a list of fixed strings and glues them together.
 /// Returns an allocated empty string if list_count(fstr_list, fstr_t) == 0.
 fstr_mem_t* fstr_implode(list(fstr_t)* fstr_list, fstr_t glue);
 

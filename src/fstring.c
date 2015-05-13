@@ -672,6 +672,12 @@ fstr_mem_t* fstr_concat(fstr_t fstr_list[], size_t n_fstr_list, fstr_t glue) {
     return fstr;
 }
 
+fstr_mem_t* fstr_concatv(vec(fstr_t)* vec, fstr_t glue) {
+    fstr_t* a_vec = vec_array(vec, fstr_t);
+    size_t n_vec = vec_count(vec, fstr_t);
+    return fstr_concat(a_vec, n_vec, glue);
+}
+
 fstr_mem_t* fstr_implode(list(fstr_t)* fstr_list, fstr_t glue) {
     if (fstr_list == 0 || list_count(fstr_list, fstr_t) == 0)
         return fstr_alloc(0);
