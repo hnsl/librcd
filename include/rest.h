@@ -50,5 +50,41 @@ rest_head_t rest_read_head(rio_t* rio_r);
 
 fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size);
 
-#endif	/* REST_H */
+/// OAuth 1.0a configuration.
+typedef struct oa10a_cfg {
+    // Method of the HTTP request. Case insensitive.
+    // When "POST" is specified, the parameters are added in the body encoded
+    // with the application/x-www-form-urlencoded format per the OAuth 1.0a spec.
+    fstr_t method;
+    // Host of the HTTP request without port. Case insensitive.
+    fstr_t host;
+    // Optional: Port of the HTTP request. Zero means default.
+    uint16_t port;
+    // Optional: True to use HTTP instead of HTTPS.
+    bool no_tls;
+    // Path of the HTTP request. Should NOT contain any query or fragment parts.
+    fstr_t path;
+    // Parameters of the oauth request. These are added to the request depending on the method type.
+    dict(fstr_t)* params;
+    // Public ID that identifies the 3rd party application. (app username)
+    fstr_t consumer_key;
+    // Secret key that authenticates a request made by the 3rd party application. (app password)
+    fstr_t consumer_secret;
+    // Token that identifies the user. (user username)
+    fstr_t token;
+    // Token that identifies the user. (user password)
+    fstr_t token_secret;
+} oa10a_cfg_t;
 
+/// Builds a complete OAuth 1.0a request based on the specified parameters.
+/// The request contains a timestamp and will only remain valid for a certain time period.
+/// It is assumed the rest request is done over http.
+/// @dirty Leaks a lot of memory needed to support the complex rest_request_t into callers heap.
+rest_request_t rest_oa10a_req(oa10a_cfg_t* oac);
+
+/// Executes a OAuth 1.0a rest request by opening a socket and writing it.
+/// The returned socket can be used with rest_read_head() and rest_read_body().
+/// @dirty Leaks the sub fiber started for a tls connection into callers heap.
+rio_t* rest_oa10a_exec(oa10a_cfg_t* oac);
+
+#endif	/* REST_H */
