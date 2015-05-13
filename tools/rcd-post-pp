@@ -688,7 +688,7 @@ function re2c_lex_escape(LexState $lex_state, &$case_sensitivity_mode) {
             return new RegexBrancher(array(
                 new RegexRune($lex_state->offset . "a", "a", 26),
                 new RegexRune($lex_state->offset . "A", "A", 26),
-                new RegexRune($lex_state->offset . "0", "0", 10),
+                new RegexRune($lex_state->offset . "n", "0", 10),
             ));
         case 's':
             return new RegexRune($lex_state->offset, "\x00", 0x21);
