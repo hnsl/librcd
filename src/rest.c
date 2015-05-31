@@ -124,7 +124,7 @@ static fstr_mem_t* header_line(fstr_t key, fstr_t val) {
 
 static void parse_headers(fstr_t headers, dict(fstr_t)* headers_io, lwt_heap_t* heap) {
     fstr_t header_line;
-    while(fstr_iterate(&headers, crlf, &header_line)) {
+    while (fstr_iterate(&headers, crlf, &header_line)) {
         fstr_t header_key, header_val;
         if (!fstr_divide(header_line, ":", &header_key, &header_val))
             throw_eio("malformed header", rest);
@@ -179,7 +179,7 @@ rest_head_t rest_read_head(rio_t* rio_r) { sub_heap_txn(heap) {
     return resp;
 }}
 
-fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size){ sub_heap_txn(heap) {
+fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size) { sub_heap_txn(heap) {
     bool has_chunked = false;
     bool has_content_length = false;
     size_t content_length;
@@ -204,12 +204,11 @@ fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size){ sub
         fstr_t end_buffer;
         FSTR_STACK_DECL(end_buffer, 2);
         for (;;) {
-            fstr_t chunk_def_str = rio_read_to_separator(rio_r, crlf, fss(chunk_def_buffer));
-            fstr_t chunk_size_str;
+            // Read next chunk size.
+            fstr_t chunk_size_str = rio_read_to_separator(rio_r, crlf, fss(chunk_def_buffer));
             // There might be chunk-extensions, they will be ignored.
-            if (!fstr_divide(chunk_def_str, ";", &chunk_size_str, 0))
-                chunk_size_str = chunk_def_str;
-            size_t c_size = chunk_size_str.len == 0? 0: fstr_to_uint(chunk_size_str, 16);
+            fstr_divide(chunk_size_str, ";", &chunk_size_str, 0);
+            size_t c_size = fstr_to_uint(chunk_size_str, 16);
             if (c_size == 0) {
                 rio_read_fill(rio_r, end_buffer);
                 if (!fstr_equal(end_buffer, crlf)) {
@@ -226,7 +225,7 @@ fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size){ sub
             fstr_t chunk_break = fstr_slice(body_buffer_tail, 0, crlf.len);
             rio_read_fill(rio_r, chunk_break);
             if (!fstr_equal(chunk_break, crlf))
-                throw_eio("invalid chunk", rest);
+                throw_eio("invalid chunk, bad trailing crlf", rest);
             body_len += c_size;
         }
         body_buffer->len = body_len;
@@ -263,7 +262,7 @@ typedef struct {
 
 vec(kv_t);
 
-int32_t cmp_kv(const void* a_ptr, const void* b_ptr) {
+static int32_t cmp_kv(const void* a_ptr, const void* b_ptr) {
     kv_t *a = (void*) a_ptr, *b = (void*) b_ptr;
     int64_t cmp = fstr_cmp_lexical(a->key, b->key);
     if (cmp != 0) {
