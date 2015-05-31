@@ -221,6 +221,16 @@ noret void _json_fail_missing_property(fstr_t prop_name);
 static inline fstr_t __attribute__((overloadable)) STR(json_value_t x) { return fss(json_stringify(x)); }
 static inline fstr_t __attribute__((overloadable)) STR(json_type_t x) { return json_serial_type(x); }
 
+/// Parses into the current heap and free's the tree.
+/// This makes the returned json structure safe to mutate.
+static json_value_t json_parse_in(fstr_t str) {
+    json_tree_t* tree = json_parse(str);
+    lwt_consume_heap(tree->heap);
+    json_value_t jv = tree->value;
+    lwt_alloc_free(tree);
+    return jv;
+}
+
 static inline json_value_t json_new_array() {
     return jarr(new_list(json_value_t));
 }
