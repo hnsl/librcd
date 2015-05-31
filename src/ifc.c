@@ -406,6 +406,11 @@ typedef struct ifc_ipipe_state {
     size_t new_proto_frame_size;
     /// Set by the writer when indicating that there will or will not be immediate additional writes. (Optimization)
     bool more_hint;
+    /// Number of bytes that is enqueued in the pipe.
+    size_t enqueued_len;
+    /// Soft maximum number of bytes that is allowed to be enqueued in the pipe.
+    /// When zero, infinite amount of data is allowed to be enqueued.
+    size_t max_len;
 } ifc_ipipe_state_t;
 
 join_locked(fstr_t) ifc_ipipe_fiber_read(fstr_t buffer, bool* more_hint_out, join_server_params, ifc_ipipe_state_t* pipe_state) {
@@ -445,6 +450,8 @@ join_locked(fstr_t) ifc_ipipe_fiber_read(fstr_t buffer, bool* more_hint_out, joi
             *more_hint_out = true;
         }
     }
+    assert(pipe_state->enqueued_len >= read_data.len);
+    pipe_state->enqueued_len -= read_data.len;
     return read_data;
 }
 
@@ -472,10 +479,11 @@ join_locked(fstr_t) ifc_ipipe_fiber_write(fstr_t data, bool more_hint, join_serv
         }
     }
     pipe_state->more_hint = more_hint;
+    pipe_state->enqueued_len += dst_written.len;
     return unwritten_data_tail;
 }
 
-fiber_main_t(ipipe) ifc_ipipe_fiber(fiber_main_attr) {
+fiber_main_t(ipipe) ifc_ipipe_fiber(fiber_main_attr, size_t max_buf_len) {
     const size_t default_new_proto_frame_size = PAGE_SIZE;
     try {
         ifc_ipipe_state_t pipe_state;
@@ -484,11 +492,14 @@ fiber_main_t(ipipe) ifc_ipipe_fiber(fiber_main_attr) {
         pipe_state.proto_frame_len = 0;
         pipe_state.new_proto_frame_size = default_new_proto_frame_size;
         pipe_state.more_hint = false;
+        pipe_state.enqueued_len = 0;
+        pipe_state.max_len = max_buf_len;
         for (;;) {
             bool read_ready = (list_count(pipe_state.frame_queue, ifc_ipipe_frame_t*) > 0 || pipe_state.proto_frame_len > 0);
+            bool write_ready = (pipe_state.max_len == 0 || pipe_state.enqueued_len < pipe_state.max_len);
             accept_join( \
-                ifc_ipipe_fiber_write, \
                 ifc_ipipe_fiber_read if read_ready, \
+                ifc_ipipe_fiber_write if write_ready, \
                 join_server_params, \
                 &pipe_state
             );
@@ -512,10 +523,10 @@ static fstr_t ifc_ipipe_write(rcd_fid_t inf_pipe_fid, fstr_t data, bool more_hin
     }
 }
 
-sf(ipipe)* ifc_ipipe_create(rio_t** inf_pipe_r_out, rio_t** inf_pipe_w_out) {
+sf(ipipe)* ifc_ipipe_create(rio_t** inf_pipe_r_out, rio_t** inf_pipe_w_out, size_t max_buf_len) {
     sf(ipipe)* ipipe_sf;
     fmitosis {
-        ipipe_sf = spawn_fiber(ifc_ipipe_fiber(""));
+        ipipe_sf = spawn_fiber(ifc_ipipe_fiber("", max_buf_len));
     }
     rcd_fid_t ipipe_fid = sf2id(ipipe, ipipe_sf);
     static const rio_class_t ifc_ipipe_read_class = {

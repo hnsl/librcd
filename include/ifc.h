@@ -161,7 +161,7 @@ rcd_sub_fiber_t* ifc_cancel_on_exit_arm(rcd_fid_t wait_fid);
 /// Internally allocates more memory if writing is faster than reading.
 /// Using this pipe with external I/O usually requires some sort of
 /// acknowledge in the protocol that prevents out-of-memory conditions.
-sf(ipipe)* ifc_ipipe_create(rio_t** inf_pipe_r_out, rio_t** inf_pipe_w_out);
+sf(ipipe)* ifc_ipipe_create(rio_t** inf_pipe_r_out, rio_t** inf_pipe_w_out, size_t max_buf_len);
 
 /// Infinite buffer pipe fiber reference type declaration.
 decl_fid_t(ibpipe);
