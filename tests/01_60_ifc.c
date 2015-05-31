@@ -277,7 +277,7 @@ void rcd_self_test_ifc() {
     sub_heap {
         rio_t *ipipe_r, *ipipe_w;
         sf(ibpipe)* ibp = ifc_ibpipe_create();
-        sf(ipipe)* ipipe_sf = ifc_ipipe_create(&ipipe_r, &ipipe_w);
+        sf(ipipe)* ipipe_sf = ifc_ipipe_create(&ipipe_r, &ipipe_w, 0);
         for (size_t i = 0; i < 2; i++) {
             bool use_bucket = (i == 1);
             sub_heap {
