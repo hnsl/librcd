@@ -6,6 +6,7 @@
 #define HTTP_MIN_ACCEPTED_HEADER_SIZE (0x1500)
 #define HTTP_MAX_STATUS_LINE (0x1000)
 #define HTTP_MAX_CHUNK_DEF_LINE (0x100)
+#define HTTP_CHUNK_STREAM_BUFFER (128 * 1024 * 1024)
 
 static const fstr_t crlf = "\r\n";
 
@@ -239,6 +240,45 @@ fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size) { su
         body_buffer->len = content_length;
     }
     return body_buffer;
+}}
+
+dict(fstr_t)* rest_stream_chunked_body(rio_t* rio_r, rio_t* rio_w) { sub_heap_txn(heap) {
+    dict(fstr_t)* headers;
+    switch_heap (heap) {
+        headers = new_dict(fstr_t);
+    }
+    fstr_t chunk_def_buffer = fss(fstr_alloc_buffer(HTTP_MAX_CHUNK_DEF_LINE));
+    fstr_t chunk_buffer = fss(fstr_alloc_buffer(HTTP_CHUNK_STREAM_BUFFER));
+    fstr_t end_buffer;
+    FSTR_STACK_DECL(end_buffer, 2);
+    for (;;) {
+        // Read next chunk size.
+        fstr_t chunk_size_str = rio_read_to_separator(rio_r, crlf, chunk_def_buffer);
+        // There might be chunk-extensions, they will be ignored.
+        fstr_divide(chunk_size_str, ";", &chunk_size_str, 0);
+        size_t c_size = fstr_to_uint(chunk_size_str, 16);
+        // Zero chunk length means that streaming is complete.
+        if (c_size == 0) {
+            // Parse and return trailing headers.
+            rio_read_fill(rio_r, end_buffer);
+            if (!fstr_equal(end_buffer, crlf)) {
+                fstr_t rest_trailing_headers = rio_read_to_separator(rio_r, "\r\n\r\n", chunk_buffer);
+                parse_headers(concs(end_buffer, rest_trailing_headers), headers, heap);
+            }
+            return headers;
+        }
+        // Stream sub chunks of the chunk until the chunk has been completely transfered.
+        while (c_size > 0) {
+            fstr_t sub_chunk_buffer = fstr_slice(chunk_buffer, 0, c_size);
+            rio_read_fill(rio_r, sub_chunk_buffer);
+            rio_write(rio_w, sub_chunk_buffer);
+            c_size -= sub_chunk_buffer.len;
+        }
+        fstr_t chunk_break = fstr_slice(chunk_buffer, 0, crlf.len);
+        rio_read_fill(rio_r, chunk_break);
+        if (!fstr_equal(chunk_break, crlf))
+            throw_eio("invalid chunk, bad trailing crlf", rest);
+    }
 }}
 
 static fstr_mem_t* oa10a_uri_host(oa10a_cfg_t* oac) { sub_heap {
