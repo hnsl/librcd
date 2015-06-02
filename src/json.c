@@ -328,11 +328,17 @@ static bool should_indent_array(list(json_value_t)* array) {
 static void stringify_value(json_value_t value, list(fstr_t)* parts, int indent);
 
 static void stringify_string(fstr_t value, list(fstr_t)* parts) {
+    // Pre-encode all control character escape sequences for optimization purposes.
+    static fstr_t cc_esc = "\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005" \
+        "\\u0006\\u0007\\u0008\\u0009\\u000a\\u000b\\u000c\\u000d\\u000e" \
+        "\\u000f\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017" \
+        "\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f";
     list_push_end(parts, fstr_t, "\"");
     size_t start = 0;
     for (size_t i = 0; i < value.len; i++) {
         fstr_t part;
-        switch (value.str[i]) {
+        uint8_t c = value.str[i];
+        switch (c) {
             case '\b': part = "\\b"; break;
             case '\f': part = "\\f"; break;
             case '\t': part = "\\t"; break;
@@ -340,7 +346,13 @@ static void stringify_string(fstr_t value, list(fstr_t)* parts) {
             case '\n': part = "\\n"; break;
             case '\\': part = "\\\\"; break;
             case '\"': part = "\\\""; break;
-            default: goto next;
+            default: {
+                if (c < 0x20) {
+                    part = fstr_slice(cc_esc, c * 6, (c + 1) * 6);
+                } else {
+                    goto next;
+                }
+            }
         }
         if (start != i)
             list_push_end(parts, fstr_t, fstr_slice(value, start, i));
