@@ -16,13 +16,13 @@
 #define jarrv(x)  json_get_array(x)
 #define jobjv(x)  json_get_object(x)
 
-#define jarr_new(...) jarr(new_list(json_value_t, __VA_ARGS__))
+#define jarr_new(...) jarr(new_vec(json_value_t, __VA_ARGS__))
 #define jobj_new(...) jobj(new_dict(json_value_t, __VA_ARGS__))
 
-#define JSON_ARR_FOREACH(parent, value) \
+#define JSON_ARR_FOREACH(parent, key, value) \
     LET(json_value_t _parent = parent) \
         if (_parent.type == JSON_ARRAY) \
-            list_foreach(_parent.array_value, json_value_t, value)
+            vec_foreach(_parent.array_value, json_value_t, key, value)
 
 #define JSON_OBJ_FOREACH(parent, key, value) \
     LET(json_value_t _parent = parent) \
@@ -142,7 +142,7 @@ typedef struct json_value {
         bool bool_value;
         double number_value;
         fstr_t string_value;
-        list(json_value_t)* array_value;
+        vec(json_value_t)* array_value;
         dict(json_value_t)* object_value;
     };
 } json_value_t;
@@ -232,7 +232,7 @@ static json_value_t json_parse_in(fstr_t str) {
 }
 
 static inline json_value_t json_new_array() {
-    return jarr(new_list(json_value_t));
+    return jarr(new_vec(json_value_t));
 }
 
 static inline json_value_t json_new_object() {
@@ -242,7 +242,7 @@ static inline json_value_t json_new_object() {
 static void json_append(json_value_t arr, json_value_t obj) {
     if (arr.type != JSON_ARRAY)
         _json_fail_invalid_type(JSON_ARRAY, arr.type);
-    list_push_end(arr.array_value, json_value_t, obj);
+    vec_append(arr.array_value, json_value_t, obj);
 }
 
 static inline void _json_type_expect(json_value_t value, json_type_t expected_type) {
@@ -269,7 +269,7 @@ static inline bool json_get_bool(json_value_t value) {
 }
 
 /// Returns an list (array) from a JSON value, throwing exception_io if the type is wrong.
-static inline list(json_value_t)* json_get_array(json_value_t value) {
+static inline vec(json_value_t)* json_get_array(json_value_t value) {
     _json_type_expect(value, JSON_ARRAY);
     return value.array_value;
 }

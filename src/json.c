@@ -216,7 +216,7 @@ static json_value_t parse_string(parser_t *parser) {
 }
 
 static json_value_t parse_array(parser_t* parser) {
-    list(json_value_t)* list = new_list(json_value_t);
+    vec(json_value_t)* list = new_vec(json_value_t);
     size_t start = parser->pos;
     consume(parser);
     bool expect_comma = false;
@@ -235,7 +235,7 @@ static json_value_t parse_array(parser_t* parser) {
         }
         expect_comma = true;
         json_value_t val = parse_value(parser);
-        list_push_end(list, json_value_t, val);
+        vec_append(list, json_value_t, val);
     }
     consume(parser);
     json_value_t ret;
@@ -311,29 +311,29 @@ json_tree_t* json_parse(fstr_t str) { sub_heap {
     }
 }}
 
-static inline void add_indent(list(fstr_t)* parts, int indent) {
+static inline void add_indent(vec(fstr_t)* parts, int indent) {
     // To avoid quadratic output size, cap indent to 20 spaces.
     fstr_t ws = fstr_slice("\n                    ", 0, (indent * INDENT_SIZE) + 1);
-    list_push_end(parts, fstr_t, ws);
+    vec_append(parts, fstr_t, ws);
 }
 
-static bool should_indent_array(list(json_value_t)* array) {
-    list_foreach(array, json_value_t, value) {
+static bool should_indent_array(vec(json_value_t)* array) {
+    vec_foreach(array, json_value_t, i, value) {
         if (value.type == JSON_ARRAY || value.type == JSON_OBJECT)
             return true;
     }
     return false;
 }
 
-static void stringify_value(json_value_t value, list(fstr_t)* parts, int indent);
+static void stringify_value(json_value_t value, vec(fstr_t)* parts, int indent);
 
-static void stringify_string(fstr_t value, list(fstr_t)* parts) {
+static void stringify_string(fstr_t value, vec(fstr_t)* parts) {
     // Pre-encode all control character escape sequences for optimization purposes.
     static fstr_t cc_esc = "\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005" \
         "\\u0006\\u0007\\u0008\\u0009\\u000a\\u000b\\u000c\\u000d\\u000e" \
         "\\u000f\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017" \
         "\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f";
-    list_push_end(parts, fstr_t, "\"");
+    vec_append(parts, fstr_t, "\"");
     size_t start = 0;
     for (size_t i = 0; i < value.len; i++) {
         fstr_t part;
@@ -355,24 +355,24 @@ static void stringify_string(fstr_t value, list(fstr_t)* parts) {
             }
         }
         if (start != i)
-            list_push_end(parts, fstr_t, fstr_slice(value, start, i));
-        list_push_end(parts, fstr_t, part);
+            vec_append(parts, fstr_t, fstr_slice(value, start, i));
+        vec_append(parts, fstr_t, part);
         start = i + 1;
 next:;
     }
     if (start != value.len)
-        list_push_end(parts, fstr_t, fstr_slice(value, start, value.len));
-    list_push_end(parts, fstr_t, "\"");
+        vec_append(parts, fstr_t, fstr_slice(value, start, value.len));
+    vec_append(parts, fstr_t, "\"");
 }
 
-static void stringify_array(list(json_value_t)* array, list(fstr_t)* parts, int indent) {
-    list_push_end(parts, fstr_t, "[");
+static void stringify_array(vec(json_value_t)* array, vec(fstr_t)* parts, int indent) {
+    vec_append(parts, fstr_t, "[");
     bool first = true;
     bool should_indent = (indent >= 0 && should_indent_array(array));
     fstr_t comma = (indent >= 0 && !should_indent? ", ": ",");
-    list_foreach(array, json_value_t, value) {
+    vec_foreach(array, json_value_t, i, value) {
         if (!first)
-            list_push_end(parts, fstr_t, comma);
+            vec_append(parts, fstr_t, comma);
         first = false;
         if (should_indent)
             add_indent(parts, indent + 1);
@@ -380,41 +380,41 @@ static void stringify_array(list(json_value_t)* array, list(fstr_t)* parts, int 
     }
     if (should_indent)
         add_indent(parts, indent);
-    list_push_end(parts, fstr_t, "]");
+    vec_append(parts, fstr_t, "]");
 }
 
-static void stringify_object(dict(json_value_t)* object, list(fstr_t)* parts, int indent) {
-    list_push_end(parts, fstr_t, "{");
+static void stringify_object(dict(json_value_t)* object, vec(fstr_t)* parts, int indent) {
+    vec_append(parts, fstr_t, "{");
     bool first = true;
     bool should_indent = (indent >= 0);
     dict_foreach(object, json_value_t, key, value) {
         if (!first)
-            list_push_end(parts, fstr_t, ",");
+            vec_append(parts, fstr_t, ",");
         first = false;
         if (should_indent)
             add_indent(parts, indent + 1);
         stringify_string(key, parts);
-        list_push_end(parts, fstr_t, should_indent? ": ": ":");
+        vec_append(parts, fstr_t, should_indent? ": ": ":");
         stringify_value(value, parts, indent + 1);
     }
     if (should_indent)
         add_indent(parts, indent);
-    list_push_end(parts, fstr_t, "}");
+    vec_append(parts, fstr_t, "}");
 }
 
-static void stringify_value(json_value_t value, list(fstr_t)* parts, int indent) {
+static void stringify_value(json_value_t value, vec(fstr_t)* parts, int indent) {
     switch (value.type) {
         case JSON_NULL:
-            list_push_end(parts, fstr_t, "null");
+            vec_append(parts, fstr_t, "null");
             break;
         case JSON_BOOL:
             if (value.bool_value == true)
-                list_push_end(parts, fstr_t, "true");
+                vec_append(parts, fstr_t, "true");
             else
-                list_push_end(parts, fstr_t, "false");
+                vec_append(parts, fstr_t, "false");
             break;
         case JSON_NUMBER:
-            list_push_end(parts, fstr_t, fss(fstr_from_double(value.number_value)));
+            vec_append(parts, fstr_t, fss(fstr_from_double(value.number_value)));
             break;
         case JSON_STRING:
             stringify_string(value.string_value, parts);
@@ -429,15 +429,15 @@ static void stringify_value(json_value_t value, list(fstr_t)* parts, int indent)
 }
 
 fstr_mem_t* json_stringify(json_value_t value) { sub_heap {
-    list(fstr_t)* parts = new_list(fstr_t);
+    vec(fstr_t)* parts = new_vec(fstr_t);
     stringify_value(value, parts, INT_MIN);
-    return escape(fstr_implode(parts, ""));
+    return escape(fstr_concatv(parts, ""));
 }}
 
 fstr_mem_t* json_stringify_pretty(json_value_t value) { sub_heap {
-    list(fstr_t)* parts = new_list(fstr_t);
+    vec(fstr_t)* parts = new_vec(fstr_t);
     stringify_value(value, parts, 0);
-    return escape(fstr_implode(parts, ""));
+    return escape(fstr_concatv(parts, ""));
 }}
 
 bool json_cmp(json_value_t a, json_value_t b) {
@@ -468,7 +468,7 @@ size_t json_length(json_value_t value) {
     } case JSON_STRING: {
         return value.string_value.len;
     } case JSON_ARRAY: {
-        return list_count(value.array_value, json_value_t);
+        return vec_count(value.array_value, json_value_t);
     } case JSON_OBJECT: {
         return dict_count(value.object_value, json_value_t);
     }}
@@ -485,15 +485,15 @@ fstr_mem_t* json_flatten(json_value_t value) { sub_heap {
     } case JSON_NULL: {
         return escape(fstr_cpy(""));
     } case JSON_ARRAY: {
-        list(fstr_t)* toks = new_list(fstr_t);
-        list_foreach(value.array_value, json_value_t, tok)
-            list_push_end(toks, fstr_t, fss(json_flatten(tok)));
-        return escape(fstr_implode(toks, ","));
+        vec(fstr_t)* toks = new_vec(fstr_t);
+        vec_foreach(value.array_value, json_value_t, i, tok)
+            vec_append(toks, fstr_t, fss(json_flatten(tok)));
+        return escape(fstr_concatv(toks, ","));
     } case JSON_OBJECT: {
-        list(fstr_t)* toks = new_list(fstr_t);
+        vec(fstr_t)* toks = new_vec(fstr_t);
         dict_foreach(value.object_value, json_value_t, key, tok)
-            list_push_end_n(toks, fstr_t, key, " => ", fss(json_flatten(tok)));
-        return escape(fstr_implode(toks, ","));
+            vec_append_n(toks, fstr_t, key, " => ", fss(json_flatten(tok)));
+        return escape(fstr_concatv(toks, ","));
     }}
 }}
 
@@ -525,7 +525,7 @@ bool json_is_empty(json_value_t value) {
     } case JSON_STRING: {
         return value.string_value.len == 0;
     } case JSON_ARRAY: {
-        return list_count(value.array_value, json_value_t) == 0;
+        return vec_count(value.array_value, json_value_t) == 0;
     } case JSON_OBJECT: {
         return dict_count(value.object_value, json_value_t) == 0;
     }}
@@ -546,12 +546,12 @@ json_value_t json_clone(json_value_t value, bool copy_strings) {
         };
         return new_value;
     } case JSON_ARRAY: {
-        list(json_value_t)* new_list_v = new_list(json_value_t);
-        list_foreach(value.array_value, json_value_t, cvalue)
-            list_push_end(new_list_v, json_value_t, json_clone(cvalue, copy_strings));
+        vec(json_value_t)* new_vec_v = new_vec(json_value_t);
+        vec_foreach(value.array_value, json_value_t, i, cvalue)
+            vec_append(new_vec_v, json_value_t, json_clone(cvalue, copy_strings));
         json_value_t new_value = {
             .type = JSON_ARRAY,
-            .array_value = new_list_v,
+            .array_value = new_vec_v,
         };
         return new_value;
     } case JSON_OBJECT: {
