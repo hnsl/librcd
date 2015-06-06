@@ -938,6 +938,10 @@ rio_t* rio_timer_create();
 /// for more information.
 rio_t* rio_clock_create();
 
+/// Creates an alarm (timer) that rings in alarm_ns.
+/// Set repeat to true to repeat in alarm_ns intervals.
+rio_t* rio_alarm_create(uint128_t alarm_ns, bool repeat);
+
 /// Arms the timer with the specified timeout and repeat interval relative to
 /// the current time. If the repeat interval is zero the timer will only
 /// timeout once.

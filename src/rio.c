@@ -2041,6 +2041,12 @@ rio_t* rio_clock_create() {
     return rio_new_h(rio_type_clock, fd, true, false, 0);
 }
 
+rio_t* rio_alarm_create(uint128_t alarm_ns, bool repeat) {
+    rio_t* timer_h = rio_timer_create();
+    rio_alarm_set(timer_h, alarm_ns, false, repeat? alarm_ns: 0);
+    return timer_h;
+}
+
 void rio_alarm_set(rio_t* rio, uint128_t value_ns, bool value_absolute, uint128_t repeat_ns) {
     if (rio->type != rio_type_timer && rio->type != rio_type_clock)
         RIO_THROW_TYPE_ERROR("rio_type_timer or rio_type_clock");
