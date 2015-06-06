@@ -1541,6 +1541,10 @@ void rio_write_fstr(rio_t* rio, fstr_t buffer) {
     rio_write(rio, buffer);
 }
 
+void rio_iov_write_fstr(vec(fstr_t)* iov, fstr_t buffer) {
+    rio_iov_write_u64(iov, buffer.len);
+    vec_append(iov, fstr_t, buffer);
+}
 
 fstr_t rio_msg_recv(rio_t* rio, fstr_t buffer) {
     int32_t read_fd = rio_get_fd_read(rio);
