@@ -123,6 +123,32 @@ typedef struct fixed_str_buffer fsbuf_t;
 
 typedef int64_t (*fstr_cmp_fn_t)(const fstr_t, const fstr_t);
 
+typedef enum {
+    utf8_xid_restricted = 1 << 0,
+    utf8_xid_allowed    = 1 << 1,
+} utf8_xid_status_t;
+
+typedef enum {
+    // Restricted types.
+    utf8_xid_default_ignorable = 1 << 0,
+    utf8_xid_historic          = 1 << 1,
+    utf8_xid_limited_use       = 1 << 2,
+    utf8_xid_not_chars         = 1 << 3,
+    utf8_xid_not_nfkc          = 1 << 4,
+    utf8_xid_not_xid           = 1 << 5,
+    utf8_xid_obsolete          = 1 << 6,
+    utf8_xid_technical         = 1 << 7,
+
+    // Allowed types.
+    utf8_xid_inclusion         = 1 << 8,
+    utf8_xid_recommended       = 1 << 9,
+} utf8_xid_type_t;
+
+typedef struct utf8_xid_profile {
+    utf8_xid_status_t status;
+    utf8_xid_type_t type;
+} utf8_xid_profile_t;
+
 // Predeclare list(fstr_t) and vec(fstr_t), see https://stackoverflow.com/q/16831605.
 list(fstr_t);
 vec(fstr_t);
@@ -576,10 +602,75 @@ fstr_t fstr_path_base(fstr_t file_path);
 
 /// Validates the specified UTF-8 string. If invalid characters is found the
 /// function returns false, otherwise it returns true.
-bool fstr_validate_utf8(fstr_t str);
+bool fstr_utf8_validate(fstr_t str);
+
+/// Deprecated alias for fstr_utf8_validate().
+#define fstr_validate_utf8 fstr_utf8_validate
 
 /// Allocates a new buffer that will contain valid UTF-8, invalid bytes will
 /// be replaced with unicode character 0xFFFD (\xEFBFBD).
-fstr_mem_t* fstr_clean_utf8(fstr_t str);
+fstr_mem_t* fstr_utf8_clean(fstr_t str);
+
+/// Deprecated alias for fstr_utf8_clean().
+#define fstr_clean_utf8 fstr_utf8_clean
+
+/// NFC normalizes a UTF-8 string.
+/// "NFC is the best form for general text, since it is more compatible
+/// with strings converted from legacy encodings."
+/// Strings that contains a null byte will be truncated in the output.
+fstr_mem_t* fstr_utf8_nrm_nfc(fstr_t str);
+
+/// NFD normalizes a UTF-8 string.
+/// "NFD and NFKD are most useful for internal processing."
+/// Strings that contains a null byte will be truncated in the output.
+fstr_mem_t* fstr_utf8_nrm_nfd(fstr_t str);
+
+/// NFKC normalizes a UTF-8 string.
+/// "NFKC is the preferred form for identifiers, especially where there are
+/// security concerns (see UTR #36)."
+/// Strings that contains a null byte will be truncated in the output.
+fstr_mem_t* fstr_utf8_nrm_nfkc(fstr_t str);
+
+/// NFKD normalizes a UTF-8 string.
+/// "NFD and NFKD are most useful for internal processing."
+/// Strings that contains a null byte will be truncated in the output.
+fstr_mem_t* fstr_utf8_nrm_nfkd(fstr_t str);
+
+/// See: http://www.unicode.org/reports/tr39/#Identifier_Characters
+///
+/// Queries a general security profile for a character for the purpose of
+/// being used in an identifier context. Characters are more or less suitable
+/// to be used as identifiers. The returned information can be used to filter
+/// or reject characters determined to be unsuitable for identifier in a
+/// particular application.
+utf8_xid_profile_t fstr_utf8_xidmod(uint32_t chr);
+
+/// Creates a new UTF-8 string with characters filtered from the original UTF-8
+/// string based on a xidmod profile mask. To not be filtered, the characters
+/// must neither match the status_mask NOR match the type_mask.
+/// For example, to only use the type_mask, set the status_mask to 0.
+/// See fstr_utf8_xidmod() for more information.
+fstr_mem_t* fstr_utf8_xidmod_filter(fstr_t str, utf8_xid_status_t status_mask, utf8_xid_type_t type_mask);
+
+/// This function is defined ("skeleton()") by Unicode Technical Standard #39:
+/// http://www.unicode.org/reports/tr39/#Confusable_Detection
+///
+/// It's purpose is to idempotently map a string X to a new skeleton string.
+/// The function groups similar characters and picks an arbitrary (but well
+/// defined) character to represent that group. This skeleton string should
+/// be thought of as an intermediate processing form, similar to a hashcode
+/// and is *not* intended for display, storage or transmission.
+////
+/// The primary purpose of the skeleton string is to allow binary comparision
+/// to detect strings which is likely to be confusable. One usecase for this
+/// is ensuring that identifiers are equivalent if they look equivalent for
+/// security and user experience purposes.
+fstr_mem_t* fstr_utf8_skeleton(fstr_t str);
+
+/// Internal UTF-8 function.
+bool utf8_confusable_ma(uint32_t in_chr, const uint32_t* out_chrv[], uint8_t* out_len);
+
+/// Internal UTF-8 function.
+void utf8_xid_modification(uint32_t in_chr, utf8_xid_status_t* out_status, utf8_xid_type_t* out_type);
 
 #endif /* RCD_FSTRING_H */

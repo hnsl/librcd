@@ -1216,7 +1216,7 @@ fstr_t fstr_path_base(fstr_t file_path) {
     return fstr_slice(file_path, j, i);
 }
 
-bool fstr_validate_utf8(fstr_t str) {
+bool fstr_utf8_validate(fstr_t str) {
     fstr_t src_tail = str;
     while (src_tail.len > 0) {
         int32_t uc_point;
@@ -1229,7 +1229,7 @@ bool fstr_validate_utf8(fstr_t str) {
     return true;
 }
 
-fstr_mem_t* fstr_clean_utf8(fstr_t str) {
+fstr_mem_t* fstr_utf8_clean(fstr_t str) {
     fstr_mem_t* dst_buf = fstr_alloc(str.len * 3);
     fstr_t dst_tail = fss(dst_buf);
     fstr_t src_tail = str;
@@ -1254,3 +1254,104 @@ fstr_mem_t* fstr_clean_utf8(fstr_t str) {
     dst_buf->len -= dst_tail.len;
     return dst_buf;
 }
+
+#define FSTR_UTF8_NORMALIZE_FN(FUNCTION_NAME, NORMALIZE_FN) fstr_mem_t* FUNCTION_NAME(fstr_t str) { sub_heap { \
+    uint8_t* cstr = (void*) fstr_to_cstr(str); \
+    uint8_t* cnormal = NORMALIZE_FN(cstr); \
+    fstr_mem_t* normal = fstr_from_cstr((void*) cnormal); \
+    free(cnormal); \
+    return escape(normal); \
+}}
+
+FSTR_UTF8_NORMALIZE_FN(fstr_utf8_nrm_nfc, utf8proc_NFC);
+FSTR_UTF8_NORMALIZE_FN(fstr_utf8_nrm_nfd, utf8proc_NFD);
+FSTR_UTF8_NORMALIZE_FN(fstr_utf8_nrm_nfkc, utf8proc_NFKC);
+FSTR_UTF8_NORMALIZE_FN(fstr_utf8_nrm_nfkd, utf8proc_NFKD);
+
+#undef FSTR_UTF8_NORMALIZE_FN
+
+utf8_xid_profile_t fstr_utf8_xidmod(uint32_t chr) {
+    utf8_xid_profile_t profile;
+    utf8_xid_modification(chr, &profile.status, &profile.type);
+    return profile;
+}
+
+fstr_mem_t* fstr_utf8_xidmod_filter(fstr_t str, utf8_xid_status_t status_mask, utf8_xid_type_t type_mask) { sub_heap {
+    fstr_t src_tail = str;
+    // In the worst case we copy the entire string.
+    fstr_mem_t* out_buf = fstr_alloc(str.len);
+    fstr_t dst_tail = fss(out_buf);
+    while (src_tail.len > 0) {
+        // Iterate to next Unicode character.
+        int32_t uc_point;
+        ssize_t i_ret = utf8proc_iterate(src_tail.str, src_tail.len, &uc_point);
+        if (i_ret < 0) {
+            // Unrecognized character, we always filter those and move one byte forward.
+            src_tail = fstr_slice(src_tail, 1, -1);
+            continue;
+        }
+        // Profile this character.
+        utf8_xid_profile_t profile = fstr_utf8_xidmod(uc_point);
+        if ((profile.status & status_mask) != 0 || (profile.type & type_mask) != 0) {
+            // Character not filtered, copy over the already encoded character.
+            fstr_t vc = fstr_slice(src_tail, 0, i_ret);
+            (void) fstr_cpy_over(dst_tail, vc, &dst_tail, 0);
+        }
+        // Move forward i_ret bytes.
+        src_tail = fstr_slice(src_tail, i_ret, -1);
+    }
+    // Adjust length of out buffer and return it.
+    out_buf->len -= dst_tail.len;
+    return escape(out_buf);
+}}
+
+fstr_mem_t* fstr_utf8_skeleton(fstr_t str) { sub_heap {
+    // 1. "Converting X to NFD format, as described in [UAX15]."
+    fstr_t str_nfd = fss(fstr_utf8_nrm_nfd(str));
+    // 2. "Successively mapping each source character in X to the target string
+    //    according to the specified data table."
+    fstr_t src_tail = str_nfd;
+    vec(uint32_t)* sk_v = new_vec(uint32_t);
+    for (size_t i = 0; i < str_nfd.len; i++) {
+        // Iterate to next generic character.
+        int32_t uc_point;
+        ssize_t i_ret = utf8proc_iterate(src_tail.str, src_tail.len, &uc_point);
+        if (i_ret < 0) {
+            // Unrecognized character, use replacement character fffd and move one byte forward.
+            uc_point = 0xfffd;
+            src_tail = fstr_slice(src_tail, 1, -1);
+        } else {
+            // Move forward i_ret bytes.
+            src_tail = fstr_slice(src_tail, i_ret, -1);
+        }
+        // Map character to confusable character.
+        const uint32_t* cf_chrv;
+        uint8_t cf_len;
+        if (utf8_confusable_ma(uc_point, &cf_chrv, &cf_len)) {
+            // Append the skeleton representation characters.
+            for (size_t j = 0; j < cf_len; j++) {
+                vec_append(sk_v, uint32_t, cf_chrv[j]);
+            }
+        } else {
+            // The character does not belong to a confusable group.
+            // Append the character directly to the vector.
+            vec_append(sk_v, uint32_t, uc_point);
+        }
+    }
+    // Iterate through the resulting vector and build the UTF-8 string.
+    // No UTF-8 character currently need more than 4 bytes.
+    fstr_t utf8_buf = fss(fstr_alloc(vec_count(sk_v, uint32_t) * 4));
+    fstr_t tail = utf8_buf;
+    vec_foreach(sk_v, uint32_t, i, uc_point) {
+        if (tail.len < 4)
+            break;
+        ssize_t len = utf8proc_encode_char(uc_point, tail.str);
+        if (len > 0) {
+            tail = fstr_slice(tail, len, -1);
+        }
+    }
+    fstr_t mapped_str = fstr_detail(utf8_buf, tail);
+    // 3. "Reapplying NFD."
+    fstr_mem_t* skeleton = fstr_utf8_nrm_nfd(mapped_str);
+    return escape(skeleton);
+}}
