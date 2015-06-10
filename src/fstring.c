@@ -1216,6 +1216,23 @@ fstr_t fstr_path_base(fstr_t file_path) {
     return fstr_slice(file_path, j, i);
 }
 
+size_t fstr_utf8_len(fstr_t str) {
+    size_t len = 0;
+    fstr_t src_tail = str;
+    while (src_tail.len > 0) {
+        int32_t uc_point;
+        ssize_t i_ret = utf8proc_iterate(src_tail.str, src_tail.len, &uc_point);
+        if (i_ret < 0) {
+            // Count one invalid character.
+            i_ret = 1;
+        }
+        assert(i_ret > 0 && i_ret <= 4 && i_ret <= src_tail.len);
+        src_tail = fstr_slice(src_tail, i_ret, -1);
+        len++;
+    }
+    return len;
+}
+
 bool fstr_utf8_validate(fstr_t str) {
     fstr_t src_tail = str;
     while (src_tail.len > 0) {
@@ -1255,20 +1272,98 @@ fstr_mem_t* fstr_utf8_clean(fstr_t str) {
     return dst_buf;
 }
 
-#define FSTR_UTF8_NORMALIZE_FN(FUNCTION_NAME, NORMALIZE_FN) fstr_mem_t* FUNCTION_NAME(fstr_t str) { sub_heap { \
-    uint8_t* cstr = (void*) fstr_to_cstr(str); \
-    uint8_t* cnormal = NORMALIZE_FN(cstr); \
-    fstr_mem_t* normal = fstr_from_cstr((void*) cnormal); \
-    free(cnormal); \
-    return escape(normal); \
+static fstr_mem_t* fstr_utf8_recase(fstr_t str, bool upper) {
+    // Make a worst-case allocation of 4 bytes per character.
+    size_t len = fstr_utf8_len(str);
+    fstr_mem_t* dst_buf = fstr_alloc(len * 4);
+    fstr_t dst_tail = fss(dst_buf);
+    fstr_t src_tail = str;
+    while (src_tail.len > 0) {
+        // Iterate to next generic character.
+        int32_t old_uc, new_uc;
+        ssize_t i_ret = utf8proc_iterate(src_tail.str, src_tail.len, &old_uc);
+        if (i_ret < 0) {
+            // Unrecognized character, use replacement character fffd for one byte.
+            new_uc = 0xfffd;
+            i_ret = 1;
+        } else {
+            // Get the propety of the character.
+            const utf8proc_property_t* prop = utf8proc_get_property(old_uc);
+            new_uc = upper? prop->uppercase_mapping: prop->lowercase_mapping;
+            if (new_uc < 0) {
+               // This character has no case, preserve it.
+               new_uc = old_uc;
+            }
+        }
+        // Encode the new char into the destination.
+        ssize_t e_ret = utf8proc_encode_char(new_uc, dst_tail.str);
+        if (e_ret > 0) {
+            dst_tail = fstr_slice(dst_tail, e_ret, -1);
+        }
+        // Move forward i_ret bytes.
+        src_tail = fstr_slice(src_tail, i_ret, -1);
+    }
+    dst_buf->len -= dst_tail.len;
+    return dst_buf;
+}
+
+fstr_mem_t* fstr_utf8_lower(fstr_t str) {
+    return fstr_utf8_recase(str, false);
+}
+
+fstr_mem_t* fstr_utf8_upper(fstr_t str) {
+    return fstr_utf8_recase(str, true);
+}
+
+noret static void utf8proc_exception(fstr_t fn, ssize_t rcode) { sub_heap {
+    throw(concs(fn, "() failed with: [", rcode, "] ", fstr_fix_cstr(utf8proc_errmsg(rcode))), exception_io);
 }}
 
-FSTR_UTF8_NORMALIZE_FN(fstr_utf8_nrm_nfc, utf8proc_NFC);
-FSTR_UTF8_NORMALIZE_FN(fstr_utf8_nrm_nfd, utf8proc_NFD);
-FSTR_UTF8_NORMALIZE_FN(fstr_utf8_nrm_nfkc, utf8proc_NFKC);
-FSTR_UTF8_NORMALIZE_FN(fstr_utf8_nrm_nfkd, utf8proc_NFKD);
+fstr_mem_t* fstr_utf8_map(fstr_t str, int options) { sub_heap {
+    // Measure string length.
+    ssize_t d0_res = utf8proc_decompose(str.str, str.len, 0, 0, options);
+    if (d0_res < 0)
+        utf8proc_exception("utf8proc_decompose", d0_res);
+    // Decompose to buffer. We allocate fstr_alloc_buffer() to see the full
+    // impact of the allocation so we can make an informed decision on if
+    // we should reallocate or not.
+    ssize_t u_len = d0_res;
+    fstr_mem_t* buffer = fstr_alloc_buffer(u_len * sizeof(int32_t) + 1);
+    int32_t* u_buffer = (void*) buffer->str;
+    ssize_t d1_res = utf8proc_decompose(str.str, str.len, u_buffer, u_len, options);
+    if (d1_res < 0)
+        utf8proc_exception("utf8proc_decompose", d1_res);
+    assert(d1_res == u_len);
+    // Re-encode Unicode to UTF-8.
+    ssize_t re_res = utf8proc_reencode(u_buffer, u_len, options);
+    if (re_res < 0)
+        utf8proc_exception("utf8proc_reencode", re_res);
+    // Write length.
+    assert(re_res <= buffer->len);
+    size_t buf_len = buffer->len;
+    buffer->len = re_res;
+    // When buffer is unneccesarily large we reallocate it to save memory.
+    if (re_res < buf_len / 2) {
+        buffer = fstr_cpy(fss(buffer));
+    }
+    return escape(buffer);
+}}
 
-#undef FSTR_UTF8_NORMALIZE_FN
+fstr_mem_t* fstr_utf8_nrm_nfc(fstr_t str) {
+    return fstr_utf8_map(str, UTF8PROC_STABLE | UTF8PROC_COMPOSE);
+}
+
+fstr_mem_t* fstr_utf8_nrm_nfd(fstr_t str) {
+    return fstr_utf8_map(str, UTF8PROC_STABLE | UTF8PROC_DECOMPOSE);
+}
+
+fstr_mem_t* fstr_utf8_nrm_nfkc(fstr_t str) {
+    return fstr_utf8_map(str, UTF8PROC_STABLE | UTF8PROC_COMPOSE | UTF8PROC_COMPAT);
+}
+
+fstr_mem_t* fstr_utf8_nrm_nfkd(fstr_t str) {
+    return fstr_utf8_map(str, UTF8PROC_STABLE | UTF8PROC_DECOMPOSE | UTF8PROC_COMPAT);
+}
 
 utf8_xid_profile_t fstr_utf8_xidmod(uint32_t chr) {
     utf8_xid_profile_t profile;

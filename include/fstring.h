@@ -600,6 +600,11 @@ fstr_t fstr_cfifo_write(fstr_cfifo_t* cfifo, fstr_t src, bool overwrite);
 /// The base name is also informally known as the file name.
 fstr_t fstr_path_base(fstr_t file_path);
 
+/// Counts the length of the UTf-8 string. Takes O(N) time.
+/// Invalid character sequences is counted as one character per byte.
+/// When out_invalid is not zero the invalid status is returned from it.
+size_t fstr_utf8_len(fstr_t str);
+
 /// Validates the specified UTF-8 string. If invalid characters is found the
 /// function returns false, otherwise it returns true.
 bool fstr_utf8_validate(fstr_t str);
@@ -613,6 +618,19 @@ fstr_mem_t* fstr_utf8_clean(fstr_t str);
 
 /// Deprecated alias for fstr_utf8_clean().
 #define fstr_clean_utf8 fstr_utf8_clean
+
+/// Returns a new string that a Unicode lowercased version of the input string.
+fstr_mem_t* fstr_utf8_lower(fstr_t str);
+
+/// Returns a new string that a Unicode uppercased version of the input string.
+fstr_mem_t* fstr_utf8_upper(fstr_t str);
+
+/// Low level UTF-8 mapping.
+/// Decomposes the UTF-8 string and reassembles it into a new allocation
+/// based on the specified options. See utf8proc.h and utf8proc_map()
+/// for more information.
+/// Throws an io exception decompose or re-encode fails.
+fstr_mem_t* fstr_utf8_map(fstr_t str, int options);
 
 /// NFC normalizes a UTF-8 string.
 /// "NFC is the best form for general text, since it is more compatible
