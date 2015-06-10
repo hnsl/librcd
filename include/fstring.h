@@ -602,7 +602,6 @@ fstr_t fstr_path_base(fstr_t file_path);
 
 /// Counts the length of the UTf-8 string. Takes O(N) time.
 /// Invalid character sequences is counted as one character per byte.
-/// When out_invalid is not zero the invalid status is returned from it.
 size_t fstr_utf8_len(fstr_t str);
 
 /// Validates the specified UTF-8 string. If invalid characters is found the
