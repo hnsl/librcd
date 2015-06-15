@@ -16,6 +16,12 @@
 #define jarrv(x)  json_get_array(x)
 #define jobjv(x)  json_get_object(x)
 
+#define j2bool(x) json_to_bool(x)
+#define j2num(x)  json_to_number(x)
+#define j2str(x)  json_to_string(x)
+#define j2arr(x)  json_to_array(x)
+#define j2obj(x)  json_to_object(x)
+
 #define jarr_new(...) jarr(new_vec(json_value_t, __VA_ARGS__))
 #define jobj_new(...) jobj(new_dict(json_value_t, __VA_ARGS__))
 
@@ -282,6 +288,31 @@ static inline dict(json_value_t)* json_get_object(json_value_t value) {
 
 static inline bool json_is_null(json_value_t value) {
     return value.type == JSON_NULL;
+}
+
+/// Returns bool stored in the JSON value or false if json type is not a bool.
+static inline bool json_to_bool(json_value_t value) {
+    return value.type == JSON_BOOL? value.bool_value: false;
+}
+
+/// Returns number stored in the JSON value or zero if json type is not a number.
+static inline double json_to_number(json_value_t value) {
+    return value.type == JSON_NUMBER? value.number_value: 0;
+}
+
+/// Returns string stored in the JSON value or empty string if json type is not a string.
+static inline fstr_t json_to_string(json_value_t value) {
+    return value.type == JSON_STRING? value.string_value: fstr("");
+}
+
+/// Returns array stored in the JSON value or new empty array if json type is not an array.
+static vec(json_value_t)* json_to_array(json_value_t value) {
+    return value.type == JSON_ARRAY? value.array_value: new_vec(json_value_t);
+}
+
+/// Returns object stored in the JSON value or new empty object if json type is not an object.
+static dict(json_value_t)* json_to_object(json_value_t value) {
+    return value.type == JSON_OBJECT? value.object_value: new_dict(json_value_t);
 }
 
 #endif  /* JSON_H */
