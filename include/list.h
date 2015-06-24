@@ -235,6 +235,18 @@ typedef struct rcd_abstract_vec {
 #define vec_get(SET, TYPE, OFFS) \
     (*vec_get_ptr(SET, TYPE, OFFS))
 
+/// Resizes a vector to the specified length.
+#define vec_resize(SET, TYPE, NEW_LENGTH) ({ \
+    vec(TYPE)* _typed_set = SET; \
+    rcd_abstract_vec_t* _vec = (rcd_abstract_vec_t*) _typed_set; \
+    size_t _new_length = (NEW_LENGTH); \
+    if (_vec->length < _new_length) { \
+        _vec_ref(_vec, sizeof(TYPE), (_new_length - 1)); \
+    } else { \
+        _vec->length = _new_length; \
+    } \
+})
+
 /// Return the content of the vector as a plain c array.
 /// This array is guaranteed to have vec_count() number of slots.
 /// The memory is guaranteed to be valid until the vector is modified in some way.
