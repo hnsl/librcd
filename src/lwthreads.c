@@ -1420,6 +1420,31 @@ int32_t lwt_get_thread_clone_flags() {
     return (CLONE_FILES | CLONE_FS | CLONE_PARENT | CLONE_THREAD | CLONE_VM | CLONE_SYSVSEM | CLONE_SIGHAND | CLONE_SETTLS | CLONE_PARENT_SETTID | CLONE_CHILD_CLEARTID);
 }
 
+static void* lwt_thread_stack_alloc(size_t stack_size, void** out_entry_pt) {
+    // Add implicit space for guard page at end.
+    stack_size += PAGE_SIZE;
+    // Make mmap allocation.
+    void* mmap_r = mmap(0, stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (mmap_r == MAP_FAILED)
+        RCD_SYSCALL_EXCEPTION(mmap, exception_fatal);
+    // Protect guard page.
+    int32_t mprotect_r = mprotect(mmap_r, PAGE_SIZE, PROT_NONE);
+    if (mprotect_r == -1)
+        RCD_SYSCALL_EXCEPTION(mprotect, exception_fatal);
+    // Calculate entry point.
+    *out_entry_pt = (void*) vm_align_floor((uintptr_t) mmap_r + stack_size, VM_ALLOC_ALIGN);
+    // Return pointer to allocation.
+    return mmap_r;
+}
+
+static void lwt_thread_stack_free(void* mmap_alloc, size_t stack_size) {
+    // Add implicit space for guard page at end.
+    stack_size += PAGE_SIZE;
+    int32_t munmap_r = munmap(mmap_alloc, stack_size);
+    if (munmap_r == -1)
+        RCD_SYSCALL_EXCEPTION(munmap, exception_fatal);
+}
+
 void lwt_thread_cancel_sync(int32_t tid) {
     // After sending the async cancel signal the thread is just a few
     // instructions away from terminating. This means that we should never do
@@ -1441,8 +1466,8 @@ void lwt_thread_cancel_sync(int32_t tid) {
 static lwt_physical_thread_t* lwt_start_physical_thread(lwt_start_cb_t start_cb) {
     // Prepare base stack and physical thread struct allocated on it.
     const size_t lwt_physical_stack_size = PAGE_SIZE * 0x40;
-    void* stack_mmap_base = vm_mmap_reserve(lwt_physical_stack_size, 0);
-    void *stack_entry_point = (void*) vm_align_floor((uintptr_t) stack_mmap_base + lwt_physical_stack_size, VM_ALLOC_ALIGN);
+    void* stack_entry;
+    lwt_thread_stack_alloc(lwt_physical_stack_size, &stack_entry);
     lwt_start_cb_t* start_cb_arg_ptr = vm_mmap_reserve(sizeof(lwt_start_cb_t), 0);
     *start_cb_arg_ptr = start_cb;
     // DBG("[lwthreads] allocated new stack for physical thread at [", DBG_PTR(stack_mmap_base), "]-[", DBG_PTR(stack_mmap_base + lwt_stack_size_default - 1), "]");
@@ -1450,7 +1475,7 @@ static lwt_physical_thread_t* lwt_start_physical_thread(lwt_start_cb_t start_cb)
     // Stack grows downward.
     int32_t clone_flags = lwt_get_thread_clone_flags();
     lwt_physical_thread_t* phys_thread = 0;
-    int32_t clone_r = lwt_start_new_thread(lwt_physical_thread_main, stack_entry_point, clone_flags, start_cb_arg_ptr, &phys_thread);
+    int32_t clone_r = lwt_start_new_thread(lwt_physical_thread_main, stack_entry, clone_flags, start_cb_arg_ptr, &phys_thread);
     if (clone_r == -1)
         RCD_SYSCALL_EXCEPTION(clone, exception_fatal);
     // We store the pid separately even though it should be the same as linux_tid because the kernel will reset linux_tid when the thread exits.
@@ -1488,10 +1513,10 @@ static void lwt_block_on_real_thread(void (*main_fn)(void*), void* arg_ptr) {
     real_block_args->event_h = rio_get_fd_write(event_h);
     // Allocate a small stack for the auxiliary thread.
     const size_t aux_thread_stack_size = 0x4000;
-    void* stack_base = lwt_alloc_new(aux_thread_stack_size);
-    void* stack_entry_point = stack_base + aux_thread_stack_size;
+    void* stack_entry;
+    void* stack_base = lwt_thread_stack_alloc(aux_thread_stack_size, &stack_entry);
     lwt_physical_thread_t* phys_thread = 0;
-    int32_t clone_r = lwt_start_new_thread(lwt_real_block_main, stack_entry_point, lwt_get_thread_clone_flags(), real_block_args, &phys_thread);
+    int32_t clone_r = lwt_start_new_thread(lwt_real_block_main, stack_entry, lwt_get_thread_clone_flags(), real_block_args, &phys_thread);
     if (clone_r == -1)
         RCD_SYSCALL_EXCEPTION(clone, exception_fatal);
     int32_t waitpid_main_tid = clone_r;
@@ -1499,7 +1524,10 @@ static void lwt_block_on_real_thread(void (*main_fn)(void*), void* arg_ptr) {
     try {
         rio_eventfd_wait(event_h);
     } finally {
+        // Free kernel thread.
         lwt_thread_cancel_sync(waitpid_main_tid);
+        // Free stack for auxiliary thread.
+        lwt_thread_stack_free(stack_base, aux_thread_stack_size);
     }
 }
 
