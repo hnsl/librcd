@@ -36,7 +36,7 @@ static void free_fn_name(type* element) { \
 
 /// The total number of allocated bytes.
 /// Can be read for the purposes of statistics and detecting memory leaks.
-extern size_t vm_total_allocated_bytes;
+extern int64_t vm_total_allocated_bytes;
 
 /// Maps a memory range. Similar to the linux mmap except that this function
 /// guarantees O(1) run-time complexity and is able to chunks of arbitrary
@@ -59,6 +59,13 @@ extern size_t vm_total_allocated_bytes;
 /// memory. If size_out is not 0 the actual size of the allocated segment will
 /// be returned there.
 void* vm_mmap_reserve(size_t min_size, size_t* size_out);
+
+/// Reallocates memory with a different size (larger or smaller) efficiently.
+/// A new pointer is returned (which may be the same as the previous pointer)
+/// and contains the contents of the previous allocation up to the specified
+/// fill length. When the ptr is zero the function will not copy over or free
+/// anything and make a fresh allocation (vm_mmap_reserve()).
+void* vm_mmap_realloc(void* ptr, size_t old_size, size_t fill_length, size_t new_min_size, size_t* size_out);
 
 /// Frees memory previously allocated with vm_mmap_reserve. Similar to the
 /// linux unmap feature. The pointer must be a pointer returned by

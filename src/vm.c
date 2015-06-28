@@ -181,7 +181,7 @@ vm_state_t vm_state = {
     .pool_mmap_end_2e = VM_POOL_MMAP_INIT_SIZE_2E,
 };
 
-size_t vm_total_allocated_bytes = 0;
+int64_t vm_total_allocated_bytes = 0;
 
 /// Increase this size when new x86_64 architecture allows additional bits of
 /// virtual memory addressing in user space.
@@ -489,6 +489,16 @@ void vm_janitor_thread(void* arg_ptr) {
     }
 }
 
+// "Lock free" update of memory usage statistics.
+static inline void vm_update_total_alloc_bytes(int64_t offset) {
+    for (;;) {
+        int64_t old_total = vm_total_allocated_bytes;
+        int64_t new_total = old_total + offset;
+        if (atomic_cas_int64(&vm_total_allocated_bytes, old_total, new_total))
+            break;
+    }
+}
+
 void* vm_mmap_reserve_sys(size_t min_size, size_t* size_out) {
     assert(LWT_READ_STACK_LIMIT == 0);
 #if defined(VM_DEBUG_PAGE_AND_NOREUSE_ALLOCS)
@@ -511,14 +521,8 @@ void* vm_mmap_reserve_sys(size_t min_size, size_t* size_out) {
 #endif
     uint8_t size_lines_2e = vm_bytes_to_lines_2e(min_size, true);
     void* ptr = vm_free_list_pop(size_lines_2e);
-    // "Lock free" update of memory usage statistics.
     size_t final_size = vm_lines_2e_to_bytes(size_lines_2e);
-    for (;;) {
-        uint64_t old_total = vm_total_allocated_bytes;
-        uint64_t new_total = old_total + final_size;
-        if (atomic_cas_uint64(&vm_total_allocated_bytes, old_total, new_total))
-            break;
-    }
+    vm_update_total_alloc_bytes(final_size);
     // Return the final size if caller required it.
     if (size_out != 0)
         *size_out = final_size;
@@ -697,11 +701,70 @@ void vm_mmap_unreserve_sys(void* ptr, size_t size) {
     }
     // "Lock free" update of memory usage statistics.
     size_t final_size = vm_lines_2e_to_bytes(lines_2e);
-    for (;;) {
-        uint64_t old_total = vm_total_allocated_bytes;
-        uint64_t new_total = old_total - final_size;
-        if (atomic_cas_uint64(&vm_total_allocated_bytes, old_total, new_total))
-            break;
+    vm_update_total_alloc_bytes(-final_size);
+}
+
+void* vm_mmap_realloc(void* old_ptr, size_t old_size, size_t fill_length, size_t new_min_size, size_t* size_out) {
+    bool non_aligned = false;
+#if defined(VM_DEBUG_PAGE_AND_NOREUSE_ALLOCS) || defined(VM_DEBUG_GUARD_ZONE) || defined(VM_DEBUG_LEAK)
+    non_aligned = true;
+#endif
+    if (old_ptr == 0) {
+        return vm_mmap_reserve(new_min_size, size_out);
+    }
+    uint8_t old_lines_2e = vm_bytes_to_lines_2e(old_size, true);
+    uint8_t new_lines_2e = vm_bytes_to_lines_2e(new_min_size, true);
+    if (non_aligned || new_lines_2e > old_lines_2e) {
+        // Expanding (or non aligned). Depending on how much we either memcpy(3) or mremap(2).
+        void* new_ptr;
+        size_t old_bytes = vm_lines_2e_to_bytes(old_lines_2e);
+        size_t new_bytes = vm_lines_2e_to_bytes(new_lines_2e);
+        if (!non_aligned && (old_bytes % PAGE_SIZE) == 0) {
+            // Large enough for mremap.
+            // We ignore fill_length as this operation is dominated by syscall and
+            // mmu query overhead and will not be significantly faster by respecting it.
+            assert((((size_t) old_ptr) % PAGE_SIZE) == 0);
+            void* mremap_r = mremap(old_ptr, old_bytes, new_bytes, MREMAP_MAYMOVE, 0);
+            if (mremap_r == MAP_FAILED)
+                RCD_SYSCALL_EXCEPTION(mremap, exception_fatal);
+            new_ptr = mremap_r;
+            // Fill the hole left by the mremap with new anonymous memory to prevent fragmentation.
+            void* mmap_r = mmap(old_ptr, old_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+            if (mmap_r == MAP_FAILED)
+                RCD_SYSCALL_EXCEPTION(mmap, exception_fatal);
+            if (mmap_r != old_ptr)
+                throw(concs("invalid address returned by mmap, expected: [", old_ptr, "], got: [", mmap_r, "]"), exception_fatal);
+            // Account for this new allocation.
+            vm_update_total_alloc_bytes(old_bytes);
+            // Free the new vma created in the hole.
+            vm_mmap_unreserve(old_ptr, old_bytes);
+            // Return a new size of new_bytes.
+            if (size_out != 0)
+                *size_out = new_bytes;
+        } else {
+            memcpy_instead:
+            // Small enough for memcpy() (or non aligned).
+            new_ptr = vm_mmap_reserve(new_bytes, size_out);
+            memcpy(new_ptr, old_ptr, MIN(MIN(old_size, fill_length), new_min_size));
+        }
+        // Free old allocation.
+        vm_mmap_unreserve(old_ptr, old_bytes);
+        return new_ptr;
+    } else if (new_lines_2e < old_lines_2e) {
+        // Shrinking. Free the non-needed trailing 2e lines.
+        uint8_t free_lines_2e = old_lines_2e - new_lines_2e;
+        size_t used_bytes = vm_lines_2e_to_bytes(new_lines_2e);
+        size_t free_bytes = vm_lines_2e_to_bytes(free_lines_2e);
+        vm_mmap_unreserve(old_ptr + used_bytes, free_bytes);
+        // Return the old pointer with smaller size out.
+        if (size_out != 0)
+            *size_out = used_bytes;
+        return old_ptr;
+    } else {
+        // Same size.
+        if (size_out != 0)
+            *size_out = vm_lines_2e_to_bytes(old_lines_2e);
+        return old_ptr;
     }
 }
 
