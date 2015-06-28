@@ -41,10 +41,8 @@ static void vec_realloc(rcd_abstract_vec_t* vec, size_t ent_size, size_t req_siz
     size_t cpy_size = vec->length * ent_size;
     size_t min_size = MAX(cpy_size, req_size);
     size_t new_size;
-    void* new_mem = vm_mmap_reserve(min_size, &new_size);
-    memcpy(new_mem, vec->mem, cpy_size);
-    memset(new_mem + cpy_size, 0, new_size - cpy_size);
-    vec->mem = new_mem;
+    vec->mem = vm_mmap_realloc(vec->mem, vec->size, cpy_size, min_size, &new_size);
+    memset(vec->mem + cpy_size, 0, new_size - cpy_size);
     vec->size = new_size;
     vec->cap = new_size / ent_size;
 }
@@ -57,7 +55,6 @@ void* _vec_ref(rcd_abstract_vec_t* vec, size_t ent_size, size_t offs) {
         void* old_mem = vec->mem;
         size_t old_size = vec->size;
         vec_realloc(vec, ent_size, min_size);
-        vm_mmap_unreserve(old_mem, old_size);
         assert(vec->cap > offs);
     }
     if (vec->length <= offs) {
