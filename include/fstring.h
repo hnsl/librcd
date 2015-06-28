@@ -119,8 +119,6 @@ typedef struct fstr_cfifo_slicev {
     fstr_t vec[2];
 } fstr_cfifo_slicev_t;
 
-typedef struct fixed_str_buffer fsbuf_t;
-
 typedef int64_t (*fstr_cmp_fn_t)(const fstr_t, const fstr_t);
 
 typedef enum {
