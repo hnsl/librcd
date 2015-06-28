@@ -37,13 +37,25 @@ typedef struct rcd_abstract_dict {
 typedef struct rcd_abstract_vec {
     /// Number of elements in the vector.
     size_t length;
+    /// Limit of the vector length.
+    size_t limit;
     /// Capacity, maximum number of elements in the vector.
     size_t cap;
     /// Raw size of the vector in bytes.
     size_t size;
     /// Pointer to vector memory.
     void* mem;
+    /// Flags.
+    uint64_t flags;
 } rcd_abstract_vec_t;
+
+/// This flag disables memory zero initialization in the vector leaving the
+/// value of non-written entries undefined when the vector is expanded.
+/// This is useful to improve performance in low-level usage scenarios.
+#define VEC_F_NOINIT (1 << 0)
+
+/// This flag enables the vector length limit.
+#define VEC_F_LIMIT (1 << 1)
 
 #define list_count(set, type) ({ \
     list(type)* __typed_set = set; \
@@ -261,6 +273,22 @@ typedef struct rcd_abstract_vec {
     vec(TYPE)* _typed_set = (SET); \
     rcd_abstract_vec_t* _vec = (rcd_abstract_vec_t*) _typed_set; \
     (vec(TYPE)*) _vec_clone(_vec, sizeof(TYPE)); \
+})
+
+/// Returns vector limit pointer for read/write.
+/// When an operation would require extending the vector length beyond this
+/// limit an io exception is thrown before any side effects can have effect.
+#define vec_limit(SET, TYPE) ({ \
+    vec(TYPE)* _typed_set = (SET); \
+    rcd_abstract_vec_t* _vec = (rcd_abstract_vec_t*) _typed_set; \
+    &_vec->limit; \
+})
+
+/// Returns vector flags pointer for read/write.
+#define vec_flags(SET, TYPE) ({ \
+    vec(TYPE)* _typed_set = (SET); \
+    rcd_abstract_vec_t* _vec = (rcd_abstract_vec_t*) _typed_set; \
+    &_vec->flags; \
 })
 
 #define __dict_get(set, type, fstr_key) ({ \
@@ -523,5 +551,40 @@ rcd_abstract_vec_t* _vec_new();
 void* _vec_ref(rcd_abstract_vec_t* vec, size_t ent_size, size_t offs);
 rcd_abstract_vec_t* _vec_clone(rcd_abstract_vec_t* vec, size_t ent_size);
 noret void _vec_throw_get_oob(size_t offs, size_t len);
+
+/// String vector, used for dynamic buffer logic.
+typedef vec(uint8_t) vstr_t;
+
+/// Creates a new string vector. Useful for dynamic string building.
+static inline vstr_t* vstr_new() {
+    vstr_t* vec = new_vec(uint8_t);
+    *vec_flags(vec, uint8_t) = VEC_F_NOINIT;
+    return vec;
+}
+
+/// Sets the length limit of the vector string.
+static inline void vstr_limit_set(vstr_t* vs, bool enable, size_t new_limit) {
+    uint64_t* flags = vec_flags(vs, uint8_t);
+    *flags = enable? (*flags | VEC_F_LIMIT): (*flags & ~VEC_F_LIMIT);
+    *vec_limit(vs, uint8_t) = new_limit;
+}
+
+/// Returns the internal memory of the string vector as a fixed string.
+/// The fixed string becomes unsafe to use as soon as the vector is modified
+/// (e.g. via vstr_write()).
+static fstr_t vstr_str(vstr_t* vs) {
+    return (fstr_t) {
+        .str = vec_array(vs, uint8_t),
+        .len = vec_count(vs, uint8_t)
+    };
+}
+
+/// Extends the fixed string vector and returns the internal buffer.
+fstr_t vstr_extend(vstr_t* vs, size_t len);
+
+/// Writes a fixed string to a string vector by copying it to the end of the
+/// string vector, expanding it as necessary. After this call any existing
+/// string vector references become invalid.
+void vstr_write(vstr_t* vs, fstr_t str);
 
 #endif	/* LIST_H */

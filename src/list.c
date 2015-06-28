@@ -42,13 +42,21 @@ static void vec_realloc(rcd_abstract_vec_t* vec, size_t ent_size, size_t req_siz
     size_t min_size = MAX(cpy_size, req_size);
     size_t new_size;
     vec->mem = vm_mmap_realloc(vec->mem, vec->size, cpy_size, min_size, &new_size);
-    memset(vec->mem + cpy_size, 0, new_size - cpy_size);
+    if ((vec->flags & VEC_F_NOINIT) == 0) {
+        memset(vec->mem + cpy_size, 0, new_size - cpy_size);
+    }
     vec->size = new_size;
     vec->cap = new_size / ent_size;
 }
 
 /// Reference an offset in a vector that is possible out of bounds, expanding the vector as necessary.
 void* _vec_ref(rcd_abstract_vec_t* vec, size_t ent_size, size_t offs) {
+    if ((vec->flags & VEC_F_LIMIT) != 0) {
+        if (vec->limit <= offs) {
+            throw(concs("invalid attempt to extend vector beyond limit: offset [",
+                offs, "], with limit: [", vec->limit, "]"), exception_io);
+        }
+    }
     if (vec->cap <= offs) {
         // Increase capacity of vector to required capacity.
         size_t min_size = (offs + 1) * ent_size;
@@ -67,11 +75,27 @@ void* _vec_ref(rcd_abstract_vec_t* vec, size_t ent_size, size_t offs) {
 /// Clones a vector.
 rcd_abstract_vec_t* _vec_clone(rcd_abstract_vec_t* vec, size_t ent_size) {
     rcd_abstract_vec_t* new_vec = _vec_new();
-    *new_vec = *vec;
-    vec_realloc(new_vec, ent_size, 0);
+    if (vec->length > 0) {
+        _vec_ref(new_vec, ent_size, vec->length - 1);
+        memcpy(new_vec->mem, vec->mem, vec->length * ent_size);
+    }
     return new_vec;
 }
 
 noret void _vec_throw_get_oob(size_t offs, size_t len) { sub_heap {
     throw(concs("invalid access in vector: offset [", offs, "], with length: [", len, "]"), exception_arg);
 }}
+
+fstr_t vstr_extend(vstr_t* vs, size_t len) {
+    if (len == 0)
+        return "";
+    size_t offs = vec_count(vs, uint8_t);
+    vec_resize(vs, uint8_t, offs + len);
+    fstr_t mem = vstr_str(vs);
+    return fstr_slice(mem, offs, -1);
+}
+
+void vstr_write(vstr_t* vs, fstr_t str) {
+    fstr_t dst = vstr_extend(vs, str.len);
+    fstr_cpy_over(dst, str, 0, 0);
+}
