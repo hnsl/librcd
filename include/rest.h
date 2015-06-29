@@ -51,10 +51,8 @@ rest_head_t rest_read_head(rio_t* rio_r);
 /// Reads a rest body.
 vstr_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size);
 
-/// Streams a chunked rest body and parses the raw data into another rio stream.
-/// When the chunked stream ends gracefully (application level) the trailing
-/// headers is parsed and returned.
-dict(fstr_t)* rest_stream_chunked_body(rio_t* rio_r, rio_t* rio_w);
+/// Like rest_read_body() but streams
+void rest_stream_body(rio_t* rio_r, rio_t* rio_w, rest_head_t head);
 
 /// OAuth 1.0a configuration.
 typedef struct oa10a_cfg {
