@@ -49,7 +49,7 @@ void rest_write_request(rio_t* rio_h, rest_request_t request);
 rest_head_t rest_read_head(rio_t* rio_r);
 
 /// Reads a rest body.
-fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size);
+vstr_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size);
 
 /// Streams a chunked rest body and parses the raw data into another rio stream.
 /// When the chunked stream ends gracefully (application level) the trailing

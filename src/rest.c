@@ -132,7 +132,7 @@ static void parse_headers(fstr_t headers, dict(fstr_t)* headers_io, lwt_heap_t* 
         fstr_t header_key_lc;
         switch_heap(heap) {
             header_key_lc = fss(fstr_lower(header_key));
-            dict_replace(headers_io, fstr_t, header_key_lc, fsc(fstr_trim(header_val)));
+            (void) dict_insert(headers_io, fstr_t, header_key_lc, fsc(fstr_trim(header_val)));
         }
     }
 }
@@ -180,7 +180,7 @@ rest_head_t rest_read_head(rio_t* rio_r) { sub_heap_txn(heap) {
     return resp;
 }}
 
-fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size) { sub_heap_txn(heap) {
+vstr_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t limit_size) { sub_heap_txn(heap) {
     bool has_chunked = false;
     bool has_content_length = false;
     size_t content_length;
@@ -193,17 +193,14 @@ fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size) { su
     if ((te_ptr != 0) && fstr_equal("chunked", *te_ptr)) {
         has_chunked = true;
     }
-    fstr_mem_t* body_buffer = 0;
+    vstr_t* body = vstr_new();
+    if (limit_size > 0) {
+        vstr_limit_set(body, true, limit_size);
+    }
     if (has_chunked) {
-        switch_heap(heap) {
-            body_buffer = fstr_alloc(max_size);
-        }
-        size_t body_len = 0;
-        fstr_t body_buffer_tail = fss(body_buffer);
         // chunk-def is "chunk-size [ chunk-extension ] CRLF"
         fstr_mem_t* chunk_def_buffer = fstr_alloc_buffer(HTTP_MAX_CHUNK_DEF_LINE);
-        fstr_t end_buffer;
-        FSTR_STACK_DECL(end_buffer, 2);
+        fstr_t crlf_buf = fstr_slice(fss(chunk_def_buffer), 0, crlf.len);
         for (;;) {
             // Read next chunk size.
             fstr_t chunk_size_str = rio_read_to_separator(rio_r, crlf, fss(chunk_def_buffer));
@@ -211,35 +208,31 @@ fstr_mem_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size) { su
             fstr_divide(chunk_size_str, ";", &chunk_size_str, 0);
             size_t c_size = fstr_to_uint(chunk_size_str, 16);
             if (c_size == 0) {
-                rio_read_fill(rio_r, end_buffer);
-                if (!fstr_equal(end_buffer, crlf)) {
-                    fstr_t rest_trailing_headers = rio_read_to_separator(rio_r, "\r\n\r\n", body_buffer_tail);
-                    parse_headers(concs(end_buffer, rest_trailing_headers), head.headers, heap);
+                // End reached, read trailing headers.
+                fstr_mem_t* header_buf = fstr_alloc_buffer(HTTP_MIN_ACCEPTED_HEADER_SIZE);
+                fstr_t trail_headers = fstr_trim(rio_read_to_separator(rio_r, crlf, fss(header_buf)));
+                if (trail_headers.len > 0) {
+                    switch_heap (heap) {
+                        import_list(header_buf);
+                        parse_headers(trail_headers, head.headers, heap);
+                    }
                 }
+                // Parsing chunked body complete.
                 break;
             }
-            if ((c_size + crlf.len) > body_buffer_tail.len)
-                throw_eio("too large response", rest);
-            rio_read_fill(rio_r, fstr_slice(body_buffer_tail, 0, c_size));
-            // Keep the body data by moving the tail.
-            body_buffer_tail = fstr_slice(body_buffer_tail, c_size, -1);
-            fstr_t chunk_break = fstr_slice(body_buffer_tail, 0, crlf.len);
-            rio_read_fill(rio_r, chunk_break);
-            if (!fstr_equal(chunk_break, crlf))
+            // Read chunk into buffer.
+            rio_read_fill(rio_r, vstr_extend(body, c_size));
+            // Read trailing crlf.
+            rio_read_fill(rio_r, crlf_buf);
+            if (!fstr_equal(crlf_buf, crlf))
                 throw_eio("invalid chunk, bad trailing crlf", rest);
-            body_len += c_size;
         }
-        body_buffer->len = body_len;
     } else if (has_content_length) {
-        if (content_length > max_size)
-            throw_eio("too large response", rest);
-        switch_heap(heap) {
-            body_buffer = fstr_alloc(content_length);
-        }
-        rio_read_fill(rio_r, fss(body_buffer));
-        body_buffer->len = content_length;
+        rio_read_fill(rio_r, vstr_extend(body, content_length));
     }
-    return body_buffer;
+    switch_heap (heap) {
+        return import(body);
+    }
 }}
 
 dict(fstr_t)* rest_stream_chunked_body(rio_t* rio_r, rio_t* rio_w) { sub_heap_txn(heap) {
