@@ -763,6 +763,10 @@ fstr_t rio_peek(rio_t* rio) NO_NULL_ARGS;
 /// the reading can be very inefficient.
 fstr_t rio_read_to_separator(rio_t* rio, fstr_t separator, fstr_t max_buffer);
 
+/// Like rio_read_to_separator() but reads dynamically into a vector string
+/// buffer so it is not limited by any buffer size you give the function.
+fstr_t rio_read_until(rio_t* rio, vstr_t* buf, fstr_t separator);
+
 /// Writes a chunk of data to the rio handle, returning the tail slice of the
 /// chunk that was not written because the underlying transport only accepted
 /// a limited number of bytes without blocking at this time. Will block until

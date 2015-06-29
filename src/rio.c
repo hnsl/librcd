@@ -1439,34 +1439,59 @@ fstr_t rio_peek(rio_t* rio) {
     return rio->peek_unconsumed;
 }
 
-fstr_t rio_read_to_separator(rio_t* rio, fstr_t separator, fstr_t max_buffer) {
+static inline fstr_t read_to_separator(rio_t* rio, fstr_t separator, bool with_vbuf, vstr_t* vbuf, fstr_t max_buf) {
     if (separator.len == 0)
-        return fstr_slice(max_buffer, 0, 0);
-    size_t used_n = 0;
-    uint64_t peek_chunk_i = 0;
+        return fstr_slice(max_buf, 0, 0);
+    // The buf_len is the length of the buffer that has been filled by copying over peaked chunks.
+    size_t buf_len = 0;
+    // Track offset where last chunk peek started in peek_offs.
+    uint64_t peek_offs = 0;
     for (size_t i = 0;; i++) {
         for (size_t j = 0;; j++) {
-            size_t offs = (i + j);
+            size_t buf_offs = (i + j);
             if (j == separator.len) {
-                rio_skip(rio, offs - peek_chunk_i);
-                return fstr_slice(max_buffer, 0, i);
+                // Separator matched, skip up to current offset.
+                rio_skip(rio, buf_offs - peek_offs);
+                // Slice the non-consummed and non-skipped data from the buffer and
+                // return the matched chunk up to i offset (before separator match).
+                if (with_vbuf) {
+                    vec_resize(vbuf, uint8_t, i);
+                    return vstr_str(vbuf);
+                } else {
+                    return fstr_slice(max_buf, 0, i);
+                }
             }
-            while (offs == used_n) {
-                fstr_t buffer = fstr_sslice(max_buffer, used_n, -1);
-                if (buffer.len == 0)
-                    throw("reached end of max buffer without matching separator", exception_io);
-                rio_skip(rio, offs - peek_chunk_i);
+            while (buf_offs == buf_len) {
+                // End of buffer reached. Extend buffer content by peeking next chunk.
+                rio_skip(rio, buf_offs - peek_offs);
                 fstr_t chunk = rio_peek(rio);
-                peek_chunk_i = offs;
-                fstr_cpy_over(buffer, chunk, 0, 0);
-                used_n += chunk.len;
-                if (used_n > max_buffer.len)
-                    used_n = max_buffer.len;
+                peek_offs = buf_offs;
+                // Copy chunk to buffer.
+                if (with_vbuf) {
+                    buf_len = buf_len + chunk.len;
+                    vstr_write(vbuf, chunk);
+                } else {
+                    fstr_t mb_tail = fstr_sslice(max_buf, buf_len, -1);
+                    if (mb_tail.len == 0)
+                        throw("reached end of max buffer without matching separator", exception_io);
+                    fstr_cpy_over(mb_tail, chunk, 0, 0);
+                    buf_len = MIN(buf_len + chunk.len, max_buf.len);
+                }
             }
-            if (separator.str[j] != max_buffer.str[offs])
+            // Match character with separator.
+            fstr_t buf = with_vbuf? vstr_str(vbuf): max_buf;
+            if (separator.str[j] != buf.str[buf_offs])
                 break;
         }
     }
+}
+
+fstr_t rio_read_to_separator(rio_t* rio, fstr_t separator, fstr_t max_buffer) {
+    return read_to_separator(rio, separator, false, 0, max_buffer);
+}
+
+fstr_t rio_read_until(rio_t* rio, vstr_t* buf, fstr_t separator) {
+    return read_to_separator(rio, separator, true, buf, "");
 }
 
 fstr_t rio_write_chunk(rio_t* rio, fstr_t chunk, bool more_hint) {
