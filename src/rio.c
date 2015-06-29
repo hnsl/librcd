@@ -1545,6 +1545,15 @@ void rio_write_part(rio_t* rio, fstr_t buffer, bool more_hint) {
     }
 }
 
+void rio_forward(rio_t* in, rio_t* out, size_t len) { sub_heap {
+    fstr_t buf = fss(fstr_alloc_buffer(MIN(len, 10 * PAGE_SIZE)));
+    for (size_t i = 0; i < len;) {
+        fstr_t chunk = rio_read(in, fstr_slice(buf, 0, len - i));
+        rio_write(out, chunk);
+        i += chunk.len;
+    }
+}}
+
 fstr_mem_t* rio_read_fstr_max(rio_t* rio, size_t max_len) { sub_heap {
     uint64_t nbo_size;
     rio_read_fill(rio, FSTR_PACK(nbo_size));

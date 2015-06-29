@@ -785,6 +785,9 @@ void rio_write(rio_t* rio, fstr_t buffer) NO_NULL_ARGS;
 /// efficiency of the transfer.
 void rio_write_part(rio_t* rio, fstr_t buffer, bool more_hint) NO_NULL_ARGS;
 
+/// Forwards len bytes from the in stream to the out stream.
+void rio_forward(rio_t* in, rio_t* out, size_t len) NO_NULL_ARGS;
+
 /// Like rio_read_fstr() but with a maximum length.
 /// If the slice of memory read is larger than max_len it throws an io exception.
 /// If max_len is zero it has the same function as rio_read_fstr().
