@@ -51,7 +51,7 @@ rest_head_t rest_read_head(rio_t* rio_r);
 /// Reads a rest body.
 vstr_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t max_size);
 
-/// Like rest_read_body() but streams
+/// Like rest_read_body() but streams body instead of filling string vector.
 void rest_stream_body(rio_t* rio_r, rio_t* rio_w, rest_head_t head);
 
 /// OAuth 1.0a configuration.
