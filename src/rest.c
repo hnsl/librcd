@@ -180,16 +180,16 @@ rest_head_t rest_read_head(rio_t* rio_r) { sub_heap_txn(heap) {
     return resp;
 }}
 
-static vstr_t* read_body(rio_t* rio_r, rio_t* rio_w, rest_head_t head, size_t limit_size) { sub_heap_txn(heap) {
+static vstr_t* read_body(rio_t* rio_r, rio_t* rio_w, rest_head_t* head, size_t limit_size) { sub_heap_txn(heap) {
     bool has_chunked = false;
     bool has_content_length = false;
     size_t content_length;
-    fstr_t* cl_ptr = dict_read(head.headers, fstr_t, "content-length");
+    fstr_t* cl_ptr = dict_read(head->headers, fstr_t, "content-length");
     if (cl_ptr != 0) {
         has_content_length = true;
         content_length = fs2ui(*cl_ptr);
     }
-    fstr_t* te_ptr = dict_read(head.headers, fstr_t, "transfer-encoding");
+    fstr_t* te_ptr = dict_read(head->headers, fstr_t, "transfer-encoding");
     if ((te_ptr != 0) && fstr_equal("chunked", *te_ptr)) {
         has_chunked = true;
     }
@@ -217,7 +217,7 @@ static vstr_t* read_body(rio_t* rio_r, rio_t* rio_w, rest_head_t head, size_t li
                 if (trail_headers.len > 0) {
                     switch_heap (heap) {
                         import_list(header_buf);
-                        parse_headers(trail_headers, head.headers, heap);
+                        parse_headers(trail_headers, head->headers, heap);
                     }
                 }
                 // Parsing chunked body complete.
@@ -248,11 +248,11 @@ static vstr_t* read_body(rio_t* rio_r, rio_t* rio_w, rest_head_t head, size_t li
     }
 }}
 
-vstr_t* rest_read_body(rio_t* rio_r, rest_head_t head, size_t limit_size) {
+vstr_t* rest_read_body(rio_t* rio_r, rest_head_t* head, size_t limit_size) {
     return read_body(rio_r, 0, head, limit_size);
 }
 
-void rest_stream_body(rio_t* rio_r, rio_t* rio_w, rest_head_t head) {
+void rest_stream_body(rio_t* rio_r, rio_t* rio_w, rest_head_t* head) {
     read_body(rio_r, rio_w, head, 0);
 }
 
