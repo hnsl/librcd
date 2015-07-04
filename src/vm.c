@@ -728,16 +728,13 @@ void* vm_mmap_realloc(void* old_ptr, size_t old_size, size_t fill_length, size_t
             if (mremap_r == MAP_FAILED)
                 RCD_SYSCALL_EXCEPTION(mremap, exception_fatal);
             new_ptr = mremap_r;
-            // Fill the hole left by the mremap with new anonymous memory to prevent fragmentation.
-            void* mmap_r = mmap(old_ptr, old_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-            if (mmap_r == MAP_FAILED)
-                RCD_SYSCALL_EXCEPTION(mmap, exception_fatal);
-            if (mmap_r != old_ptr)
-                throw(concs("invalid address returned by mmap, expected: [", old_ptr, "], got: [", mmap_r, "]"), exception_fatal);
-            // Account for this new allocation.
-            vm_update_total_alloc_bytes(old_bytes);
-            // Free the new vma created in the hole.
-            vm_mmap_unreserve(old_ptr, old_bytes);
+            // It is likely that there is now a hole in the virtual memory left by
+            // the moved vma depending on how it was moved. We could compensate for
+            // this fragmentation by mapping a new vma in the hole but it's hardly
+            // worth the extra complexity since future allocations, mappings and
+            // reallocations may use the hole.
+            // Account for the expanded allocation.
+            vm_update_total_alloc_bytes(new_bytes - old_bytes);
             // Return a new size of new_bytes.
             if (size_out != 0)
                 *size_out = new_bytes;
@@ -746,9 +743,9 @@ void* vm_mmap_realloc(void* old_ptr, size_t old_size, size_t fill_length, size_t
             // Small enough for memcpy() (or non aligned).
             new_ptr = vm_mmap_reserve(new_bytes, size_out);
             memcpy(new_ptr, old_ptr, MIN(MIN(old_size, fill_length), new_min_size));
+            // Free old allocation.
+            vm_mmap_unreserve(old_ptr, old_bytes);
         }
-        // Free old allocation.
-        vm_mmap_unreserve(old_ptr, old_bytes);
         return new_ptr;
     } else if (new_lines_2e < old_lines_2e) {
         // Shrinking. Free the non-needed trailing 2e lines.
