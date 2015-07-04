@@ -52,19 +52,6 @@ typedef enum lwt_fd_event {
     lwt_fd_event_write,
 } lwt_fd_event_t;
 
-/// Reads a random 64 bit integer from the x86_64 CPU random generator.
-static inline uint64_t lwt_rdrand64() {
-    uint64_t r;
-    __asm__(
-        "1: rdrand %%rax\n\t"
-        "jnc 1b\n\t"
-        : "=a" (r) // Output
-        : // Input
-        : "%rax" // Clobbered register
-    );
-    return r;
-}
-
 // Called when assertions fail.
 void __assert_fail(fstr_t expr, fstr_t file, int line, fstr_t function);
 
@@ -285,4 +272,30 @@ void lwt_write_fiber_dump_debug();
 /// Overloaded exception string conversion for convenience.
 static inline fstr_t __attribute__((overloadable)) STR(rcd_exception_t* x) { return fss(lwt_get_exception_dump(x)); }
 
-#endif	/* LWTHREADS_H */
+/// Completely fills the buffer with cryptographic grade random entropy quickly.
+void lwt_rdrand(fstr_t buf);
+
+/// Reads a random 64 bit integer from the x86_64 CPU random generator.
+static inline uint64_t lwt_rdrand64() {
+    void lwt_detect_rdrand();
+    extern int32_t lwt_has_rdrand;
+    if (lwt_has_rdrand == 0) {
+        lwt_detect_rdrand();
+    }
+    uint64_t r;
+    if (lwt_has_rdrand == 1) {
+        __asm__(
+            "1: rdrand %%rax\n\t"
+            "jnc 1b\n\t"
+            : "=a" (r) // Output
+            : // Input
+            : "%rax" // Clobbered register
+        );
+        return r;
+    } else {
+        lwt_rdrand(FSTR_PACK(r));
+    }
+    return r;
+}
+
+#endif /* LWTHREADS_H */

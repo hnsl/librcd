@@ -296,10 +296,6 @@ fstr_t fstr_detail(fstr_t full, fstr_t tail);
 /// the specified character.
 void fstr_fill(fstr_t dst, uint8_t chr);
 
-/// Returns a pseudo random string with the specified number of bytes.
-/// This stream is not suitable for cryptographic applications.
-fstr_mem_t* fstr_pseudo_random(size_t length);
-
 /// Returns a pseudo random hexadecimal string with the specified number of bytes.
 fstr_mem_t* fstr_hexrandom(size_t length);
 

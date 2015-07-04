@@ -348,27 +348,12 @@ void fstr_fill(fstr_t dst, uint8_t chr) {
     memset(dst.str, chr, dst.len);
 }
 
-fstr_mem_t* fstr_pseudo_random(size_t length) { sub_heap {
-    prng_state_t* prng_s = prng_get_thread_state();
-    prng_seed_time(prng_s);
-    fstr_mem_t* out_str = fstr_alloc(length);
-    for (size_t i = 0; i < length; i += sizeof(uint64_t)) {
-        uint64_t rnd_64 = prng_rand_nds(prng_s);
-        fstr_cpy_over(fstr_slice(fstr_str(out_str), i, i + sizeof(uint64_t)), FSTR_PACK(rnd_64), 0, 0);
-    }
-    return escape(out_str);
-}}
-
 fstr_mem_t* fstr_hexrandom(size_t length) { sub_heap {
-    prng_state_t* prng_s = prng_get_thread_state();
-    prng_seed_time(prng_s);
-    fstr_mem_t* out_hex_str = fstr_alloc(length);
-    const size_t hex_per_uint64 = (sizeof(uint64_t) * 2);
-    for (size_t i = 0; i < length; i += hex_per_uint64) {
-        uint64_t rnd_64 = prng_rand_nds(prng_s);
-        fstr_serial_uint(fstr_slice(fstr_str(out_hex_str), i, i + hex_per_uint64), rnd_64, 16);
-    }
-    return escape(out_hex_str);
+	fstr_t raw_rnd = fss(fstr_alloc(length / 2 + 1));
+	lwt_rdrand(raw_rnd);
+	fstr_mem_t* out = fstr_hexencode(raw_rnd);
+	out->len = length;
+	return escape(out);
 }}
 
 fstr_mem_t* fstr_hexencode(fstr_t bin_src) {

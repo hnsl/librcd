@@ -344,13 +344,6 @@ typedef uint128_t rcd_fid_t;
 /// Handle for a sub fiber. Used to create attached fibers with mitosis that are cleaned up when free'd.
 typedef struct rcd_sub_fiber rcd_sub_fiber_t;
 
-/// Declares thread static memory in an object file. This memory should not be
-/// modified directly as it is only used as a original image for the thread
-/// static memory of each physical thread. To actually reference the thread
-/// local static memory the pointer inside the segment should be translated
-/// through lwt_get_thread_static_ptr().
-#define RCD_DEFINE_THREAD_STATIC_MEMORY(declaration) const declaration __attribute__((section("librcd_thread_static_memory")))
-
 /// Thrown for invalid arguments, invalid precondition or other dynamic typing errors.
 /// Examples: argument was null pointer, given list was empty.
 #define exception_arg           (1 << 0)
@@ -790,7 +783,6 @@ extern int rcd_pp_marker__join_shared_declare;
 
 #include "reflect.h"
 #include "arithmetic.h"
-#include "prng.h"
 #include "lwthreads.h"
 #include "rio.h"
 #include "sort.h"
