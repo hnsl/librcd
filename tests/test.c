@@ -9,7 +9,7 @@
 
 #pragma librcd
 
-void rcd_self_test_seg_stacks();
+void rcd_self_test_misc();
 void rcd_self_test_memory();
 void rcd_self_test_libgcc();
 void rcd_self_test_regex();
@@ -29,6 +29,8 @@ void rcd_self_test_vm();
 /// be tested before the high level function that depends on it.
 void rcd_primitive_self_test() {
     // TODO: Replace this with a preprocessor generated list of function calls instead.
+    rio_debug("[rcd_primitive_self_test]: testing misc\n");
+    //rcd_self_test_misc();
     rio_debug("[rcd_primitive_self_test]: testing memory\n");
     rcd_self_test_memory();
     rio_debug("[rcd_primitive_self_test]: testing libgcc\n");
