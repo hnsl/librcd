@@ -168,13 +168,13 @@ static void init_ca_chain(void* arg_ptr) { uninterruptible sub_heap {
                     /* DBG("reading cert [", ca_file_path, "]"); */
                     RCD_POLAR_ECE(x509_crt_parse_file(ca_chain, fstr_to_cstr(ca_file_path)), exception_io);
                 } catch (exception_io, e) {
-                    /* rio_debug(concs("tls init ca error: failed to read cert [", ca_file_path, "], certificate validation might fail:\n")); */
-                    /* rio_debug(fss(lwt_get_exception_dump(e))); */
+                    rio_debug(concs("tls init ca error: failed to read cert [", ca_file_path, "], certificate validation might fail:\n"));
+                    DBG(e);
                 }
             }
         } catch (exception_io, e) {
             rio_debug(concs("tls init ca error: failed to open cert path [", ca_path, "], certificate validation might fail:\n"));
-            rio_debug(fss(lwt_get_exception_dump(e)));
+            DBG(e);
         }
     }
 }}
