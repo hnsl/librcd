@@ -12,6 +12,7 @@
 /// Check if data is chi square random.
 /// Original implementation at: https://en.wikibooks.org/wiki/Algorithm_Implementation/Pseudorandom_Numbers/Chi-Square_Test
 /// This is a very simple frequency analysis, it does not check if the entropy is cryptographic grade (impossible).
+/// A good rng will fail this test about 10% of the time.
 static bool is_chi_square_random(fstr_t data) {
     // Basic test parameters.
     double n = data.len;
@@ -38,17 +39,29 @@ static bool is_chi_square_random(fstr_t data) {
     return chi_square >= r - max_d && chi_square <= r + max_d;
 }
 
-void rcd_self_test_misc() { sub_heap {
-    // Test random data generator.
-    vstr_t* random_data = vstr_new();
-    for (size_t i = 0; i < 1000; i++) {
-        uint64_t x = lwt_rdrand64();
-        vstr_write(random_data, FSTR_PACK(x));
+static void self_test_rdrand() {
+    for (size_t i = 1;; i++) sub_heap {
+        // Test random data generator.
+        vstr_t* random_data = vstr_new();
+        for (size_t i = 0; i < 1000; i++) {
+            uint64_t x = lwt_rdrand64();
+            vstr_write(random_data, FSTR_PACK(x));
+        }
+        for (size_t i = 1; i < PAGE_SIZE * 10; i += (i / 8 + 1)) sub_heap {
+            fstr_t buf = fss(fstr_alloc(i));
+            lwt_rdrand(buf);
+            vstr_write(random_data, buf);
+        }
+        if (is_chi_square_random(vstr_str(random_data)))
+            return;
+        if (i == 4) {
+            // The probability of this is about 10%^4 = 0.01%.
+            improb_atest(false, "the random data had poor entropy, broken rng?");
+            return;
+        }
     }
-    for (size_t i = 1; i < PAGE_SIZE * 10; i += (i / 8 + 1)) sub_heap {
-        fstr_t buf = fss(fstr_alloc(i));
-        lwt_rdrand(buf);
-        vstr_write(random_data, buf);
-    }
-    improb_atest(is_chi_square_random(vstr_str(random_data)), "the random data had poor entropy, broken rng?");
-}}
+}
+
+void rcd_self_test_misc() {
+    self_test_rdrand();
+}
