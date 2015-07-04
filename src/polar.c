@@ -117,6 +117,7 @@ static void init_ca_chain(void* arg_ptr) { uninterruptible sub_heap {
     x509_crt* ca_chain = arg_ptr;
     fstr_t ca_paths[] = POLAR_TLS_CA_PATHS;
     for (size_t i = 0; i < LENGTHOF(ca_paths); i++) {
+        dict(uint8_t)* read_paths = new_dict(uint8_t);
         fstr_t ca_path = ca_paths[i];
         try {
             list_foreach(rio_file_list(ca_path), fstr_mem_t*, fname) {
@@ -124,7 +125,11 @@ static void init_ca_chain(void* arg_ptr) { uninterruptible sub_heap {
                 try {
                     if (rio_file_stat(ca_file_path).file_type != rio_file_type_regular)
                         break;
-                    /* DBG("reading cert [", ca_file_path, "]"); */
+                    // In case of symlinks that map to the same cert, get the real path and ignore duplicates.
+                    ca_file_path = fss(rio_file_real_path(ca_file_path));
+                    if (!dict_insert(read_paths, uint8_t, ca_file_path, 0))
+                        break;
+                    //x-dbg/ DBG("reading cert [", ca_file_path, "]");
                     RCD_POLAR_ECE(x509_crt_parse_file(ca_chain, fstr_to_cstr(ca_file_path)), exception_io);
                 } catch (exception_io, e) {
                     rio_debug(concs("tls init ca error: failed to read cert [", ca_file_path, "], certificate validation might fail:\n"));
