@@ -205,7 +205,7 @@ void rcd_self_test_io() {
     // Create a fiber that bounces a TCP message. Do it twice on the same port to also test that the fd really closes and the port becomes available again.
     for (int i = 0; i < 2; i++) {
         sub_heap {
-            int32_t test_port = 10000 + prng_rand() % 9999;
+            int32_t test_port = 10000 + lwt_rdrand64() % 9999;
             rcd_fid_t child_fid;
             fmitosis {
                 child_fid = spawn_static_fiber(io_test_bounce_tcp("", test_port));
@@ -239,7 +239,7 @@ void rcd_self_test_io() {
     // Create a fiber that bounces an UDP message. Do it twice on the same port to also test that the fd really closes and the port becomes available again.
     for (int i = 0; i < 2; i++) {
         sub_heap {
-            int32_t test_port = 10000 + prng_rand() % 9999;
+            int32_t test_port = 10000 + lwt_rdrand64() % 9999;
             rcd_fid_t child_fid;
             fmitosis {
                 child_fid = spawn_static_fiber(io_test_bounce_udp("", test_port));
@@ -461,7 +461,7 @@ void rcd_self_test_io() {
     // Test peek + lookahead of tcp stream.
     for (int i = 0; i < 2; i++) {
         sub_heap {
-            int32_t test_port = 10000 + prng_rand() % 9999;
+            int32_t test_port = 10000 + lwt_rdrand64() % 9999;
             rcd_fid_t child_fid;
             fmitosis {
                 child_fid = spawn_static_fiber(io_test_peek_lookahead("", test_port));
