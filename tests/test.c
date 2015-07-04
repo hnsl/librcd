@@ -30,7 +30,7 @@ void rcd_self_test_vm();
 void rcd_primitive_self_test() {
     // TODO: Replace this with a preprocessor generated list of function calls instead.
     rio_debug("[rcd_primitive_self_test]: testing misc\n");
-    //rcd_self_test_misc();
+    rcd_self_test_misc();
     rio_debug("[rcd_primitive_self_test]: testing memory\n");
     rcd_self_test_memory();
     rio_debug("[rcd_primitive_self_test]: testing libgcc\n");
