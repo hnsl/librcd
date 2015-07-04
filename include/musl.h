@@ -7300,6 +7300,15 @@ long __syscall_ret(unsigned long), __syscall(long, ...),
 #define SYS_process_vm_writev            311
 #define SYS_kcmp                312
 #define SYS_finit_module            313
+#define SYS_sched_setattr            314
+#define SYS_sched_getattr            315
+#define SYS_renameat2                316
+#define SYS_seccomp                317
+#define SYS_getrandom                318
+#define SYS_memfd_create            319
+#define SYS_kexec_file_load            320
+#define SYS_bpf                    321
+#define SYS_execveat                322
 
 #undef SYS_fstatat
 #undef SYS_pread
