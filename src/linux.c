@@ -961,6 +961,10 @@ int syncfs(int fd) {
     return (int) syscall(SYS_syncfs, fd);
 }
 
+int getrandom(void* buf, size_t buflen, unsigned int flags) {
+    return (int) syscall(SYS_getrandom, buf, buflen, flags);
+}
+
 // Make sigprocmask alias for rt_sigprocmask.
 int sigprocmask(int how, const sigset_t* set, sigset_t* oldset)
 __attribute__ ((weak, alias ("rt_sigprocmask")));

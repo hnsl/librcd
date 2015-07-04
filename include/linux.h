@@ -2057,6 +2057,17 @@ int syncfs(int fd);
 /* SYS_getcpu 309 */
 /* SYS_process_vm_readv 310 */
 /* SYS_process_vm_writev 311 */
+/* SYS_kcmp 312 */
+/* SYS_finit_module 313 */
+/* SYS_sched_setattr 314 */
+/* SYS_sched_getattr 315 */
+/* SYS_renameat2 316 */
+/* SYS_seccomp 317 */
+int getrandom(void* buf, size_t buflen, unsigned int flags);
+/* SYS_memfd_create 319 */
+/* SYS_kexec_file_load 320 */
+/* SYS_bpf 321 */
+/* SYS_execveat 322 */
 
 /// Librcd wrapper for the mount syscall that uses fixed strings instead of
 /// c strings. Throws an io exception if the mount fails.
