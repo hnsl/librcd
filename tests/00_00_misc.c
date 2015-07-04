@@ -46,8 +46,8 @@ void rcd_self_test_misc() { sub_heap {
         vstr_write(random_data, FSTR_PACK(x));
     }
     for (size_t i = 1; i < PAGE_SIZE * 10; i += (i / 8 + 1)) sub_heap {
-		fstr_t buf = fss(fstr_alloc(i));
-		lwt_rdrand(buf);
+        fstr_t buf = fss(fstr_alloc(i));
+        lwt_rdrand(buf);
         vstr_write(random_data, buf);
     }
     improb_atest(is_chi_square_random(vstr_str(random_data)), "the random data had poor entropy, broken rng?");
