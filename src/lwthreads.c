@@ -3302,7 +3302,7 @@ int32_t lwt_has_rdrand = 0;
 
 /// Detect if has rdrand or not.
 void lwt_detect_rdrand() {
-	uint32_t ecx;
+    uint32_t ecx;
     __asm__(
         "mov $1, %%eax\n\t"
         "cpuid\n\t"
@@ -3314,41 +3314,41 @@ void lwt_detect_rdrand() {
 }
 
 static void getrandom_fill(fstr_t buf) {
-	fstr_t tail = buf;
-	while (tail.len > 0) {
-		int32_t getrandom_r = getrandom(tail.str, tail.len, 0);
-		if (getrandom_r == -1) {
-			if (errno == EINTR)
-				continue;
-			// There is no expected io error getrandom() can throw that is not fatal.
-			RCD_SYSCALL_EXCEPTION(getrandom, exception_fatal);
-		}
-		tail = fstr_slice(tail, MAX(getrandom_r, 0), -1);
-	}
+    fstr_t tail = buf;
+    while (tail.len > 0) {
+        int32_t getrandom_r = getrandom(tail.str, tail.len, 0);
+        if (getrandom_r == -1) {
+            if (errno == EINTR)
+                continue;
+            // There is no expected io error getrandom() can throw that is not fatal.
+            RCD_SYSCALL_EXCEPTION(getrandom, exception_fatal);
+        }
+        tail = fstr_slice(tail, MAX(getrandom_r, 0), -1);
+    }
 }
 
 void lwt_rdrand(fstr_t buf) {
-	if (buf.len == 0)
-		return;
-	static int8_t lock = 0;
-	static uint8_t pool[PAGE_SIZE];
-	static size_t level = 0;
-	if (buf.len >= sizeof(pool) / 4) {
-		// Buffer too large to use pool, fill it from system.
-		getrandom_fill(buf);
-	} else {
-		// Fill buffer by copying from pool.
-		atomic_spinlock_lock(&lock); {
-			if (level < buf.len) {
-				// Refill pool.
-				fstr_t pool_tail = {.str = pool + level, .len = sizeof(pool) - level};
-				getrandom_fill(pool_tail);
-				level = sizeof(pool);
-			}
-			// Consume top portion of pool and lower level.
-			assert(level >= buf.len);
-			memcpy(buf.str, pool + level - buf.len, buf.len);
-			level -= buf.len;
-		} atomic_spinlock_unlock(&lock);
-	}
+    if (buf.len == 0)
+        return;
+    static int8_t lock = 0;
+    static uint8_t pool[PAGE_SIZE];
+    static size_t level = 0;
+    if (buf.len >= sizeof(pool) / 4) {
+        // Buffer too large to use pool, fill it from system.
+        getrandom_fill(buf);
+    } else {
+        // Fill buffer by copying from pool.
+        atomic_spinlock_lock(&lock); {
+            if (level < buf.len) {
+                // Refill pool.
+                fstr_t pool_tail = {.str = pool + level, .len = sizeof(pool) - level};
+                getrandom_fill(pool_tail);
+                level = sizeof(pool);
+            }
+            // Consume top portion of pool and lower level.
+            assert(level >= buf.len);
+            memcpy(buf.str, pool + level - buf.len, buf.len);
+            level -= buf.len;
+        } atomic_spinlock_unlock(&lock);
+    }
 }
