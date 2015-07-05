@@ -406,6 +406,8 @@ typedef struct ifc_ipipe_state {
     size_t new_proto_frame_size;
     /// Set by the writer when indicating that there will or will not be immediate additional writes. (Optimization)
     bool more_hint;
+    /// Set by writer when the stream has ended and no more data will be available.
+    bool end_of_stream;
     /// Number of bytes that is enqueued in the pipe.
     size_t enqueued_len;
     /// Soft maximum number of bytes that is allowed to be enqueued in the pipe.
@@ -416,7 +418,10 @@ typedef struct ifc_ipipe_state {
 join_locked(fstr_t) ifc_ipipe_fiber_read(fstr_t buffer, bool* more_hint_out, join_server_params, ifc_ipipe_state_t* pipe_state) {
     fstr_t read_data;
     if (list_count(pipe_state->frame_queue, ifc_ipipe_frame_t*) == 0) {
-        assert(pipe_state->proto_frame_len > 0);
+        if (pipe_state->proto_frame_len == 0) {
+            assert(pipe_state->end_of_stream);
+            throw_eio("end of ipipe stream reached, write side closed gracefully", rio_eos);
+        }
         // Read directly from the proto frame.
         ifc_ipipe_frame_t* proto_frame = pipe_state->proto_frame;
         read_data = fstr_cpy_over(buffer, fstr_slice(fss(proto_frame->mem), proto_frame->read_len, pipe_state->proto_frame_len), 0, 0);
@@ -463,8 +468,10 @@ static ifc_ipipe_frame_t* ifc_ipipe_new_proto_frame(size_t new_proto_frame_size)
 }
 
 join_locked(fstr_t) ifc_ipipe_fiber_write(fstr_t data, bool more_hint, join_server_params, ifc_ipipe_state_t* pipe_state) {
-    if (data.len == 0)
+    if (data.len == 0) {
+        pipe_state->end_of_stream = true;
         return data;
+    }
     ifc_ipipe_frame_t* proto_frame = pipe_state->proto_frame;
     fstr_t dst_buffer = fstr_sslice(fss(proto_frame->mem), pipe_state->proto_frame_len, -1);
     fstr_t unwritten_data_tail;
@@ -492,10 +499,13 @@ fiber_main_t(ipipe) ifc_ipipe_fiber(fiber_main_attr, size_t max_buf_len) {
         pipe_state.proto_frame_len = 0;
         pipe_state.new_proto_frame_size = default_new_proto_frame_size;
         pipe_state.more_hint = false;
+        pipe_state.end_of_stream = false;
         pipe_state.enqueued_len = 0;
         pipe_state.max_len = max_buf_len;
         for (;;) {
-            bool read_ready = (list_count(pipe_state.frame_queue, ifc_ipipe_frame_t*) > 0 || pipe_state.proto_frame_len > 0);
+            bool read_ready = (list_count(pipe_state.frame_queue, ifc_ipipe_frame_t*) > 0
+                || pipe_state.proto_frame_len > 0
+                || pipe_state.end_of_stream);
             bool write_ready = (pipe_state.max_len == 0 || pipe_state.enqueued_len < pipe_state.max_len);
             accept_join( \
                 ifc_ipipe_fiber_read if read_ready, \
@@ -535,6 +545,7 @@ sf(ipipe)* ifc_ipipe_create(rio_t** inf_pipe_r_out, rio_t** inf_pipe_w_out, size
     *inf_pipe_r_out = rio_new_abstract(&ifc_ipipe_read_class, ipipe_fid, 0);
     static const rio_class_t ifc_ipipe_write_class = {
         .write_part_fn = ifc_ipipe_write,
+        .notify_wclose = true
     };
     *inf_pipe_w_out = rio_new_abstract(&ifc_ipipe_write_class, ipipe_fid, 0);
     return ipipe_sf;
