@@ -120,12 +120,20 @@ typedef struct rio_class {
     /// writes immediately after the call and the implementation should use
     /// this information to reduce any overhead caused by acting on the write
     /// immediately.
+    /// When the buffer is empty (len = 0) the rio library signals that the
+    /// rio handle has been closed (via free/destruct). This is the only time
+    /// the buffer can be empty and only happens when notify_wclose is true.
     fstr_t (*write_part_fn)(rcd_fid_t fid_arg, fstr_t buffer, bool more_hint);
     /// Shall wait until [reading does not block] if read is true or
     /// otherwise [writing does not block] and then return true.
     /// If wait is false the function should return immediately return false
     /// instead of waiting if the condition has not occurred yet.
     bool (*poll_fn)(rcd_fid_t fid_arg, bool read, bool wait);
+    /// Set notify_wclose to true if you wish to be notified of a close (by
+    /// free/destruction the rio handle) on the write function with an empty
+    /// buffer. This is useful to forward a graceful end of stream signal to
+    /// the remote reader.
+    bool notify_wclose;
 } rio_class_t;
 
 typedef struct rio_handle rio_t;

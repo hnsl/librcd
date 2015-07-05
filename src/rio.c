@@ -81,6 +81,10 @@ static void rio_strict_close(int32_t fd) {
         RCD_SYSCALL_EXCEPTION(close, exception_fatal);
 }
 
+fiber_main rio_end_abstract_write(fiber_main_attr, const rio_class_t* impl, rcd_fid_t fid_arg) { try {
+    impl->write_part_fn(fid_arg, "", false);
+} catch (exception_io | exception_desync, e); }
+
 static void rio_destruct_h(void* arg_ptr) {
     rio_t* rio = arg_ptr;
     if (rio->type == rio_type_pipe) {
@@ -92,7 +96,15 @@ static void rio_destruct_h(void* arg_ptr) {
             lwt_io_free_fd_tracking(rio->xfer.pipe.fd_write);
             rio_strict_close(rio->xfer.pipe.fd_write);
         }
-    } else if (rio->type != rio_type_abstract) {
+    } else if (rio->type == rio_type_abstract) {
+        const rio_class_t* impl = rio->xfer.abstract.impl;
+        if (rio->xfer.abstract.is_writable && impl->write_part_fn != 0 && impl->notify_wclose) {
+            // Spawn end abstract write notify fiber.
+            fmitosis {
+                spawn_static_fiber(rio_end_abstract_write("", impl, rio->xfer.abstract.fid_arg));
+            }
+        }
+    } else {
         if (rio->xfer.duplex.fd != -1) {
             lwt_io_free_fd_tracking(rio->xfer.duplex.fd);
             rio_strict_close(rio->xfer.duplex.fd);
@@ -1498,40 +1510,41 @@ fstr_t rio_write_chunk(rio_t* rio, fstr_t chunk, bool more_hint) {
     if (rio->type == rio_type_abstract) {
         if (rio->xfer.abstract.impl->write_part_fn == 0 || !rio->xfer.abstract.is_writable)
             throw("the specified rio handle does not support the operation write", exception_arg);
+        if (chunk.len == 0)
+            return chunk;
         return rio->xfer.abstract.impl->write_part_fn(rio->xfer.abstract.fid_arg, chunk, more_hint);
     }
     int32_t write_fd = rio_get_fd_write(rio);
     if (write_fd == -1)
         throw("the specified rio handle does not support the operation write", exception_arg);
     bool send_with_msg_more = (more_hint && rio->type == rio_type_tcp);
-    ssize_t n_sent = 0;
-    if (chunk.len > 0) {
-        for (;;) {
-            if (send_with_msg_more) {
-                n_sent = send(write_fd, chunk.str, chunk.len, MSG_DONTWAIT | MSG_MORE);
+    if (chunk.len == 0)
+        return chunk;
+    for (;;) {
+        ssize_t n_sent;
+        if (send_with_msg_more) {
+            n_sent = send(write_fd, chunk.str, chunk.len, MSG_DONTWAIT | MSG_MORE);
+        } else {
+            n_sent = write(write_fd, chunk.str, chunk.len);
+        }
+        if (n_sent > 0) {
+            return fstr_sslice(chunk, (ssize_t) n_sent, -1);
+        } else if (n_sent == -1) {
+            if (errno == EWOULDBLOCK) {
+                lwt_block_until_edge_level_io_event(write_fd, lwt_fd_event_write);
+            } else if (errno == EINTR) {
+                continue;
             } else {
-                n_sent = write(write_fd, chunk.str, chunk.len);
-            }
-            if (n_sent > 0) {
-                break;
-            } else if (n_sent == -1) {
-                if (errno == EWOULDBLOCK) {
-                    lwt_block_until_edge_level_io_event(write_fd, lwt_fd_event_write);
-                } else if (errno == EINTR) {
-                    continue;
+                if (send_with_msg_more) {
+                    RCD_SYSCALL_EXCEPTION(send, exception_io);
                 } else {
-                    if (send_with_msg_more) {
-                        RCD_SYSCALL_EXCEPTION(send, exception_io);
-                    } else {
-                        RCD_SYSCALL_EXCEPTION(write, exception_io);
-                    }
+                    RCD_SYSCALL_EXCEPTION(write, exception_io);
                 }
-            } else {
-                sub_heap_e(throw(concs((send_with_msg_more? "send": "write"), "() failed: no data was written (abnormal return code)"), exception_io));
             }
+        } else {
+            sub_heap_e(throw(concs((send_with_msg_more? "send": "write"), "() failed: no data was written (abnormal return code)"), exception_io));
         }
     }
-    return fstr_sslice(chunk, (ssize_t) n_sent, -1);
 }
 
 void rio_write(rio_t* rio, fstr_t buffer) {
