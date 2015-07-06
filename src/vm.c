@@ -716,32 +716,51 @@ void* vm_mmap_realloc(void* old_ptr, size_t old_size, size_t fill_length, size_t
     uint8_t new_lines_2e = vm_bytes_to_lines_2e(new_min_size, true);
     if (non_aligned || new_lines_2e > old_lines_2e) {
         // Expanding (or non aligned). Depending on how much we either memcpy(3) or mremap(2).
-        void* new_ptr;
         size_t old_bytes = vm_lines_2e_to_bytes(old_lines_2e);
         size_t new_bytes = vm_lines_2e_to_bytes(new_lines_2e);
+        void* new_ptr = vm_mmap_reserve(new_bytes, size_out);
         if (!non_aligned && (old_bytes % PAGE_SIZE) == 0) {
             // Large enough for mremap.
-            // We ignore fill_length as this operation is dominated by syscall and
-            // mmu query overhead and will not be significantly faster by respecting it.
             assert((((size_t) old_ptr) % PAGE_SIZE) == 0);
-            void* mremap_r = mremap(old_ptr, old_bytes, new_bytes, MREMAP_MAYMOVE, 0);
+            assert((((size_t) new_ptr) % PAGE_SIZE) == 0);
+            // We move the mapping to our own new allocated address instead of
+            // letting the kernel decide how to move the mapping. This has two
+            // important advantages, first we don't extend our virtual address
+            // space with small chunks, causing irreversible fragmentation that
+            // would eventually crash the program due to reaching 64k VMA
+            // limit. Secondly we ensure the new allocation does not overlap
+            // with the old allocation, allowing us to free the old allocation
+            // without any complicated checks.
+            // First we must unmap the existing allocation to create a hole
+            // which we can move the mapping to, otherwise mremap will return
+            // EFAULT as it's really sensitive to even the slightest perceived
+            // difference in the source and target VMAs.
+            int32_t munmap_r = munmap(new_ptr, new_bytes);
+            if (munmap_r == -1)
+                RCD_SYSCALL_EXCEPTION(munmap, exception_fatal);
+            // We ignore fill_length as this operation is dominated by syscall
+            // and mmu query overhead and will not be significantly faster by
+            // respecting it.
+            assert((((size_t) old_ptr) % PAGE_SIZE) == 0);
+            void* mremap_r = mremap(old_ptr, old_bytes, new_bytes, MREMAP_MAYMOVE | MREMAP_FIXED, new_ptr);
             if (mremap_r == MAP_FAILED)
                 RCD_SYSCALL_EXCEPTION(mremap, exception_fatal);
             new_ptr = mremap_r;
-            // It is likely that there is now a hole in the virtual memory left by
-            // the moved vma depending on how it was moved. We could compensate for
-            // this fragmentation by mapping a new vma in the hole but it's hardly
-            // worth the extra complexity since future allocations, mappings and
-            // reallocations may use the hole.
-            // Account for the expanded allocation.
-            vm_update_total_alloc_bytes(new_bytes - old_bytes);
+            // Fill the hole left by the mremap with new anonymous memory that
+            // we can free since the old memory is still accounted for.
+            void* mmap_r = mmap(old_ptr, old_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+            if (mmap_r == MAP_FAILED)
+                RCD_SYSCALL_EXCEPTION(mmap, exception_fatal);
+            if (mmap_r != old_ptr)
+                throw(concs("invalid address returned by mmap, expected: [", old_ptr, "], got: [", mmap_r, "]"), exception_fatal);
+            // Free the old allocation.
+            vm_mmap_unreserve(old_ptr, old_bytes);
             // Return a new size of new_bytes.
             if (size_out != 0)
                 *size_out = new_bytes;
         } else {
             memcpy_instead:
             // Small enough for memcpy() (or non aligned).
-            new_ptr = vm_mmap_reserve(new_bytes, size_out);
             memcpy(new_ptr, old_ptr, MIN(MIN(old_size, fill_length), new_min_size));
             // Free old allocation.
             vm_mmap_unreserve(old_ptr, old_bytes);
