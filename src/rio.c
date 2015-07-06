@@ -1357,6 +1357,27 @@ fstr_t rio_read_to_end(rio_t* rio, fstr_t buffer) {
     return fstr_sslice(buffer, 0, -tail_left.len - 1);
 }
 
+fstr_t rio_read_all(rio_t* rio, vstr_t* buffer) {
+    size_t vbuf_slen = vec_count(buffer, uint8_t);
+    try {
+        for (;;) {
+            // Attempt to read a chunk that is 25% as large as the buffer.
+            // We set a minimum of 64 bytes and up to 128 pages of data.
+            size_t blen = vec_count(buffer, uint8_t);
+            size_t max_chunk_len = MIN(MAX(64, blen / 4), 128 * PAGE_SIZE);
+            fstr_t dst = vstr_extend(buffer, max_chunk_len);
+            fstr_t chunk = "";
+            try {
+                chunk = rio_read(rio, dst);
+            } finally {
+                // Shrink the buffer to get rid of the unwritten tail.
+                vec_resize(buffer, uint8_t, blen + chunk.len);
+            }
+        }
+    } catch_eio (rio_eos, e);
+    return fstr_slice(vstr_str(buffer), vbuf_slen, -1);
+}
+
 join_locked(fstr_t) read_to_end_tout_result(join_server_params, rcd_exception_t* ex, fstr_t result) {
     if (ex != 0)
         lwt_throw_exception(ex);

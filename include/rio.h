@@ -724,6 +724,11 @@ void rio_read_fill(rio_t* rio, fstr_t buffer) NO_NULL_ARGS;
 /// Throws other io exceptions on read error.
 fstr_t rio_read_to_end(rio_t* rio, fstr_t buffer) NO_NULL_ARGS;
 
+/// Reads all data until the stream ends (a rio_eos is thrown) into the given
+/// string vector buffer. The written tail of the buffer is returned.
+/// Throws other io exceptions on read error. In this case the buffer content/state is undefined.
+fstr_t rio_read_all(rio_t* rio, vstr_t* buffer) NO_NULL_ARGS;
+
 /// Reads until either the buffer ends, the stream ends or timeout.
 /// Calling this function will reallocate and disable the rio handle.
 /// Exactly like rio_read_to_end() but also throws rio_timeout eio exception.
