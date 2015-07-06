@@ -755,9 +755,6 @@ void* vm_mmap_realloc(void* old_ptr, size_t old_size, size_t fill_length, size_t
                 throw(concs("invalid address returned by mmap, expected: [", old_ptr, "], got: [", mmap_r, "]"), exception_fatal);
             // Free the old allocation.
             vm_mmap_unreserve(old_ptr, old_bytes);
-            // Return a new size of new_bytes.
-            if (size_out != 0)
-                *size_out = new_bytes;
         } else {
             memcpy_instead:
             // Small enough for memcpy() (or non aligned).
