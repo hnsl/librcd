@@ -1475,6 +1475,7 @@ fstr_t rio_peek(rio_t* rio) {
 static inline fstr_t read_to_separator(rio_t* rio, fstr_t separator, bool with_vbuf, vstr_t* vbuf, fstr_t max_buf) {
     if (separator.len == 0)
         return fstr_slice(max_buf, 0, 0);
+    size_t vbuf_slen = with_vbuf? vec_count(vbuf, uint8_t): 0;
     // The buf_len is the length of the buffer that has been filled by copying over peaked chunks.
     size_t buf_len = 0;
     // Track offset where last chunk peek started in peek_offs.
@@ -1488,8 +1489,8 @@ static inline fstr_t read_to_separator(rio_t* rio, fstr_t separator, bool with_v
                 // Slice the non-consummed and non-skipped data from the buffer and
                 // return the matched chunk up to i offset (before separator match).
                 if (with_vbuf) {
-                    vec_resize(vbuf, uint8_t, i);
-                    return vstr_str(vbuf);
+                    vec_resize(vbuf, uint8_t, vbuf_slen + i);
+                    return fstr_slice(vstr_str(vbuf), vbuf_slen, -1);
                 } else {
                     return fstr_slice(max_buf, 0, i);
                 }
@@ -1513,7 +1514,7 @@ static inline fstr_t read_to_separator(rio_t* rio, fstr_t separator, bool with_v
             }
             // Match character with separator.
             fstr_t buf = with_vbuf? vstr_str(vbuf): max_buf;
-            if (separator.str[j] != buf.str[buf_offs])
+            if (separator.str[j] != buf.str[vbuf_slen + buf_offs])
                 break;
         }
     }
