@@ -1357,7 +1357,7 @@ fstr_t rio_read_to_end(rio_t* rio, fstr_t buffer) {
     return fstr_sslice(buffer, 0, -tail_left.len - 1);
 }
 
-fstr_t rio_read_all(rio_t* rio, vstr_t* buffer) {
+fstr_t rio_read_all(rio_t* rio, vstr_t* buffer) { sub_heap {
     size_t vbuf_slen = vec_count(buffer, uint8_t);
     try {
         for (;;) {
@@ -1376,7 +1376,7 @@ fstr_t rio_read_all(rio_t* rio, vstr_t* buffer) {
         }
     } catch_eio (rio_eos, e);
     return fstr_slice(vstr_str(buffer), vbuf_slen, -1);
-}
+}}
 
 join_locked(fstr_t) read_to_end_tout_result(join_server_params, rcd_exception_t* ex, fstr_t result) {
     if (ex != 0)
