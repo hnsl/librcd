@@ -83,9 +83,9 @@
     for (int64_t _i = 0; _i < LENGTHOF(_path); _i++) { \
         json_value_t* _next_value = (_value.type == JSON_OBJECT? \
             dict_read(_value.object_value, json_value_t, _path[_i]): 0); \
-        _value = (_next_value == 0? jnull: *_next_value); \
-        if (json_is_null(_value)) \
+        if (_next_value == 0) \
             _json_fail_missing_property(_path[_i]); \
+        _value = *_next_value; \
     } \
     _value; \
 })
