@@ -23,7 +23,8 @@ static int dict_cmp(const rbtree_node_t* node1, const rbtree_node_t* node2) {
 }
 
 static inline size_t dict_elem_size(rcd_abstract_dict_t* dict, fstr_t key) {
-    return sizeof(rcd_abstract_delem_t) + vm_align_ceil(key.len, 8) + dict->ent_size;
+    // Must align key by VM_ALLOC_ALIGN to not make data access unaligned.
+    return sizeof(rcd_abstract_delem_t) + vm_align_ceil(key.len, VM_ALLOC_ALIGN) + dict->ent_size;
 }
 
 static void dict_destructor(void* arg_ptr) {
@@ -45,7 +46,7 @@ static rcd_abstract_delem_t* new_delem(rcd_abstract_dict_t* dict, fstr_t key, si
 }
 
 static void* delem_value_ptr(rcd_abstract_delem_t* delem) {
-    return ((void*) delem) + sizeof(rcd_abstract_delem_t) + vm_align_ceil(delem->key.len, 8);
+    return ((void*) delem) + sizeof(rcd_abstract_delem_t) + vm_align_ceil(delem->key.len, VM_ALLOC_ALIGN);
 }
 
 static rcd_abstract_delem_t* dict_lookup(rcd_abstract_dict_t* dict, fstr_t key) {
