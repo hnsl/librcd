@@ -68,7 +68,6 @@ void rcd_self_test_dict() {
                 case 0:
                     atest(fstr_equal(english_word, "hello"));
                     atest(fstr_equal(swedish_word, "hej"));
-                    dict_foreach_delete_current(word_book, fstr_t);
                     break;
                 case 1:
                     atest(fstr_equal(english_word, "bye"));
@@ -84,10 +83,10 @@ void rcd_self_test_dict() {
                 i++;
             }
             atest(i == 3);
-            atest(dict_count(word_book, fstr_t) == 2);
+            atest(dict_count(word_book, fstr_t) == 3);
         }{
             fstr_t* word = dict_read(word_book, fstr_t, "hello");
-            atest(word == 0);
+            atest(fstr_equal(*word, "hej"));
         }{
             fstr_t* word = dict_read(word_book, fstr_t, "bye");
             atest(fstr_equal(*word, "ses"));
@@ -95,7 +94,7 @@ void rcd_self_test_dict() {
             atest(dict_delete(word_book, fstr_t, "bye"));
             fstr_t* word = dict_read(word_book, fstr_t, "bye");
             atest(word == 0);
-            atest(dict_count(word_book, fstr_t) == 1);
+            atest(dict_count(word_book, fstr_t) == 2);
         }
     }
     sub_heap {
@@ -105,21 +104,6 @@ void rcd_self_test_dict() {
             *j = i;
             bool insert_ok = dict_push_end(test_dict, int32_t*, FSTR_PACK(i), j);
             atest(insert_ok);
-        }{
-            size_t i = 0;
-            dict_foreach(test_dict, int32_t*, k, j) {
-                atest(*j == i);
-                int32_t* j2 = new(int32_t);
-                *j2 = (i * 2);
-                dict_foreach_replace_current(int32_t*, j2);
-                i++;
-            }
-        }{
-            size_t i = 0;
-            dict_foreach(test_dict, int32_t*, k, j) {
-                atest(*j == (i * 2));
-                i++;
-            }
         }
     }
     sub_heap {
