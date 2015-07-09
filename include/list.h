@@ -9,29 +9,31 @@
 
 #include "fstring.h"
 
-typedef struct rcd_abstract_list_element {
-    struct rcd_abstract_list_element* prev;
-    struct rcd_abstract_list_element* next;
+typedef struct rcd_abstract_lelem {
+    struct rcd_abstract_lelem* prev;
+    struct rcd_abstract_lelem* next;
     uint8_t type_data[];
-} rcd_abstract_list_element_t;
+} rcd_abstract_lelem_t;
 
 typedef struct rcd_abstract_list {
     size_t length;
-    rcd_abstract_list_element_t* base;
+    rcd_abstract_lelem_t* base;
 } rcd_abstract_list_t;
 
-typedef struct rcd_abstract_dict_element {
-    // type_data[] is in immediate prefix - this allows the suffix data to be key and a compare function that is unaware of the type data size
+typedef struct rcd_abstract_delem {
+    // type_data[] is in immediate prefix - this allows the suffix data to be
+    // key and a compare function that is unaware of the type data size
     rbtree_node_t node;
-    struct rcd_abstract_dict_element* prev;
-    struct rcd_abstract_dict_element* next;
+    struct rcd_abstract_delem* prev;
+    struct rcd_abstract_delem* next;
     fstr_mem_t key;
-} rcd_abstract_dict_element_t;
+} rcd_abstract_delem_t;
 
 typedef struct rcd_abstract_dict {
     rbtree_t tree;
-    rcd_abstract_dict_element_t* seq;
+    rcd_abstract_delem_t* seq;
     size_t length;
+    size_t ent_size;
 } rcd_abstract_dict_t;
 
 typedef struct rcd_abstract_vec {
@@ -74,7 +76,7 @@ typedef struct rcd_abstract_vec {
 
 #define list_push_end(set, type, e) ({ \
     list(type)* __typed_set = set; \
-    rcd_abstract_list_element_t* __elem = lwt_alloc_new(sizeof(rcd_abstract_list_element_t) + sizeof(type)); \
+    rcd_abstract_lelem_t* __elem = lwt_alloc_new(sizeof(rcd_abstract_lelem_t) + sizeof(type)); \
     *((type*) __elem->type_data) = e; \
     rcd_abstract_list_t* __abstract_list = (rcd_abstract_list_t*) __typed_set; \
     DL_APPEND(__abstract_list->base, __elem); \
@@ -89,7 +91,7 @@ typedef struct rcd_abstract_vec {
 
 #define list_push_start(set, type, e) ({ \
     list(type)* __typed_set = set; \
-    rcd_abstract_list_element_t* __elem = lwt_alloc_new(sizeof(rcd_abstract_list_element_t) + sizeof(type)); \
+    rcd_abstract_lelem_t* __elem = lwt_alloc_new(sizeof(rcd_abstract_lelem_t) + sizeof(type)); \
     *((type*) __elem->type_data) = e; \
     rcd_abstract_list_t* __abstract_list = (rcd_abstract_list_t*) __typed_set; \
     DL_PREPEND(__abstract_list->base, __elem); \
@@ -102,89 +104,71 @@ typedef struct rcd_abstract_vec {
         list_push_start(set, type, elems[__i]); \
 })
 
-#define __dict_elem_to_mem_ptr(__elem, type) ({ \
-    size_t __type_size = vm_align_ceil(sizeof(type), 8); \
-    ((void*) __elem) - __type_size; \
-})
-
-#define __dict_put(set, type, fstr_key, e) \
-    dict(type)* __typed_set = set; \
-    fstr_t __elem_key = fstr_key; \
-    size_t __type_size = vm_align_ceil(sizeof(type), 8); \
-    void* __mem_ptr = lwt_alloc_new(__type_size + sizeof(rcd_abstract_dict_element_t) + __elem_key.len); \
-    *((type*) __mem_ptr) = e; \
-    rcd_abstract_dict_element_t* __elem = __mem_ptr + __type_size; \
-    __elem->key.len = __elem_key.len; \
-    memcpy(__elem->key.str, __elem_key.str, __elem_key.len); \
+#define _dict_insert_raw(SET, TYPE, FSTR_KEY, VALUE, APPEND, REPLACE) ({ \
+    dict(TYPE)* __typed_set = SET; \
     rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
-
-#define __dict_xpend(set, type, fstr_key, e, xpend_code) \
-    __dict_put(set, type, fstr_key, e); \
-    rbtree_node_t* existing_node = rbtree_insert(&__elem->node, &_abstract_dict->tree); \
-    if (existing_node == 0) { \
-        _abstract_dict->length++; \
-        xpend_code; \
-    } else { \
-        lwt_alloc_free(__mem_ptr); \
-    } \
-    existing_node == 0;
-
-// TODO: dict pop start/end
-
-#define dict_push_start(set, type, fstr_key, e) ({ \
-    __dict_xpend(set, type, fstr_key, e, DL_PREPEND(_abstract_dict->seq, __elem)) \
+    TYPE _value = (VALUE); \
+    _dict_insert(_abstract_dict, (FSTR_KEY), FSTR_PACK(_value), APPEND, REPLACE); \
 })
 
-#define dict_push_end(set, type, fstr_key, e) ({ \
-    __dict_xpend(set, type, fstr_key, e, DL_APPEND(_abstract_dict->seq, __elem)) \
-})
+#define dict_push_start(SET, TYPE, FSTR_KEY, VALUE) \
+    _dict_insert_raw(SET, TYPE, FSTR_KEY, VALUE, false, false)
 
-#define dict_insert(set, type, fstr_key, e) dict_push_end(set, type, fstr_key, e)
+#define dict_push_end(SET, TYPE, FSTR_KEY, VALUE) \
+    _dict_insert_raw(SET, TYPE, FSTR_KEY, VALUE, true, false)
 
+#define dict_insert(SET, TYPE, FSTR_KEY, VALUE) \
+    dict_push_end(SET, TYPE, FSTR_KEY, VALUE)
 
-#define dict_inserta(set, type, fstr_key, e) ({ \
-    bool insert_ok = dict_push_end(set, type, fstr_key, e); \
+#define dict_inserta(SET, TYPE, FSTR_KEY, VALUE) ({ \
+    bool insert_ok = dict_push_end(SET, TYPE, FSTR_KEY, VALUE); \
     assert(insert_ok);; \
 })
 
-#define dict_replace(set, type, fstr_key, e) ({ \
-    __dict_put(set, type, fstr_key, e); \
-    rbtree_node_t* __existing_elem_node = rbtree_insert(&__elem->node, &_abstract_dict->tree); \
-    if (__existing_elem_node == 0) { \
-        _abstract_dict->length++; \
-        DL_APPEND(_abstract_dict->seq, __elem); \
-    } else { \
-        rcd_abstract_dict_element_t* __existing_elem = (void*) (__existing_elem_node) - offsetof(rcd_abstract_dict_element_t, node); \
-        rbtree_replace(__existing_elem_node, &__elem->node, &_abstract_dict->tree); \
-        /* preserve the element at the same position in the sequence */ \
-        __elem->prev = __existing_elem->prev; \
-        if (__existing_elem->prev != 0 && __existing_elem->prev->next != 0) \
-            __existing_elem->prev->next = __elem; \
-        __elem->next = __existing_elem->next; \
-        if (__existing_elem->next != 0) { \
-            __existing_elem->next->prev = __elem; \
-        } else { \
-            if (_abstract_dict->seq->prev == __existing_elem) \
-                _abstract_dict->seq->prev = __elem; \
-        } \
-        if (_abstract_dict->seq == __existing_elem) \
-            _abstract_dict->seq = __elem; \
-        /* deallocate the existing element */ \
-        void* __old_mem_ptr = __dict_elem_to_mem_ptr(__existing_elem, type); \
-        lwt_alloc_free(__old_mem_ptr); \
-    } \
-})
+#define dict_replace(SET, TYPE, FSTR_KEY, VALUE) \
+    _dict_insert_raw(SET, TYPE, FSTR_KEY, VALUE, true, true)
 
-#define dict_replace_n(set, type, ...) ({ \
+#define dict_replace_n(SET, TYPE, ...) ({ \
     struct { \
         fstr_t key; \
-        type value; \
+        TYPE value; \
     } _rkv[] = {__VA_ARGS__}; \
     for (size_t _i = 0;; _i++) { \
         if (_i == LENGTHOF(_rkv)) \
             break; \
-        dict_replace(set, type, _rkv[_i].key, _rkv[_i].value); \
+        dict_replace(SET, TYPE, _rkv[_i].key, _rkv[_i].value); \
     } \
+})
+
+#define dict_read(SET, TYPE, FSTR_KEY) ({ \
+    dict(TYPE)* __typed_set = SET; \
+    rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
+    (TYPE*) _dict_get(_abstract_dict, FSTR_KEY); \
+})
+
+#define dict_delete(SET, TYPE, FSTR_KEY) ({ \
+    dict(TYPE)* __typed_set = SET; \
+    rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
+    _dict_remove(_abstract_dict, FSTR_KEY); \
+})
+
+#define dict_deletea(SET, TYPE, FSTR_KEY) ({ \
+    bool delete_ok = dict_delete(SET, TYPE, FSTR_KEY); \
+    assert(delete_ok);; \
+})
+
+#define dict_first_key(SET, TYPE) ({ \
+    dict(TYPE)* __typed_set = SET; \
+    rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
+    rcd_abstract_delem_t* __elem = _abstract_dict->seq; \
+    (__elem == 0)? (fstr_mem_t*) 0: (fstr_mem_t*) &__elem->key; \
+})
+
+#define dict_last_key(SET, TYPE) ({ \
+    dict(TYPE)* __typed_set = SET; \
+    rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
+    rcd_abstract_delem_t* __elem = (_abstract_dict->seq != 0? _abstract_dict->seq->prev: 0); \
+    (__elem == 0)? (fstr_mem_t*) 0: (fstr_mem_t*) &__elem->key; \
 })
 
 /// Returns a reference to a specific OFFSET in the vector.
@@ -291,59 +275,6 @@ typedef struct rcd_abstract_vec {
     &_vec->flags; \
 })
 
-#define __dict_get(set, type, fstr_key) ({ \
-    fstr_t __cmp_key = fstr_key; \
-    rbtree_node_t* __node_ptr; \
-    sub_heap { \
-        void* __cmp_mem = lwt_alloc_new(sizeof(rcd_abstract_dict_element_t) + __cmp_key.len); \
-        rcd_abstract_dict_element_t* __cmp_elem = __cmp_mem; \
-        __cmp_elem->key.len = __cmp_key.len; \
-        memcpy(__cmp_elem->key.str, __cmp_key.str, __cmp_key.len); \
-        __node_ptr = rbtree_lookup(&__cmp_elem->node, &_abstract_dict->tree); \
-    } \
-    RBTREE_NODE2ELEM(rcd_abstract_dict_element_t, node, __node_ptr); \
-})
-
-#define dict_read(set, type, fstr_key) ({ \
-    dict(type)* __typed_set = set; \
-    rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
-    rcd_abstract_dict_element_t* __elem = __dict_get(set, type, fstr_key); \
-    (__elem == 0)? (type*) 0: (type*) __dict_elem_to_mem_ptr(__elem, type); \
-})
-
-#define dict_delete(set, type, fstr_key) ({ \
-    dict(type)* __typed_set = set; \
-    rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
-    rcd_abstract_dict_element_t* __elem = __dict_get(set, type, fstr_key); \
-    if (__elem != 0) { \
-        rbtree_remove(&__elem->node, &_abstract_dict->tree); \
-        DL_DELETE(_abstract_dict->seq, __elem); \
-        void* __mem_ptr = __dict_elem_to_mem_ptr(__elem, type); \
-        lwt_alloc_free(__mem_ptr); \
-        _abstract_dict->length--; \
-    } \
-    (__elem != 0); \
-})
-
-#define dict_deletea(set, type, fstr_key) ({ \
-    bool delete_ok = dict_delete(set, type, fstr_key); \
-    assert(delete_ok);; \
-})
-
-#define dict_first_key(set, type) ({ \
-    dict(type)* __typed_set = set; \
-    rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
-    rcd_abstract_dict_element_t* __elem = _abstract_dict->seq; \
-    (__elem == 0)? (fstr_mem_t*) 0: (fstr_mem_t*) &__elem->key; \
-})
-
-#define dict_last_key(set, type) ({ \
-    dict(type)* __typed_set = set; \
-    rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
-    rcd_abstract_dict_element_t* __elem = (_abstract_dict->seq != 0? _abstract_dict->seq->prev: 0); \
-    (__elem == 0)? (fstr_mem_t*) 0: (fstr_mem_t*) &__elem->key; \
-})
-
 #define list_peek_end(set, type) ({ \
     list(type)* _typed_set = set; \
     if (list_count(_typed_set, type) == 0) \
@@ -356,7 +287,7 @@ typedef struct rcd_abstract_vec {
     list(type)* __typed_set = set; \
     type value = list_peek_end(__typed_set, type); \
     rcd_abstract_list_t* __abstract_list = (rcd_abstract_list_t*) __typed_set; \
-    rcd_abstract_list_element_t* __elem = __abstract_list->base->prev; \
+    rcd_abstract_lelem_t* __elem = __abstract_list->base->prev; \
     DL_DELETE(__abstract_list->base, __elem); \
     lwt_alloc_free(__elem); \
     __abstract_list->length--; \
@@ -374,7 +305,7 @@ typedef struct rcd_abstract_vec {
     list(type)* __typed_set = set; \
     type value = list_peek_start(__typed_set, type); \
     rcd_abstract_list_t* __abstract_list = (rcd_abstract_list_t*) __typed_set; \
-    rcd_abstract_list_element_t* __elem = __abstract_list->base; \
+    rcd_abstract_lelem_t* __elem = __abstract_list->base; \
     DL_DELETE(__abstract_list->base, __elem); \
     lwt_alloc_free(__elem); \
     __abstract_list->length--; \
@@ -382,18 +313,18 @@ typedef struct rcd_abstract_vec {
 })
 
 #define list_foreach(set, type, key) \
-    for (rcd_abstract_list_element_t *_cur = ((rcd_abstract_list_t *) set)->base, *_next = (_cur != 0? _cur->next: 0); _cur != 0; _cur = _next, _next = (_next != 0? _next->next: 0)) \
+    for (rcd_abstract_lelem_t *_cur = ((rcd_abstract_list_t *) set)->base, *_next = (_cur != 0? _cur->next: 0); _cur != 0; _cur = _next, _next = (_next != 0? _next->next: 0)) \
     for (int32_t _iter = 0; _iter == 0;) \
     for (; (_iter == 1 && (_next = 0), _iter == 0);) \
     for (type key = *((type*) &(_cur->type_data)); (_iter++) == 0; _iter = ({if (false) { list(type)* _type_check = set; } 2;}))
 
-#define dict_foreach(set, type, each_key, each_value) \
-    for (rcd_abstract_dict_element_t *_next = ((rcd_abstract_dict_t *) set)->seq, *_cur \
+#define dict_foreach(SET, TYPE, EACH_KEY, EACH_VALUE) \
+    for (rcd_abstract_delem_t *_next = ((rcd_abstract_dict_t *) SET)->seq, *_cur \
     ; _next != 0 && (_cur = _next, _next = _cur->next, true);) \
-    for (int32_t _iter = 0; ({if (false) { dict(type)* _type_check = set; }}), _iter == 0;) \
-    for (fstr_t each_key = fss(&_cur->key); _iter == 0;) \
-    for (type __each_value_type; (_iter == 1 && (_next = 0), _iter == 0);) \
-    for (type each_value; (_iter++) == 0? (each_value = *((type*) __dict_elem_to_mem_ptr(_cur, type)), true): false;)
+    for (int32_t _iter = 0; ({if (false) { dict(TYPE)* _type_check = SET; }}), _iter == 0;) \
+    for (fstr_t EACH_KEY = fss(&_cur->key); _iter == 0;) \
+    for (TYPE __each_value_type; (_iter == 1 && (_next = 0), _iter == 0);) \
+    for (TYPE EACH_VALUE; (_iter++) == 0? (EACH_VALUE = *((TYPE*) _dict_get_vptr(_cur)), true): false;)
 
 #define vec_foreach(SET, TYPE, ITERATOR, KEY) \
     LET(vec(TYPE)* _vec = SET) \
@@ -406,22 +337,6 @@ typedef struct rcd_abstract_vec {
     DL_DELETE(__abstract_list->base, _cur); \
     lwt_alloc_free(_cur); \
     __abstract_list->length--; \
-})
-
-#define dict_foreach_delete_current(set, type) ({ \
-    dict(type)* __typed_set = set; \
-    rcd_abstract_dict_t* _abstract_dict = (rcd_abstract_dict_t*) __typed_set; \
-    rbtree_remove(&_cur->node, &_abstract_dict->tree); \
-    DL_DELETE(_abstract_dict->seq, _cur); \
-    void* __mem_ptr = __dict_elem_to_mem_ptr(_cur, type); \
-    lwt_alloc_free(__mem_ptr); \
-    _abstract_dict->length--; \
-    _cur = 0; \
-})
-
-#define dict_foreach_replace_current(type, val) ({ \
-    if (false) { type* _type_check = &__each_value_type; } \
-    *((type*) __dict_elem_to_mem_ptr(_cur, type)) = val; \
 })
 
 #define list_to_carray(set, type, carray_dest, carray_len_dest) ({ \
@@ -464,14 +379,11 @@ typedef struct rcd_abstract_vec {
 
 int rcd_dict_cmp(const rbtree_node_t* node1, const rbtree_node_t* node2);
 
-#define new_dict(type, ...) ({ \
-    rcd_abstract_dict_t* _abstract_dict = new(rcd_abstract_dict_t); \
-    _abstract_dict->seq = 0; \
-    _abstract_dict->length = 0; \
-    rbtree_init(&_abstract_dict->tree, rcd_dict_cmp); \
-    dict(type)* _dict = (void*) _abstract_dict; \
-    dict_replace_n(_dict, type, __VA_ARGS__); \
-    _dict; \
+#define new_dict(TYPE, ...) ({ \
+    rcd_abstract_dict_t* _new_dict = _dict_new(sizeof(TYPE)); \
+    dict(TYPE)* _new_typed_set = (void*) _new_dict; \
+    dict_replace_n(_new_typed_set, TYPE, __VA_ARGS__); \
+    _new_typed_set; \
 })
 
 #define new_vec(TYPE, ...) ({ \
@@ -482,9 +394,9 @@ int rcd_dict_cmp(const rbtree_node_t* node1, const rbtree_node_t* node2);
 })
 
 /// Allocates a new list containing the in-memory keys of the dict.
-#define dict_keys(set, type) ({ \
+#define dict_keys(SET, TYPE) ({ \
     list(fstr_t)* keys = new_list(fstr_t); \
-    dict_foreach(set, type, key, value) \
+    dict_foreach(SET, TYPE, key, value) \
         list_push_end(keys, fstr_t, key); \
     keys; \
 })
@@ -546,6 +458,12 @@ int rcd_dict_cmp(const rbtree_node_t* node1, const rbtree_node_t* node2);
 
 noret void _list_peek_end_zero_err();
 noret void _list_peek_start_zero_err();
+
+void* _dict_get(rcd_abstract_dict_t* dict, fstr_t key);
+void* _dict_get_vptr(rcd_abstract_delem_t* delem);
+bool _dict_insert(rcd_abstract_dict_t* dict, fstr_t key, fstr_t value, bool append, bool replace);
+bool _dict_remove(rcd_abstract_dict_t* dict, fstr_t key);
+rcd_abstract_dict_t* _dict_new(size_t ent_size);
 
 rcd_abstract_vec_t* _vec_new();
 void* _vec_ref(rcd_abstract_vec_t* vec, size_t ent_size, size_t offs);
