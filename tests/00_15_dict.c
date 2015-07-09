@@ -122,4 +122,37 @@ void rcd_self_test_dict() {
             }
         }
     }
+    sub_heap {
+        dict(int32_t)* test_dict = new_dict(int32_t, {"all", 1});
+        dict_replace(test_dict, int32_t, "all", 2);
+        dict_replace(test_dict, int32_t, "foo", 3);
+        dict_replace(test_dict, int32_t, "bar", 4);
+        dict_replace(test_dict, int32_t, "baz", 5);
+        atest(dict_count(test_dict, int32_t) == 4);
+        int32_t i = 0;
+        dict_foreach(test_dict, int32_t, key, value) {
+            switch (i) {
+            case 0:
+                atest(fstr_equal(key, "all"));
+                atest(value == 2);
+                break;
+            case 1:
+                atest(fstr_equal(key, "foo"));
+                atest(value == 3);
+                break;
+            case 2:
+                atest(fstr_equal(key, "bar"));
+                atest(value == 4);
+                break;
+            case 3:
+                atest(fstr_equal(key, "baz"));
+                atest(value == 5);
+                break;
+            default:
+                atest(false);
+            }
+            i++;
+        }
+        atest(i == 4);
+    }
 }
