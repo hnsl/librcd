@@ -87,24 +87,26 @@ bool _dict_insert(rcd_abstract_dict_t* dict, fstr_t key, fstr_t value, bool appe
             rbtree_replace(&delem_ex->node, &delem->node, &dict->tree);
             // Inject into existing position.
             {
-                // Fix "previous" pointer.
-                delem->prev = delem_ex->prev != delem_ex? delem_ex->prev: delem;
-                // Fix "next" pointer.
-                assert(delem_ex->next != delem_ex);
+                // Transfer "prev" and "next" pointers.
+                delem->prev = delem_ex->prev;
                 delem->next = delem_ex->next;
-                // Fix "incoming previous" pointer.
-                if (delem->prev != 0 && delem->prev->next != 0) {
-                    assert(delem->prev->next == delem_ex);
-                    delem->prev->next = delem;
-                }
-                // Fix "incoming next" pointer.
-                if (delem->next != 0) {
-                    assert(delem->next->prev == delem_ex);
-                    delem->next->prev = delem;
-                }
                 // Fix head pointer.
                 if (dict->seq == delem_ex) {
                     dict->seq = delem;
+                }
+                // Fix "incoming next" pointer.
+                assert(delem->prev != 0);
+                if (delem->prev->next != 0) {
+                    assert(delem->prev->next == delem_ex);
+                    delem->prev->next = delem;
+                }
+                // Fix "incoming prev" pointer.
+                if (delem->next != 0) {
+                    assert(delem->next->prev == delem_ex);
+                    delem->next->prev = delem;
+                } else {
+                    assert(dict->seq->prev == delem_ex);
+                    dict->seq->prev = delem;
                 }
             }
             // Delete existing node.
