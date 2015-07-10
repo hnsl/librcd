@@ -5,6 +5,7 @@
 /* See the COPYING file distributed with this project for more information. */
 
 #include "rcd.h"
+#include "test.h"
 
 #pragma librcd
 
@@ -106,37 +107,58 @@ void rcd_self_test_dict() {
             atest(insert_ok);
         }
     }
-    sub_heap {
-        dict(int32_t)* test_dict = new_dict(int32_t, {"all", 1});
-        dict_replace(test_dict, int32_t, "all", 2);
-        dict_replace(test_dict, int32_t, "foo", 3);
-        dict_replace(test_dict, int32_t, "bar", 4);
-        dict_replace(test_dict, int32_t, "baz", 5);
-        atest(dict_count(test_dict, int32_t) == 4);
-        int32_t i = 0;
-        dict_foreach(test_dict, int32_t, key, value) {
-            switch (i) {
-            case 0:
-                atest(fstr_equal(key, "all"));
-                atest(value == 2);
-                break;
-            case 1:
-                atest(fstr_equal(key, "foo"));
-                atest(value == 3);
-                break;
-            case 2:
-                atest(fstr_equal(key, "bar"));
-                atest(value == 4);
-                break;
-            case 3:
-                atest(fstr_equal(key, "baz"));
-                atest(value == 5);
-                break;
-            default:
-                atest(false);
+    // Test replace linking.
+    for (int32_t i = 0; i < 6; i++) {
+        for (int32_t j = 0; j <= i; j++) TEST_MEM_LEAK {
+            DBGFN("[", i, "/", j, "] starting next test ***");
+            dict(int32_t)* d = new_dict(int32_t);
+            sub_heap {
+                // Build the initial dict.
+                for (size_t k = 0; k <= i; k++) {
+                    atest(dict_insert(d, int32_t, STR(k), k));
+                    DBGFN("[", i, "/", j, "] insert [", k, "] => [", k, "]");
+                }
+                // Make the test replace.
+                atest(dict_replace(d, int32_t, STR(j), j + 1000));
+                DBGFN("[", i, "/", j, "] replace [", j, "] => [", j + 1000, "]");
             }
-            i++;
+            for (int32_t i_e = 0; i_e <= 6; i_e++) {
+                // Manipulate sequence further.
+                sub_heap {
+                    if (i_e > 3) {
+                        dict_push_start(d, int32_t, STR(i + i_e), i + i_e);
+                        DBGFN("[", i, "/", j, "] prepend [", i + i_e, "] => [", i + i_e, "]");
+                    } else if (i_e > 0) {
+                        dict_push_end(d, int32_t, STR(i + i_e), i + i_e);
+                        DBGFN("[", i, "/", j, "] append [", i + i_e, "] => [", i + i_e, "]");
+                    }
+                }
+                // Verify basic integrity.
+                for (size_t k = 0; k <= i + i_e; k++) sub_heap {
+                    int32_t* i = dict_read(d, int32_t, STR(k));
+                    atest(*i == (k == j? k + 1000: k));
+                }
+                int32_t k = 0;
+                int32_t n_pfx = MAX(i_e - 3, 0);
+                dict_foreach(d, int32_t, key, value) sub_heap {
+                    int32_t e_key, e_value;
+                    if (n_pfx > 0) {
+                        e_key = i + 3 + n_pfx;
+                        e_value = e_key;
+                        n_pfx--;
+                    } else {
+                        e_key = k;
+                        e_value = (k == j? k + 1000: k);
+                        k++;
+                    }
+                    atest(fstr_equal(key, STR(e_key)));
+                    atest(value == e_value);
+                }
+                atest(n_pfx == 0);
+                atest(k == (i + 1 + MIN(i_e, 3)));
+                atest(dict_count(d, int32_t) == (i + 1 + i_e));
+            }
+            lwt_alloc_free(d);
         }
-        atest(i == 4);
     }
 }
