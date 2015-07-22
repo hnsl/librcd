@@ -1924,6 +1924,7 @@ int x509_crt_verify( x509_crt *crt,
 {
     size_t cn_len;
     int ret;
+    int top_flags = 0;
     int pathlen = 0;
     x509_crt *parent;
     x509_name *name;
@@ -1988,18 +1989,20 @@ int x509_crt_verify( x509_crt *crt,
             break;
     }
 
-    /* Are we part of the chain or at the top? */
-    if( parent != NULL )
+    /* Check if we trust this certificate as a top certificate first. */
+    ret = x509_crt_verify_top( crt, trust_ca, ca_crl,
+                               pathlen, &top_flags, f_vrfy, p_vrfy );
+
+    if( parent == NULL )
     {
+        *flags |= top_flags;
+    }
+
+    if( ret != 0 && parent != NULL )
+    {
+        /* Check if we trust this certificate as a child certificate. */
         ret = x509_crt_verify_child( crt, parent, trust_ca, ca_crl,
                                      pathlen, flags, f_vrfy, p_vrfy );
-        if( ret != 0 )
-            return( ret );
-    }
-    else
-    {
-        ret = x509_crt_verify_top( crt, trust_ca, ca_crl,
-                                   pathlen, flags, f_vrfy, p_vrfy );
         if( ret != 0 )
             return( ret );
     }
