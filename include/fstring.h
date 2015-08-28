@@ -296,6 +296,9 @@ fstr_t fstr_detail(fstr_t full, fstr_t tail);
 /// the specified character.
 void fstr_fill(fstr_t dst, uint8_t chr);
 
+/// Repeats a string a number of times.
+fstr_mem_t* fstr_repeat(fstr_t str, int64_t count);
+
 /// Returns a pseudo random hexadecimal string with the specified number of bytes.
 fstr_mem_t* fstr_hexrandom(size_t length);
 

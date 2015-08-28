@@ -348,6 +348,15 @@ void fstr_fill(fstr_t dst, uint8_t chr) {
     memset(dst.str, chr, dst.len);
 }
 
+fstr_mem_t* fstr_repeat(fstr_t str, int64_t count) {
+    fstr_mem_t* dst = fstr_alloc(str.len * count);
+    fstr_t tail = fss(dst);
+    while (tail.len > 0) {
+        fstr_cpy_over(tail, str, &tail, 0);
+    }
+    return dst;
+}
+
 fstr_mem_t* fstr_hexrandom(size_t length) { sub_heap {
 	fstr_t raw_rnd = fss(fstr_alloc(length / 2 + 1));
 	lwt_rdrand(raw_rnd);
